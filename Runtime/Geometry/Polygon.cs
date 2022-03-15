@@ -9,10 +9,10 @@ namespace Scopa
     /// </summary>
     public class Polygon
     {
-        public IReadOnlyList<Vector3> vertices { get; }
+        public IReadOnlyList<Vector3> Vertices { get; }
 
-        public Plane plane => new Plane(vertices[0], vertices[1], vertices[2]);
-        public Vector3 Origin => vertices.Aggregate(Vector3.zero, (x, y) => x + y) / vertices.Count;
+        public Plane Plane;
+        public Vector3 Origin => Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / Vertices.Count;
 
         /// <summary>
         /// Creates a polygon from a list of points
@@ -20,7 +20,8 @@ namespace Scopa
         /// <param name="vertices">The vertices of the polygon</param>
         public Polygon(IEnumerable<Vector3> vertices)
         {
-            this.vertices = vertices.ToList();
+            Vertices = vertices.ToList();
+            Plane = new Plane(Vertices[0], Vertices[1], Vertices[2]);
         }
 
         /// <summary>
@@ -29,49 +30,64 @@ namespace Scopa
         /// </summary>
         /// <param name="plane">The polygon plane</param>
         /// <param name="radius">The polygon radius</param>
-        public Polygon(Plane plane, float radius = 1000000f)
+        public Polygon(Plane plane, float radius = 10000f)
         {
             // Get aligned up and right axes to the plane
-            var tempV = plane.GetClosestAxisToNormal() == Vector3.forward ? -Vector3.up : -Vector3.forward;
-            var up = Vector3.Cross(tempV, plane.normal).normalized;
-            var right = Vector3.Cross(plane.normal, up).normalized;
-
-            var point = plane.PointOnPlane();
+            var direction = plane.GetClosestAxisToNormal();
+            var tempV = direction == Vector3.forward ? Vector3.up : Vector3.forward;
+            var up = tempV.Cross(plane.Normal).Normalise();
+            var right = plane.Normal.Cross(up).Normalise();
+            up *= radius;
+            right *= radius;
 
             var verts = new List<Vector3>
             {
-                point + right + up, // Top right
-                point - right + up, // Top left
-                point - right - up, // Bottom left
-                point + right - up, // Bottom right
+                plane.PointOnPlane + right + up, // Top right
+                plane.PointOnPlane - right + up, // Top left
+                plane.PointOnPlane - right - up, // Bottom left
+                plane.PointOnPlane + right - up, // Bottom right
             };
             
-            var origin = verts.Aggregate(Vector3.zero, (x, y) => x + y) / verts.Count;
-            vertices = verts.Select(x => (x - origin).normalized * radius + origin).ToList();
+            // var origin = verts.Aggregate(Vector3.zero, (x, y) => x + y) / verts.Count;
+            Vertices = verts.ToList();
+
+            Plane = plane.Clone();
         }
 
-        // public PlaneClassification ClassifyAgainstPlane(Plane p)
-        // {
-        //     var count = Vertices.Count;
-        //     var front = 0;
-        //     var back = 0;
-        //     var onplane = 0;
+        /// <summary>
+        /// Determines if this polygon is behind, in front, or spanning a plane. Returns calculated data.
+        /// </summary>
+        /// <param name="p">The plane to test against</param>
+        /// <param name="classifications">The OnPlane classification for each vertex</param>
+        /// <param name="front">The number of vertices in front of the plane</param>
+        /// <param name="back">The number of vertices behind the plane</param>
+        /// <param name="onplane">The number of vertices on the plane</param>
+        /// <returns>A PlaneClassification value.</returns>
+        private PlaneClassification ClassifyAgainstPlane(Plane p, out int[] classifications, out int front, out int back, out int onplane)
+        {
+            var count = Vertices.Count;
+            front = 0;
+            back = 0;
+            onplane = 0;
+            classifications = new int[count];
 
-        //     foreach (var t in Vertices)
-        //     {
-        //         var test = p.OnPlane(t);
+            for (var i = 0; i < Vertices.Count; i++)
+            {
+                var test = p.OnPlane(Vertices[i]);
 
-        //         // Vertices on the plane are both in front and behind the plane in this context
-        //         if (test <= 0) back++;
-        //         if (test >= 0) front++;
-        //         if (test == 0) onplane++;
-        //     }
+                // Vertices on the plane are both in front and behind the plane in this context
+                if (test <= 0) back++;
+                if (test >= 0) front++;
+                if (test == 0) onplane++;
 
-        //     if (onplane == count) return PlaneClassification.OnPlane;
-        //     if (front == count) return PlaneClassification.Front;
-        //     if (back == count) return PlaneClassification.Back;
-        //     return PlaneClassification.Spanning;
-        // }
+                classifications[i] = test;
+            }
+
+            if (onplane == count) return PlaneClassification.OnPlane;
+            if (front == count) return PlaneClassification.Front;
+            if (back == count) return PlaneClassification.Back;
+            return PlaneClassification.Spanning;
+        }
 
         /// <summary>
         /// Splits this polygon by a clipping plane, returning the back and front planes.
@@ -83,7 +99,7 @@ namespace Scopa
         /// <returns>True if the split was successful</returns>
         public bool Split(Plane clip, out Polygon back, out Polygon front)
         {
-            return Split(clip, out back, out front, out _, out _);
+            return SplitNew(clip, out back, out front, out _, out _);
         }
 
         /// <summary>
@@ -96,17 +112,78 @@ namespace Scopa
         /// <param name="coplanarBack">If the polygon rests on the plane and points backward, this will not be null</param>
         /// <param name="coplanarFront">If the polygon rests on the plane and points forward, this will not be null</param>
         /// <returns>True if the split was successful</returns>
-        public bool Split(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
+
+        public bool SplitOld(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
-            // const double epsilon = NumericsExtensions.Epsilon;
+            var count = Vertices.Count;
+
+            var classify = ClassifyAgainstPlane(clip, out var classifications, out _, out _, out _);
+
+            // If the polygon doesn't span the plane, return false.
+            if (classify != PlaneClassification.Spanning)
+            {
+                back = front = null;
+                coplanarBack = coplanarFront = null;
+                if (classify == PlaneClassification.Back) back = this;
+                else if (classify == PlaneClassification.Front) front = this;
+                else if (Plane.Normal.Dot(clip.Normal) > 0) coplanarFront = this;
+                else coplanarBack = this;
+                return false;
+            }
+
+            // Get the new front and back vertices
+            var backVerts = new List<Vector3>();
+            var frontVerts = new List<Vector3>();
+            var prev = 0;
+
+            for (var i = 0; i <= count; i++)
+            {
+                var idx = i % count;
+                var end = Vertices[idx];
+                var cls = classifications[idx];
+
+                // Check plane crossing
+                if (i > 0 && cls != 0 && prev != 0 && prev != cls)
+                {
+                    // This line end point has crossed the plane
+                    // Add the line intersect to the 
+                    var start = Vertices[i - 1];
+                    // var line = new Line(start, end);
+                    var isect = clip.GetIntersectionPoint(start, end);
+                    if (isect == null) Debug.LogError("Expected intersection, got null.");
+                    frontVerts.Add(isect.Value);
+                    backVerts.Add(isect.Value);
+                }
+
+                // Add original points
+                if (i < Vertices.Count)
+                {
+                    // OnPlane points get put in both polygons, doesn't generate split
+                    if (cls >= 0) frontVerts.Add(end);
+                    if (cls <= 0) backVerts.Add(end);
+                }
+
+                prev = cls;
+            }
+
+            back = new Polygon(backVerts);
+            front = new Polygon(frontVerts);
+            coplanarBack = coplanarFront = null;
+
+            return true;
+        }
+
+        public bool SplitNew(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
+        {
+            const float epsilon = 0.000001f;
             
-            var distances = vertices.Select(clip.GetDistanceToPoint).ToList();
+            var distances = Vertices.Select(clip.EvalAtPoint).ToList();
             
             int cb = 0, cf = 0;
             for (var i = 0; i < distances.Count; i++)
             {
-                if (distances[i] <= -Mathf.Epsilon) cb++;
-                else if (distances[i] >= Mathf.Epsilon) cf++;
+                if (distances[i] < -epsilon) cb++;
+                else if (distances[i] > epsilon) cf++;
                 else distances[i] = 0;
             }
 
@@ -115,10 +192,8 @@ namespace Scopa
             {
                 // Co-planar
                 back = front = coplanarBack = coplanarFront = null;
-                if (Vector3.Dot(clip.normal, plane.normal) > 0) 
-                    coplanarFront = this;
-                else 
-                    coplanarBack = this;
+                if (Plane.Normal.Dot(clip.Normal) >= 0) coplanarFront = this;
+                else coplanarBack = this;
                 return false;
             }
             else if (cb == 0)
@@ -140,14 +215,12 @@ namespace Scopa
             var backVerts = new List<Vector3>();
             var frontVerts = new List<Vector3>();
 
-            for (var i = 0; i < vertices.Count; i++)
+            for (var i = 0; i < Vertices.Count; i++)
             {
-                var j = (i + 1) % vertices.Count;
+                var j = (i + 1) % Vertices.Count;
 
-                var s = vertices[i];
-                var e = vertices[j];
-                var sd = distances[i];
-                var ed = distances[j];
+                Vector3 s = Vertices[i], e = Vertices[j];
+                float sd = distances[i], ed = distances[j];
 
                 if (sd <= 0) backVerts.Add(s);
                 if (sd >= 0) frontVerts.Add(s);
@@ -162,8 +235,8 @@ namespace Scopa
                 }
             }
             
-            back = new Polygon(backVerts.Select(v => new Vector3(v.x, v.y, v.z)));
-            front = new Polygon(frontVerts.Select(v => new Vector3(v.x, v.y, v.z)));
+            back = new Polygon(backVerts.Select(x => new Vector3(x.x, x.y, x.z)));
+            front = new Polygon(frontVerts.Select(x => new Vector3(x.x, x.y, x.z)));
             coplanarBack = coplanarFront = null;
 
             return true;

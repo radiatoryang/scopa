@@ -19,19 +19,18 @@ namespace Scopa.Formats.Map.Objects
         {
             if (Faces.Count < 4) return;
 
-            var poly = new Polyhedron(Faces.Select(x => new Plane(x.Plane.normal, x.Plane.distance)));
+            var poly = new Polyhedron(Faces.Select(x => new Plane(x.Plane.Normal.ToPrecisionVector3(), x.Plane.D)));
 
             foreach (var face in Faces)
             {
-                var pg = poly.Polygons.FirstOrDefault(x => Vector3Extensions.Approximately(x.plane.normal, face.Plane.normal, 0.1f) ); // 0.0075d ? Magic number that seems to match VHE
+                var pg = poly.Polygons.FirstOrDefault(x => x.Plane.Normal.EquivalentTo(face.Plane.Normal.ToPrecisionVector3(), 0.0075f)); // Magic number that seems to match VHE
                 if (pg != null)
                 {
-                   face.Vertices.AddRange(pg.vertices);
+                    face.Vertices.AddRange(pg.Vertices.Select(x => x.ToStandardVector3()));
                 }
-
             }
         }
-
+        
         public override string ToString()
         {
             var s = "";

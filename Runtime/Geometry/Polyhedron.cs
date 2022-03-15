@@ -26,7 +26,7 @@ namespace Scopa
         /// </summary>
         public Polyhedron(IEnumerable<Plane> planes)
         {
-            var newPolygons = new List<Polygon>();
+            var polygons = new List<Polygon>();
             
             var list = planes.ToList();
             for (var i = 0; i < list.Count; i++)
@@ -35,33 +35,32 @@ namespace Scopa
                 var poly = new Polygon(list[i]);
                 for (var j = 0; j < list.Count; j++)
                 {
-                    if (i != j && poly.Split(list[j], out var back, out _))
+                    if (i != j && poly.Split(list[j], out var back, out var front))
                     {
-                        poly = back;
+                        poly = back != null ? back : front;
                     }
                 }
-                newPolygons.Add(poly);
+                polygons.Add(poly);
             }
 
             // Ensure all the faces point outwards
-            var origin = newPolygons.Aggregate(Vector3.zero, (x, y) => x + y.Origin) / newPolygons.Count;
-            for (var i = 0; i < newPolygons.Count; i++)
+            var origin = polygons.Aggregate(Vector3.zero, (x, y) => x + y.Origin) / polygons.Count;
+            for (var i = 0; i < polygons.Count; i++)
             {
-                var face = newPolygons[i];
-                if (face.plane.GetDistanceToPoint(origin) >= 0f) 
-                    newPolygons[i] = new Polygon(face.vertices.Reverse());
+                var face = polygons[i];
+                if (face.Plane.OnPlane(origin) >= 0) polygons[i] = new Polygon(face.Vertices.Reverse());
             }
 
-            Polygons = newPolygons;
+            Polygons = polygons;
         }
 
-        // /// <summary>
-        // /// Splits this polyhedron into two polyhedron by intersecting against a plane.
-        // /// </summary>
-        // /// <param name="plane">The splitting plane</param>
-        // /// <param name="back">The back side of the polyhedron</param>
-        // /// <param name="front">The front side of the polyhedron</param>
-        // /// <returns>True if the plane splits the polyhedron, false if the plane doesn't intersect</returns>
+        /// <summary>
+        /// Splits this polyhedron into two polyhedron by intersecting against a plane.
+        /// </summary>
+        /// <param name="plane">The splitting plane</param>
+        /// <param name="back">The back side of the polyhedron</param>
+        /// <param name="front">The front side of the polyhedron</param>
+        /// <returns>True if the plane splits the polyhedron, false if the plane doesn't intersect</returns>
         // public bool Split(Plane plane, out Polyhedron back, out Polyhedron front)
         // {
         //     back = front = null;

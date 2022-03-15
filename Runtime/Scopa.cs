@@ -40,11 +40,15 @@ namespace Scopa {
                 foreach (var face in solid.Faces) {
                     if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
                         continue;
+                    
+                    var texName = face.TextureName.ToLowerInvariant();
+                    if ( texName.Contains("sky") || texName.Contains("trigger") || texName.Contains("clip") || texName.Contains("skip") )
+                        continue;
 
-                    for(int i=0; i<face.Vertices.Count-2; i++) {
+                    for(int i=2; i<face.Vertices.Count; i++) {
+                        tris.Add(vertCount);
                         tris.Add(vertCount + i);
-                        tris.Add(vertCount + i + 2);
-                        tris.Add(vertCount + i + 1);
+                        tris.Add(vertCount + i - 1);
                     }
 
                     for( int v=0; v<face.Vertices.Count; v++) {

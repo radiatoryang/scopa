@@ -180,11 +180,11 @@ namespace Scopa.Formats.Map.Formats
                         return s;
                     case "patchDef2":
                     case "brushDef":
-                        Assert.IsTrue(false, "idTech3 format maps are currently not supported.");
+                        Util.Assert(false, "idTech3 format maps are currently not supported.");
                         break;
                     case "patchDef3":
                     case "brushDef3":
-                        Assert.IsTrue(false, "idTech4 format maps are currently not supported.");
+                        Util.Assert(false, "idTech4 format maps are currently not supported.");
                         break;
                     default:
                         s.Faces.Add(ReadFace(line));
@@ -199,30 +199,31 @@ namespace Scopa.Formats.Map.Formats
             const NumberStyles ns = NumberStyles.Float;
 
             var parts = line.Split(' ').ToList();
+            // Debug.Log(line);
 
-            
-            Assert.IsTrue(parts[0] == "(");
-            Assert.IsTrue(parts[4] == ")");
-            Assert.IsTrue(parts[5] == "(");
-            Assert.IsTrue(parts[9] == ")");
-            Assert.IsTrue(parts[10] == "(");
-            Assert.IsTrue(parts[14] == ")");
+            Util.Assert(parts[0] == "(");
+            Util.Assert(parts[4] == ")");
+            Util.Assert(parts[5] == "(");
+            Util.Assert(parts[9] == ")");
+            Util.Assert(parts[10] == "(");
+            Util.Assert(parts[14] == ")");
 
-            var a = Vector3Extensions.Parse(parts[1], parts[2], parts[3], ns, CultureInfo.InvariantCulture);
-            var b = Vector3Extensions.Parse(parts[6], parts[7], parts[8], ns, CultureInfo.InvariantCulture);
-            var c = Vector3Extensions.Parse(parts[11], parts[12], parts[13], ns, CultureInfo.InvariantCulture);
+            var a = NumericsExtensions.Parse(parts[1], parts[2], parts[3], ns, CultureInfo.InvariantCulture);
+            var b = NumericsExtensions.Parse(parts[6], parts[7], parts[8], ns, CultureInfo.InvariantCulture);
+            var c = NumericsExtensions.Parse(parts[11], parts[12], parts[13], ns, CultureInfo.InvariantCulture);
 
-            var ab = b - a;
-            var ac = c - a;
+            // var ab = b - a;
+            // var ac = c - a;
 
-            var normal = Vector3.Cross(ab, ac).normalized;
-            var d = Vector3.Dot(a, normal);
+            // var normal = Vector3.Cross(ac, ab).normalized;
+            // var d = normal.Dot(a);
 
             var face = new Face()
             {
-                Plane = new Plane(normal, d),
+                Plane = new Plane(a, b, c),
                 TextureName = parts[15]
             };
+            // Debug.Log($"normal: {face.Plane.normal}, distance: {face.Plane.distance}");
 
             // idTech2, idTech3
             if (parts.Count == 21 || parts.Count == 24)
@@ -254,14 +255,14 @@ namespace Scopa.Formats.Map.Formats
             // Worldcraft
             else if (parts.Count == 31)
             {
-                Assert.IsTrue(parts[16] == "[");
-                Assert.IsTrue(parts[21] == "]");
-                Assert.IsTrue(parts[22] == "[");
-                Assert.IsTrue(parts[27] == "]");
+                Util.Assert(parts[16] == "[");
+                Util.Assert(parts[21] == "]");
+                Util.Assert(parts[22] == "[");
+                Util.Assert(parts[27] == "]");
 
-                face.UAxis = Vector3Extensions.Parse(parts[17], parts[18], parts[19], ns, CultureInfo.InvariantCulture);
+                face.UAxis = NumericsExtensions.Parse(parts[17], parts[18], parts[19], ns, CultureInfo.InvariantCulture);
                 face.XShift = float.Parse(parts[20], ns, CultureInfo.InvariantCulture);
-                face.VAxis = Vector3Extensions.Parse(parts[23], parts[24], parts[25], ns, CultureInfo.InvariantCulture);
+                face.VAxis = NumericsExtensions.Parse(parts[23], parts[24], parts[25], ns, CultureInfo.InvariantCulture);
                 face.YShift = float.Parse(parts[26], ns, CultureInfo.InvariantCulture);
                 face.Rotation = float.Parse(parts[28], ns, CultureInfo.InvariantCulture);
                 face.XScale = float.Parse(parts[29], ns, CultureInfo.InvariantCulture);
@@ -269,16 +270,13 @@ namespace Scopa.Formats.Map.Formats
             }
             else
             {
-                Assert.IsTrue(false, $"Unknown number of tokens ({parts.Count}) in face definition.");
+                Util.Assert(false, $"Unknown number of tokens ({parts.Count}) in face definition.");
             }
 
             return face;
         }
 
         #endregion
-
-
-        #region Writing
 
         public void Write(Stream stream, MapFile map, string styleHint)
         {
@@ -287,6 +285,9 @@ namespace Scopa.Formats.Map.Formats
                 WriteWorld(sw, map.Worldspawn, styleHint);
             }
         }
+
+        #region Writing
+
 
         private static string FormatVector3(Vector3 c)
         {
@@ -341,10 +342,10 @@ namespace Scopa.Formats.Map.Formats
                     strings.Add(face.YScale.ToString("0.000", CultureInfo.InvariantCulture));
                     break;
                 case "idTech3":
-                    Assert.IsTrue(false, "idTech3 format maps are currently not supported.");
+                    Util.Assert(false, "idTech3 format maps are currently not supported.");
                     break;
                 case "idTech4":
-                    Assert.IsTrue(false, "idTech4 format maps are currently not supported.");
+                    Util.Assert(false, "idTech4 format maps are currently not supported.");
                     break;
                 case "Worldcraft":
                 default:
