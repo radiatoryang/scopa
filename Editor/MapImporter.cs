@@ -23,9 +23,13 @@ namespace Scopa.Editor {
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
+            var mapName = Path.GetFileNameWithoutExtension(ctx.assetPath);
             var mapFile = Scopa.Import(filepath);
 
-            var mesh = Scopa.BuildMesh(mapFile.Worldspawn);
+            var gameObject = new GameObject( mapName );
+            var mesh = Scopa.BuildMesh(mapFile.Worldspawn, mapName);
+            gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+            gameObject.AddComponent<MeshRenderer>().sharedMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
             // var position = JsonUtility.FromJson<Vector3>(File.ReadAllText(ctx.assetPath));
 
             // cube.transform.position = position;
@@ -33,14 +37,15 @@ namespace Scopa.Editor {
 
             // 'cube' is a GameObject and will be automatically converted into a prefab
             // (Only the 'Main Asset' is eligible to become a Prefab.)
-            ctx.AddObjectToAsset("Worldspawn", mesh);
-            ctx.SetMainObject(mesh);
+            ctx.AddObjectToAsset(gameObject.name, gameObject);
+            ctx.AddObjectToAsset(gameObject.name + "Worldspawn", mesh);
+            ctx.SetMainObject(gameObject);
 
-            var material = new Material(Shader.Find("Standard"));
-            material.color = Color.gray;
+            // var material = new Material(Shader.Find("Standard"));
+            // material.color = Color.gray;
 
             // Assets must be assigned a unique identifier string consistent across imports
-            ctx.AddObjectToAsset("my Material", material);
+            // ctx.AddObjectToAsset("my Material", material);
 
             // Assets that are not passed into the context as import outputs must be destroyed
             // var tempMesh = new Mesh();

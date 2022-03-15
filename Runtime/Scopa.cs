@@ -28,7 +28,7 @@ namespace Scopa {
             return mapFile;
         }
 
-        public static Mesh BuildMesh( Entity ent ) {
+        public static Mesh BuildMesh( Entity ent, string mapName, float scalingFactor = 0.03125f ) {
             var verts = new List<Vector3>();
             // ar normals = new List<Vector3>();
             var tris = new List<int>();
@@ -43,12 +43,12 @@ namespace Scopa {
 
                     for(int i=0; i<face.Vertices.Count-2; i++) {
                         tris.Add(vertCount + i);
-                        tris.Add(vertCount + i + 1);
                         tris.Add(vertCount + i + 2);
+                        tris.Add(vertCount + i + 1);
                     }
 
                     for( int v=0; v<face.Vertices.Count; v++) {
-                        verts.Add(face.Vertices[v]);
+                        verts.Add(face.Vertices[v] * scalingFactor);
                         // normals.Add(face.Plane.normal);
                     }
                     vertCount += face.Vertices.Count;
@@ -58,12 +58,14 @@ namespace Scopa {
             }
 
             var mesh = new Mesh();
+            mesh.name = mapName + "-" + ent.ClassName;
             mesh.SetVertices(verts);
             // mesh.SetNormals(normals);
             mesh.SetTriangles(tris, 0);
 
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
+            mesh.Optimize();
             
             return mesh;
         }
