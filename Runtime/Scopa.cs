@@ -47,8 +47,8 @@ namespace Scopa {
 
                     for(int i=2; i<face.Vertices.Count; i++) {
                         tris.Add(vertCount);
-                        tris.Add(vertCount + i);
                         tris.Add(vertCount + i - 1);
+                        tris.Add(vertCount + i);
                     }
 
                     for( int v=0; v<face.Vertices.Count; v++) {

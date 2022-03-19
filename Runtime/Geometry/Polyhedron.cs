@@ -29,27 +29,31 @@ namespace Scopa
             var polygons = new List<Polygon>();
             
             var list = planes.ToList();
+            Debug.Log("Polyhedron " + string.Join( "\n", planes) );
             for (var i = 0; i < list.Count; i++)
             {
                 // Split the polygon by all the other planes
-                var poly = new Polygon(list[i]);
+                var poly = new Polygon(list[i], 1000f);
                 for (var j = 0; j < list.Count; j++)
                 {
                     if (i != j && poly.Split(list[j], out var back, out var front))
                     {
-                        poly = back != null ? back : front;
+                        poly = back;
                     }
                 }
                 polygons.Add(poly);
             }
 
             // Ensure all the faces point outwards
-            var origin = polygons.Aggregate(Vector3.zero, (x, y) => x + y.Origin) / polygons.Count;
-            for (var i = 0; i < polygons.Count; i++)
-            {
-                var face = polygons[i];
-                if (face.Plane.OnPlane(origin) >= 0) polygons[i] = new Polygon(face.Vertices.Reverse());
-            }
+            // var origin = polygons.Aggregate(Vector3.zero, (x, y) => x + y.Origin) / polygons.Count;
+            // for (var i = 0; i < polygons.Count; i++)
+            // {
+            //     var face = polygons[i];
+            //     if (face.Plane.OnPlane(origin) >= 0) {
+            //         polygons[i] = new Polygon(face.Vertices.Reverse());
+            //         Debug.Log($"reversing normal {face.Plane} away from {origin} -> {polygons[i].Plane} ");
+            //     }
+            // }
 
             Polygons = polygons;
         }

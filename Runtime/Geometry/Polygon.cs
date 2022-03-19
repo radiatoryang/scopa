@@ -22,6 +22,7 @@ namespace Scopa
         {
             Vertices = vertices.ToList();
             Plane = new Plane(Vertices[0], Vertices[1], Vertices[2]);
+            // Plane.ReverseNormal();
         }
 
         /// <summary>
@@ -30,7 +31,7 @@ namespace Scopa
         /// </summary>
         /// <param name="plane">The polygon plane</param>
         /// <param name="radius">The polygon radius</param>
-        public Polygon(Plane plane, float radius = 10000f)
+        public Polygon(Plane plane, float radius)
         {
             // Get aligned up and right axes to the plane
             var direction = plane.GetClosestAxisToNormal();
@@ -119,6 +120,8 @@ namespace Scopa
 
             var classify = ClassifyAgainstPlane(clip, out var classifications, out _, out _, out _);
 
+            Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() + "... " + classify.ToString() );
+
             // If the polygon doesn't span the plane, return false.
             if (classify != PlaneClassification.Spanning)
             {
@@ -149,8 +152,10 @@ namespace Scopa
                     // Add the line intersect to the 
                     var start = Vertices[i - 1];
                     // var line = new Line(start, end);
+                    Debug.Log($"looking for intersection on {clip} between {start} and {end}");
                     var isect = clip.GetIntersectionPoint(start, end);
                     if (isect == null) Debug.LogError("Expected intersection, got null.");
+                    Debug.Log("found intersection at " + isect);
                     frontVerts.Add(isect.Value);
                     backVerts.Add(isect.Value);
                 }
@@ -166,6 +171,8 @@ namespace Scopa
                 prev = cls;
             }
 
+            Debug.Log("resulting backVerts: " + string.Join(" ", backVerts));
+
             back = new Polygon(backVerts);
             front = new Polygon(frontVerts);
             coplanarBack = coplanarFront = null;
@@ -175,9 +182,13 @@ namespace Scopa
 
         public bool SplitNew(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
-            const float epsilon = 0.000001f;
+            const float epsilon = 0.01f;
+
+            Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() );
             
             var distances = Vertices.Select(clip.EvalAtPoint).ToList();
+
+            // Debug.Log("Split distances: " + string.Join(", ", distances) );
             
             int cb = 0, cf = 0;
             for (var i = 0; i < distances.Count; i++)
@@ -190,6 +201,7 @@ namespace Scopa
             // Check non-spanning cases
             if (cb == 0 && cf == 0)
             {
+                // Debug.Log("Split result: non-spanning");
                 // Co-planar
                 back = front = coplanarBack = coplanarFront = null;
                 if (Plane.Normal.Dot(clip.Normal) >= 0) coplanarFront = this;
@@ -198,6 +210,7 @@ namespace Scopa
             }
             else if (cb == 0)
             {
+                // Debug.Log("Split result: all back");
                 // All vertices in front
                 back = coplanarBack = coplanarFront = null;
                 front = this;
@@ -205,11 +218,14 @@ namespace Scopa
             }
             else if (cf == 0)
             {
+                // Debug.Log("Split result: all front");
                 // All vertices behind
                 front = coplanarBack = coplanarFront = null;
                 back = this;
                 return false;
             }
+
+            Debug.Log("Split result: mixed");
 
             // Get the new front and back vertices
             var backVerts = new List<Vector3>();

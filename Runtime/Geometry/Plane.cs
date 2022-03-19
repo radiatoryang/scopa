@@ -33,6 +33,18 @@ namespace Scopa {
             _plane = new UnityEngine.Plane(a, b, c);
         }
 
+        public void ReverseDistance() {
+            _plane.distance *= -1;
+        }
+
+        public void ReverseNormal() {
+            _plane.normal *= -1;
+        }
+
+        public void Flip() {
+            _plane.Flip();
+        }
+
         /// <summary>
         /// Gets the axis closest to the normal of this plane
         /// </summary>
@@ -49,20 +61,30 @@ namespace Scopa {
         public Vector3? GetIntersectionPoint(Vector3 start, Vector3 end) {
             if (_plane.Raycast(new Ray(start, end - start), out var enter) ) {
                 return start + (end-start).normalized * enter;
+                // return _plane.ClosestPointOnPlane(start);
             } else {
                 return null;
             }
         }
 
         public float EvalAtPoint(Vector3 point) {
-            return -_plane.GetDistanceToPoint(point);
+            return _plane.GetDistanceToPoint(point * -1);
         }
 
         public int OnPlane(Vector3 point) {
-            var res = -_plane.GetDistanceToPoint(point);
+            var res = _plane.GetDistanceToPoint(point);
             if (Mathf.Abs(res) < 0.001f) return 0;
             if (res < 0) return -1;
             return 1;
+        }
+
+        public void DebugDraw() {
+            Debug.DrawRay( _plane.normal * _plane.distance, _plane.normal * 10f, Color.yellow, 60f );
+        }
+
+        public override string ToString()
+        {
+            return $"[Plane normal {normal}, dist {distance}]";
         }
 
         public Plane Clone() {

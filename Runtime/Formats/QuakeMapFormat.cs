@@ -21,7 +21,7 @@ namespace Scopa.Formats.Map.Formats
      *          ( x y z ) ( x y z ) ( x y z ) texturename xshift yshift rotation xscale yscale
      *          // idTech3:
      *          ( x y z ) ( x y z ) ( x y z ) shadername xshift yshift rotation xscale yscale contentflags surfaceflags value
-     *          // Worldcraft:
+     *          // Worldcraft / idTech2 mapversion 220:
      *          ( x y z ) ( x y z ) ( x y z ) texturename [ ux uy uz xshift ] [ vx vy vz yshift ] rotation xscale yscale
      *      }
      *  }
@@ -208,9 +208,9 @@ namespace Scopa.Formats.Map.Formats
             Util.Assert(parts[10] == "(");
             Util.Assert(parts[14] == ")");
 
-            var a = NumericsExtensions.Parse(parts[1], parts[2], parts[3], ns, CultureInfo.InvariantCulture);
-            var b = NumericsExtensions.Parse(parts[6], parts[7], parts[8], ns, CultureInfo.InvariantCulture);
-            var c = NumericsExtensions.Parse(parts[11], parts[12], parts[13], ns, CultureInfo.InvariantCulture);
+            var a = NumericsExtensions.Parse(parts[1], parts[3], parts[2], ns, CultureInfo.InvariantCulture);
+            var b = NumericsExtensions.Parse(parts[6], parts[8], parts[7], ns, CultureInfo.InvariantCulture);
+            var c = NumericsExtensions.Parse(parts[11], parts[13], parts[12], ns, CultureInfo.InvariantCulture);
 
             // var ab = b - a;
             // var ac = c - a;
@@ -223,6 +223,23 @@ namespace Scopa.Formats.Map.Formats
                 Plane = new Plane(a, b, c),
                 TextureName = parts[15]
             };
+
+            // idk why this is needed?
+            // if ( face.Plane.GetClosestAxisToNormal() != Vector3.up ) {
+            //     Debug.Log("reversing!");
+            face.Plane.ReverseNormal();
+            // }
+
+            Debug.Log(line + "\n" + face.Plane);
+
+            // if ( face.TextureName == "TOP") {
+            //     face.Plane.ReverseDistance();
+            //     Debug.Log("reverse: " + face.Plane);
+            // }
+
+            // if ( face.Plane.distance > 0)
+            //     face.Plane.ReverseDistance();
+
             // Debug.Log($"normal: {face.Plane.normal}, distance: {face.Plane.distance}");
 
             // idTech2, idTech3
@@ -252,7 +269,7 @@ namespace Scopa.Formats.Map.Formats
                     face.Value = float.Parse(parts[20], ns, CultureInfo.InvariantCulture);
                 }
             }
-            // Worldcraft
+            // Worldcraft / version 220
             else if (parts.Count == 31)
             {
                 Util.Assert(parts[16] == "[");
