@@ -208,6 +208,7 @@ namespace Scopa.Formats.Map.Formats
             Util.Assert(parts[10] == "(");
             Util.Assert(parts[14] == ")");
 
+            // swizzle from Z up to Y up
             var a = NumericsExtensions.Parse(parts[1], parts[3], parts[2], ns, CultureInfo.InvariantCulture);
             var b = NumericsExtensions.Parse(parts[6], parts[8], parts[7], ns, CultureInfo.InvariantCulture);
             var c = NumericsExtensions.Parse(parts[11], parts[13], parts[12], ns, CultureInfo.InvariantCulture);

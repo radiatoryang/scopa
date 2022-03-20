@@ -51,11 +51,23 @@ namespace Scopa {
         /// <returns>Vector3.UnitX, Vector3.UnitY, or Vector3.UnitZ depending on the plane's normal</returns>
         public Vector3 GetClosestAxisToNormal() {
             // VHE prioritises the axes in order of X, Y, Z.
+            // so in Unity land, that's X, Z, and Y
             var norm = _plane.normal.Absolute();
 
             if (norm.x >= norm.y && norm.x >= norm.z) return Vector3.right;
-            if (norm.y >= norm.z) return Vector3.up;
-            return Vector3.forward;
+            if (norm.z >= norm.y) return Vector3.forward;
+            return Vector3.up;
+        }
+
+        public bool IsOrthogonal() {
+            if ( Mathf.Abs(_plane.normal.x) > 0.01f && Mathf.Abs(_plane.normal.x) < 0.99f ) {
+                return false;
+            } else if ( Mathf.Abs(_plane.normal.y) > 0.01f && Mathf.Abs(_plane.normal.y) < 0.99f ) {
+                return false;
+            } else if ( Mathf.Abs(_plane.normal.z) > 0.01f && Mathf.Abs(_plane.normal.z) < 0.99f ) {
+                return false;
+            }
+            return true;
         }
 
         public Vector3? GetIntersectionPoint(Vector3 start, Vector3 end) {
@@ -68,7 +80,11 @@ namespace Scopa {
         }
 
         public float EvalAtPoint(Vector3 point) {
-            return _plane.GetDistanceToPoint(point * -1);
+            return _plane.GetDistanceToPoint(-point);
+        }
+
+        public float GetDistanceToPoint(Vector3 point) {
+            return _plane.GetDistanceToPoint(point);
         }
 
         public int OnPlane(Vector3 point) {

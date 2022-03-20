@@ -34,6 +34,10 @@ namespace Scopa {
         }
 
         public static bool EquivalentTo(this Vector3 a, Vector3 b, float delta = 0.0001f) {
+            return Equivalent(a, b, delta);
+        }
+
+        public static bool Equivalent(Vector3 a, Vector3 b, float delta = 0.0001f) {
             if ( Mathf.Abs( a.x - b.x) > delta)
                 return false;
             if ( Mathf.Abs( a.y - b.y) > delta)

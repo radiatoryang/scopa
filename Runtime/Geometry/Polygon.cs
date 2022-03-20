@@ -182,10 +182,19 @@ namespace Scopa
 
         public bool SplitNew(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
-            const float epsilon = 0.01f;
+            const float epsilon = 0.00001f;
 
-            Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() );
+            // Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() );
             
+            bool isOrthogonal = this.Plane.IsOrthogonal();
+            var debugInfo = this.Plane.ToString() + " vs " + clip.ToString();
+            // var tempClip = clip.Clone();
+            // if ( isOrthogonal ) {
+            //     tempClip.ReverseNormal();
+            //     Debug.Log("non ortho, trying...");
+            // }
+
+            //var distances = Vertices.Select(vert => tempClip.GetDistanceToPoint(-vert) ).ToList();
             var distances = Vertices.Select(clip.EvalAtPoint).ToList();
 
             // Debug.Log("Split distances: " + string.Join(", ", distances) );
@@ -201,7 +210,8 @@ namespace Scopa
             // Check non-spanning cases
             if (cb == 0 && cf == 0)
             {
-                // Debug.Log("Split result: non-spanning");
+                if ( !isOrthogonal )
+                    Debug.Log("Split result: non-spanning " + debugInfo);
                 // Co-planar
                 back = front = coplanarBack = coplanarFront = null;
                 if (Plane.Normal.Dot(clip.Normal) >= 0) coplanarFront = this;
@@ -210,22 +220,28 @@ namespace Scopa
             }
             else if (cb == 0)
             {
-                // Debug.Log("Split result: all back");
+                if ( !isOrthogonal )
+                    Debug.Log("Split result: all back " + debugInfo);
                 // All vertices in front
                 back = coplanarBack = coplanarFront = null;
                 front = this;
+
                 return false;
             }
             else if (cf == 0)
             {
-                // Debug.Log("Split result: all front");
+                if ( !isOrthogonal )
+                    Debug.Log("Split result: all front " + debugInfo);
                 // All vertices behind
                 front = coplanarBack = coplanarFront = null;
                 back = this;
+
                 return false;
             }
 
-            Debug.Log("Split result: mixed");
+            if ( !isOrthogonal ) {
+                Debug.Log("Split result: mixed " + debugInfo);
+            }
 
             // Get the new front and back vertices
             var backVerts = new List<Vector3>();
@@ -254,6 +270,9 @@ namespace Scopa
             back = new Polygon(backVerts.Select(x => new Vector3(x.x, x.y, x.z)));
             front = new Polygon(frontVerts.Select(x => new Vector3(x.x, x.y, x.z)));
             coplanarBack = coplanarFront = null;
+
+            if ( !isOrthogonal )
+                Debug.Log( "verts are now: " + string.Join("\n", backVerts.Select( vert => vert.ToString() )) );
 
             return true;
         }

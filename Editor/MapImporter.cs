@@ -28,6 +28,8 @@ namespace Scopa.Editor {
 
             var gameObject = new GameObject( mapName );
             var mesh = Scopa.BuildMesh(mapFile.Worldspawn, mapName);
+
+            // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
             gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
             gameObject.AddComponent<MeshRenderer>().sharedMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
             // var position = JsonUtility.FromJson<Vector3>(File.ReadAllText(ctx.assetPath));

@@ -29,7 +29,10 @@ namespace Scopa
             var polygons = new List<Polygon>();
             
             var list = planes.ToList();
-            Debug.Log("Polyhedron " + string.Join( "\n", planes) );
+
+            var anyNonOrtho = planes.Where( plane => !plane.IsOrthogonal() ).Any();
+            if ( anyNonOrtho )
+                Debug.Log("Polyhedron " + string.Join( "\n", planes) );
             for (var i = 0; i < list.Count; i++)
             {
                 // Split the polygon by all the other planes
@@ -41,19 +44,23 @@ namespace Scopa
                         poly = back;
                     }
                 }
+                
+                if ( !list[i].IsOrthogonal() ) {
+                    Debug.Log("DONE! resulting polygon is: " + string.Join("\n", poly.Vertices) );
+                }
                 polygons.Add(poly);
             }
 
             // Ensure all the faces point outwards
-            // var origin = polygons.Aggregate(Vector3.zero, (x, y) => x + y.Origin) / polygons.Count;
-            // for (var i = 0; i < polygons.Count; i++)
-            // {
-            //     var face = polygons[i];
-            //     if (face.Plane.OnPlane(origin) >= 0) {
-            //         polygons[i] = new Polygon(face.Vertices.Reverse());
-            //         Debug.Log($"reversing normal {face.Plane} away from {origin} -> {polygons[i].Plane} ");
-            //     }
-            // }
+            var origin = polygons.Aggregate(Vector3.zero, (x, y) => x + y.Origin) / polygons.Count;
+            for (var i = 0; i < polygons.Count; i++)
+            {
+                var face = polygons[i];
+                if (face.Plane.OnPlane(origin) >= 0) {
+                    polygons[i] = new Polygon(face.Vertices.Reverse());
+                    Debug.Log($"reversing normal {face.Plane} away from {origin} -> {polygons[i].Plane} ");
+                }
+            }
 
             Polygons = polygons;
         }
