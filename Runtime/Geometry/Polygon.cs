@@ -210,8 +210,8 @@ namespace Scopa
             // Check non-spanning cases
             if (cb == 0 && cf == 0)
             {
-                if ( !isOrthogonal )
-                    Debug.Log("Split result: non-spanning " + debugInfo);
+                // if ( !isOrthogonal )
+                //     Debug.Log("Split result: non-spanning " + debugInfo);
                 // Co-planar
                 back = front = coplanarBack = coplanarFront = null;
                 if (Plane.Normal.Dot(clip.Normal) >= 0) coplanarFront = this;
@@ -220,8 +220,8 @@ namespace Scopa
             }
             else if (cb == 0)
             {
-                if ( !isOrthogonal )
-                    Debug.Log("Split result: all back " + debugInfo);
+                // if ( !isOrthogonal )
+                //     Debug.Log("Split result: all back " + debugInfo);
                 // All vertices in front
                 back = coplanarBack = coplanarFront = null;
                 front = this;
@@ -230,8 +230,8 @@ namespace Scopa
             }
             else if (cf == 0)
             {
-                if ( !isOrthogonal )
-                    Debug.Log("Split result: all front " + debugInfo);
+                // if ( !isOrthogonal )
+                //     Debug.Log("Split result: all front " + debugInfo);
                 // All vertices behind
                 front = coplanarBack = coplanarFront = null;
                 back = this;
@@ -239,9 +239,9 @@ namespace Scopa
                 return false;
             }
 
-            if ( !isOrthogonal ) {
-                Debug.Log("Split result: mixed " + debugInfo);
-            }
+            // if ( !isOrthogonal ) {
+            //     Debug.Log("Split result: mixed " + debugInfo);
+            // }
 
             // Get the new front and back vertices
             var backVerts = new List<Vector3>();
@@ -271,8 +271,8 @@ namespace Scopa
             front = new Polygon(frontVerts.Select(x => new Vector3(x.x, x.y, x.z)));
             coplanarBack = coplanarFront = null;
 
-            if ( !isOrthogonal )
-                Debug.Log( "verts are now: " + string.Join("\n", backVerts.Select( vert => vert.ToString() )) );
+            // if ( !isOrthogonal )
+            //     Debug.Log( "verts are now: " + string.Join("\n", backVerts.Select( vert => vert.ToString() )) );
 
             return true;
         }

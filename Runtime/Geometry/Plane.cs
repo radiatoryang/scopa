@@ -10,6 +10,8 @@ namespace Scopa {
         Spanning
     }
 
+    public enum Axis { X, Y, Z }
+
     /// <summary> wraps around UnityEngine.Plane so I don't have to mess with the other map format code so much </summary>
     public class Plane {
         /// <summary> internal UnityEngine.Plane used for all the math </summary>
@@ -50,13 +52,21 @@ namespace Scopa {
         /// </summary>
         /// <returns>Vector3.UnitX, Vector3.UnitY, or Vector3.UnitZ depending on the plane's normal</returns>
         public Vector3 GetClosestAxisToNormal() {
+            switch ( GetMainAxisToNormal() ) {
+                case Axis.X: return Vector3.right;
+                case Axis.Z: return Vector3.forward;
+                default: return Vector3.up;
+            }
+        }
+
+        public Axis GetMainAxisToNormal() {
             // VHE prioritises the axes in order of X, Y, Z.
             // so in Unity land, that's X, Z, and Y
             var norm = _plane.normal.Absolute();
 
-            if (norm.x >= norm.y && norm.x >= norm.z) return Vector3.right;
-            if (norm.z >= norm.y) return Vector3.forward;
-            return Vector3.up;
+            if (norm.x >= norm.y && norm.x >= norm.z) return Axis.X;
+            if (norm.z >= norm.y) return Axis.Z;
+            return Axis.Y;
         }
 
         public bool IsOrthogonal() {

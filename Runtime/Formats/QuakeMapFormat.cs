@@ -231,7 +231,7 @@ namespace Scopa.Formats.Map.Formats
             face.Plane.ReverseNormal();
             // }
 
-            Debug.Log(line + "\n" + face.Plane);
+            // Debug.Log(line + "\n" + face.Plane);
 
             // if ( face.TextureName == "TOP") {
             //     face.Plane.ReverseDistance();

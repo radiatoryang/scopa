@@ -23,10 +23,21 @@ namespace Scopa.Formats.Map.Objects
 
             foreach (var face in Faces)
             {
+                if ( !face.Plane.IsOrthogonal() ) {
+                    // Debug.Log("ComputeVertices: trying to match non-orthogonal face " + face.Plane);
+
+                    face.Plane.ReverseNormal();
+
+                    // Debug.Log("ComputeVertices possible candidates: " + string.Join("\n", poly.Polygons.Select(p => p.Plane)) );
+                }
+
                 var pg = poly.Polygons.FirstOrDefault(x => x.Plane.Normal.EquivalentTo(face.Plane.Normal.ToPrecisionVector3(), 0.0075f)); // Magic number that seems to match VHE
                 if (pg != null)
                 {
                     face.Vertices.AddRange(pg.Vertices.Select(x => x.ToStandardVector3()));
+                    // if ( !face.Plane.IsOrthogonal() ) {
+                    //     Debug.Log("ComputeVertices: found vertices! " + string.Join("\n", face.Vertices));
+                    // }
                 }
             }
         }

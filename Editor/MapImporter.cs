@@ -27,11 +27,23 @@ namespace Scopa.Editor {
             var mapFile = Scopa.Import(filepath);
 
             var gameObject = new GameObject( mapName );
-            var mesh = Scopa.BuildMesh(mapFile.Worldspawn, mapName);
+            var meshList = Scopa.BuildMeshRecursive(mapFile.Worldspawn, mapName);
+            var colliderData = Scopa.GenerateColliders(mapFile.Worldspawn);
 
             // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
-            gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
-            gameObject.AddComponent<MeshRenderer>().sharedMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
+            foreach ( var mesh in meshList ) {
+                var newMeshObj = new GameObject( mesh.name.Substring(mapName.Length+1) );
+                newMeshObj.transform.SetParent(gameObject.transform);
+                newMeshObj.AddComponent<MeshFilter>().sharedMesh = mesh;
+                newMeshObj.AddComponent<MeshRenderer>().sharedMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
+                // TODO: also add colliders?
+            }
+
+            foreach ( var col in colliderData ) {
+                var boxCol = gameObject.AddComponent<BoxCollider>();
+                boxCol.center = col.boxColliderBounds.center;
+                boxCol.size = col.boxColliderBounds.size;
+            }
             // var position = JsonUtility.FromJson<Vector3>(File.ReadAllText(ctx.assetPath));
 
             // cube.transform.position = position;
@@ -40,7 +52,9 @@ namespace Scopa.Editor {
             // 'cube' is a GameObject and will be automatically converted into a prefab
             // (Only the 'Main Asset' is eligible to become a Prefab.)
             ctx.AddObjectToAsset(gameObject.name, gameObject);
-            ctx.AddObjectToAsset(gameObject.name + "Worldspawn", mesh);
+            foreach ( var mesh in meshList ) {
+                ctx.AddObjectToAsset(mesh.name, mesh);
+            }
             ctx.SetMainObject(gameObject);
 
             // var material = new Material(Shader.Find("Standard"));
