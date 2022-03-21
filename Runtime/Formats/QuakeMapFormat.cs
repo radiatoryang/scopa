@@ -100,14 +100,15 @@ namespace Scopa.Formats.Map.Formats
         private static void ReadEntities(StreamReader rdr, MapFile map)
         {
             string line;
+            int solidCountInEntireMap = 0;
             while ((line = CleanLine(rdr.ReadLine())) != null)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
-                if (line == "{") ReadEntity(rdr, map);
+                if (line == "{") ReadEntity(rdr, map, solidCountInEntireMap);
             }
         }
 
-        private static void ReadEntity(StreamReader rdr, MapFile map)
+        private static void ReadEntity(StreamReader rdr, MapFile map, int solidCount)
         {
             var e = new Entity();
 
@@ -122,7 +123,11 @@ namespace Scopa.Formats.Map.Formats
                 else if (line[0] == '{')
                 {
                     var s = ReadSolid(rdr);
-                    if (s != null) e.Children.Add(s);
+                    if (s != null) {
+                        s.id = solidCount;
+                        solidCount++;
+                        e.Children.Add(s);
+                    }
                 }
                 else if (line[0] == '}')
                 {

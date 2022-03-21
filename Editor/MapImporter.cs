@@ -7,9 +7,6 @@ using UnityEditor.AssetImporters;
 using UnityEditor.Experimental.AssetImporters;
 #endif
 
-using System.IO;
-using Scopa;
-
 namespace Scopa.Editor {
 
     /// <summary>
@@ -23,42 +20,17 @@ namespace Scopa.Editor {
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
-            var mapName = Path.GetFileNameWithoutExtension(ctx.assetPath);
-            var mapFile = Scopa.Import(filepath);
 
-            var gameObject = new GameObject( mapName );
-            var meshList = Scopa.BuildMeshRecursive(mapFile.Worldspawn, mapName);
-            var colliderData = Scopa.GenerateColliders(mapFile.Worldspawn);
+            var mapFile = Scopa.Parse(filepath);
+            var defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
+            var gameObject = Scopa.BuildMapIntoGameObject(mapFile, defaultMaterial, out var meshList);
 
-            // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
-            foreach ( var mesh in meshList ) {
-                var newMeshObj = new GameObject( mesh.name.Substring(mapName.Length+1) );
-                newMeshObj.transform.SetParent(gameObject.transform);
-                newMeshObj.AddComponent<MeshFilter>().sharedMesh = mesh;
-                newMeshObj.AddComponent<MeshRenderer>().sharedMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
-                // TODO: also add colliders?
-            }
-
-            foreach ( var col in colliderData ) {
-                var boxCol = gameObject.AddComponent<BoxCollider>();
-                boxCol.center = col.boxColliderBounds.center;
-                boxCol.size = col.boxColliderBounds.size;
-            }
-            // var position = JsonUtility.FromJson<Vector3>(File.ReadAllText(ctx.assetPath));
-
-            // cube.transform.position = position;
-            // cube.transform.localScale = new Vector3(m_Scale, m_Scale, m_Scale);
-
-            // 'cube' is a GameObject and will be automatically converted into a prefab
             // (Only the 'Main Asset' is eligible to become a Prefab.)
             ctx.AddObjectToAsset(gameObject.name, gameObject);
             foreach ( var mesh in meshList ) {
                 ctx.AddObjectToAsset(mesh.name, mesh);
             }
             ctx.SetMainObject(gameObject);
-
-            // var material = new Material(Shader.Find("Standard"));
-            // material.color = Color.gray;
 
             // Assets must be assigned a unique identifier string consistent across imports
             // ctx.AddObjectToAsset("my Material", material);
