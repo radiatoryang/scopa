@@ -102,7 +102,7 @@ namespace Scopa {
                 return null;
                 
             var mesh = new Mesh();
-            mesh.name = namePrefix + "-" + ent.ClassName + "-" + lastSolidID.ToString();
+            mesh.name = namePrefix + "-" + ent.ClassName + "#" + lastSolidID.ToString();
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
 
@@ -226,7 +226,7 @@ namespace Scopa {
 
                 // otherwise, use a mesh collider
                 var newMeshCollider = AddMeshCollider(gameObject, solid);
-                newMeshCollider.name = namePrefix + "-" + ent.ClassName + "-" + solid.id;
+                newMeshCollider.name = namePrefix + "-" + ent.ClassName + "#" + solid.id;
                 meshList.Add( newMeshCollider ); 
             }
 
