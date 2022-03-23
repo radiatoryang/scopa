@@ -252,8 +252,8 @@ namespace Scopa.Formats.Map.Formats
             if (parts.Count == 21 || parts.Count == 24)
             {
                 var direction = face.Plane.GetClosestAxisToNormal();
-                face.UAxis = direction == Vector3.right ? Vector3.up : Vector3.right;
-                face.VAxis = direction == Vector3.forward ? -Vector3.up : -Vector3.forward;
+                face.UAxis = direction == Vector3.right ? Vector3.forward : Vector3.right;
+                face.VAxis = direction == Vector3.up ? -Vector3.forward : -Vector3.up;
 
                 var xshift = float.Parse(parts[16], ns, CultureInfo.InvariantCulture);
                 var yshift = float.Parse(parts[17], ns, CultureInfo.InvariantCulture);
@@ -283,9 +283,9 @@ namespace Scopa.Formats.Map.Formats
                 Util.Assert(parts[22] == "[");
                 Util.Assert(parts[27] == "]");
 
-                face.UAxis = NumericsExtensions.Parse(parts[17], parts[18], parts[19], ns, CultureInfo.InvariantCulture);
+                face.UAxis = NumericsExtensions.Parse(parts[17], parts[19], parts[18], ns, CultureInfo.InvariantCulture);
                 face.XShift = float.Parse(parts[20], ns, CultureInfo.InvariantCulture);
-                face.VAxis = NumericsExtensions.Parse(parts[23], parts[24], parts[25], ns, CultureInfo.InvariantCulture);
+                face.VAxis = NumericsExtensions.Parse(parts[23], parts[25], parts[24], ns, CultureInfo.InvariantCulture);
                 face.YShift = float.Parse(parts[26], ns, CultureInfo.InvariantCulture);
                 face.Rotation = float.Parse(parts[28], ns, CultureInfo.InvariantCulture);
                 face.XScale = float.Parse(parts[29], ns, CultureInfo.InvariantCulture);

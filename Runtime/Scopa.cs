@@ -10,8 +10,8 @@ namespace Scopa {
         public static float scalingFactor = 0.03125f; // 1/32, since 1.0 meters = 32 units
 
         static bool warnedUserAboutMultipleColliders = false;
-        const string warningMessage = "WARNING! Unity will complain about too many colliders with same name on same object, because it may not re-import in the same order / same way again."
-            + "\n\nHowever, this is by design. You don't want a game object for each box colllder / a thousand box colliders. So just IGNORE UNITY'S WARNINGS.";
+        const string warningMessage = "WARNING! Unity will complain about too many colliders with same name on same object, because it may not re-import in the same order / same way again... "
+            + "However, this is by design. You don't want a game object for each box colllder / a thousand box colliders. So just IGNORE UNITY'S WARNINGS.";
 
         /// <summary>Parses the .MAP text data into a usable data structure.</summary>
         public static MapFile Parse( string pathToMapFile ) {
@@ -71,6 +71,7 @@ namespace Scopa {
             var meshList = new List<Mesh>();
             var verts = new List<Vector3>();
             var tris = new List<int>();
+            var uvs = new List<Vector2>();
 
             var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
             var allFaces = new List<Face>(); // used later for testing unseen faces
@@ -95,7 +96,7 @@ namespace Scopa {
 
             // pass 2: now build mesh, while also culling unseen faces
             foreach ( var solid in solids) {
-                BuildMeshFromSolid( solid, false, verts, tris);
+                BuildMeshFromSolid( solid, false, verts, tris, uvs);
             }
 
             if ( verts.Count == 0 || tris.Count == 0) 
@@ -105,6 +106,7 @@ namespace Scopa {
             mesh.name = namePrefix + "-" + ent.ClassName + "#" + lastSolidID.ToString();
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
+            mesh.SetUVs(0, uvs);
 
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
@@ -128,14 +130,15 @@ namespace Scopa {
         }
 
         /// <summary> given a brush / solid, either 
-        /// (a) adds mesh data to provided verts / tris lists 
+        /// (a) adds mesh data to provided verts / tris / UV lists 
         /// OR (b) returns a mesh if no lists provided</summary>
-        public static Mesh BuildMeshFromSolid(Solid solid, bool includeDiscardedFaces = false, List<Vector3> verts = null, List<int> tris = null) {
+        public static Mesh BuildMeshFromSolid(Solid solid, bool includeDiscardedFaces = false, List<Vector3> verts = null, List<int> tris = null, List<Vector2> uvs = null) {
             bool returnMesh = false;
 
             if (verts == null || tris == null) {
                 verts = new List<Vector3>();
                 tris = new List<int>();
+                uvs = new List<Vector2>();
                 returnMesh = true;
             }
 
@@ -159,7 +162,7 @@ namespace Scopa {
                 // if ( face.discardWhenBuildingMesh )
                 //     continue;
 
-                AddFaceVerticesToMesh(face.Vertices, verts, tris);
+                BuildFaceMesh(face, verts, tris, uvs);
             }
 
             if ( !returnMesh ) {
@@ -169,6 +172,7 @@ namespace Scopa {
             var mesh = new Mesh();
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
+            mesh.SetUVs(0, uvs);
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
             mesh.Optimize();
@@ -180,22 +184,26 @@ namespace Scopa {
             return mesh;
         }
 
-        /// <summary> build mesh fragment (verts / tris), usually run for each face of a solid </summary>
-        static void AddFaceVerticesToMesh(List<Vector3> addTheseVertices, List<Vector3> verts, List<int> tris) {
-            var vertCount = verts.Count;
+        /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
+        static void BuildFaceMesh(Face face, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 1, int textureHeight = 1) {
+            var lastVertIndexOfList = verts.Count;
 
-            for( int v=0; v<addTheseVertices.Count; v++) {
-                verts.Add(addTheseVertices[v]);
+            // add all verts and UVs
+            for( int v=0; v<face.Vertices.Count; v++) {
+                verts.Add(face.Vertices[v]);
+
+                uvs.Add(new Vector2(
+                    (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / textureWidth,
+                    (Vector3.Dot(face.Vertices[v], face.VAxis / face.YScale) + (face.YShift % textureHeight)) / textureHeight
+                ));
             }
 
             // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
-            for(int i=2; i<addTheseVertices.Count; i++) {
-                tris.Add(vertCount);
-                tris.Add(vertCount + i - 1);
-                tris.Add(vertCount + i);
+            for(int i=2; i<face.Vertices.Count; i++) {
+                tris.Add(lastVertIndexOfList);
+                tris.Add(lastVertIndexOfList + i - 1);
+                tris.Add(lastVertIndexOfList + i);
             }
-
-            // TODO: UVs?
         }
 
         /// <summary> for each solid in an Entity, add either a Box Collider or a Mesh Collider component </summary>
@@ -274,18 +282,14 @@ namespace Scopa {
             return newMesh;
         }
 
-    }
-
-    public class ColliderData {
-        public Bounds boxColliderBounds;
-        public Vector3[] meshColliderVerts;
-
-        public ColliderData(Bounds bounds) {
-            boxColliderBounds = bounds;
+        static float Frac(float decimalNumber) {
+            if ( Mathf.Round(decimalNumber) > decimalNumber ) {
+                return (Mathf.Ceil(decimalNumber) - decimalNumber);
+            } else {
+                return (decimalNumber - Mathf.Floor(decimalNumber));
+            }
         }
 
-        public ColliderData(Vector3[] verts) {
-            meshColliderVerts = verts;
-        }
     }
+
 }

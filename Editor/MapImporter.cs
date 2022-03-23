@@ -22,7 +22,14 @@ namespace Scopa.Editor {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
 
             var mapFile = Scopa.Parse(filepath);
-            var defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
+ 
+            var defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
+            if ( defaultMaterial == null ) {
+                defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( AssetDatabase.FindAssets("BlockoutDark.mat")[0] );
+                if ( defaultMaterial == null ) {
+                    defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
+                }
+            }
             var gameObject = Scopa.BuildMapIntoGameObject(mapFile, defaultMaterial, out var meshList);
 
             // (Only the 'Main Asset' is eligible to become a Prefab.)
