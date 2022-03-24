@@ -8,6 +8,10 @@ using Scopa.Formats.Id;
 using UnityEngine;
 using Mesh = UnityEngine.Mesh;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace Scopa {
     public static class Scopa {
         public static float scalingFactor = 0.03125f; // 1/32, since 1.0 meters = 32 units
@@ -67,20 +71,16 @@ namespace Scopa {
 
         public static bool IsExcludedTexName(string textureName) {
             var texName = textureName.ToLowerInvariant();
-            return texName.Contains("sky") || texName.Contains("trigger") || texName.Contains("clip") || texName.Contains("skip") || texName.Contains("water");
+            return string.IsNullOrWhiteSpace(texName) || texName.Contains("sky") || texName.Contains("trigger") || texName.Contains("clip") || texName.Contains("skip") || texName.Contains("water");
         }
 
         public static List<Mesh> AddGameObjectFromEntity( GameObject rootGameObject, Entity ent, string namePrefix, Material defaultMaterial ) {
-            var meshList = new List<Mesh>();
-            var verts = new List<Vector3>();
-            var tris = new List<int>();
-            var uvs = new List<Vector2>();
-
             var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
             var allFaces = new List<Face>(); // used later for testing unseen faces
             var lastSolidID = -1;
 
-            // pass 1: gather all faces + cull any faces we're obviously not going to use
+            // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
+            var textureLookup = new Dictionary<string, Material>();
             foreach (var solid in solids) {
                 lastSolidID = solid.id;
                 foreach (var face in solid.Faces) {
@@ -94,48 +94,100 @@ namespace Scopa {
                     }
                     
                     allFaces.Add(face);
+
+                    if ( !textureLookup.ContainsKey(face.TextureName) ) {
+                        var newMaterial = defaultMaterial;
+                        
+                        // TODO: this is a good time to grab the proper Material override
+                        
+                        // EDITOR ONLY: if still no better material found, then search the AssetDatabase for a matching texture name
+                        #if UNITY_EDITOR
+                        var searchQuery = face.TextureName + " t:Material";
+                        Debug.Log("search: " + searchQuery);
+                        var materialSearchGUID = AssetDatabase.FindAssets(searchQuery).FirstOrDefault();
+
+                        // if there's multiple Materials attached to one Asset, we have to do additional filtering
+                        if ( !string.IsNullOrEmpty(materialSearchGUID) ) {
+                            var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
+                            foreach ( var asset in allAssets ) {
+                                if ( asset is Material && asset.name.Contains(face.TextureName) ) {
+                                    newMaterial = asset as Material;
+                                    Debug.Log("found: " + newMaterial.name);
+                                    break;
+                                }
+                            }
+                        }
+                        #endif
+
+                        textureLookup.Add(face.TextureName, newMaterial);
+                    }
                 }
             }
 
-            // pass 2: now build mesh, while also culling unseen faces
-            foreach ( var solid in solids) {
-                BuildMeshFromSolid( solid, false, verts, tris, uvs);
+            // pass 2: now build one mesh + one game object per textureName
+            var meshList = new List<Mesh>();
+
+            var verts = new List<Vector3>();
+            var tris = new List<int>();
+            var uvs = new List<Vector2>();
+            var meshParent = new GameObject( ent.ClassName + "#" + ent.ID.ToString() );
+
+            meshParent.transform.SetParent(rootGameObject.transform);
+
+            foreach ( var textureKVP in textureLookup ) {
+                verts.Clear();
+                tris.Clear();
+                uvs.Clear();
+                
+                foreach ( var solid in solids) {
+                    BuildMeshFromSolid( solid, textureKVP.Key, false, verts, tris, uvs);
+                }
+
+                if ( verts.Count == 0 || tris.Count == 0) 
+                    continue;
+                    
+                var mesh = new Mesh();
+                mesh.name = namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-" + textureKVP.Key;
+                mesh.SetVertices(verts);
+                mesh.SetTriangles(tris, 0);
+                mesh.SetUVs(0, uvs);
+
+                mesh.RecalculateBounds();
+                mesh.RecalculateNormals();
+                mesh.Optimize();
+                meshList.Add( mesh );
+                
+                #if UNITY_EDITOR
+                UnityEditor.MeshUtility.SetMeshCompression(mesh, UnityEditor.ModelImporterMeshCompression.Medium);
+                #endif
+
+                // finally, add mesh as game object, while we still have all the entity information
+                var newMeshObj = textureLookup.Count > 1 ? new GameObject( textureKVP.Key ) : meshParent; // but if there's only one texture name, then just reuse meshParent
+                if ( newMeshObj != meshParent )
+                    newMeshObj.transform.SetParent(meshParent.transform);
+                newMeshObj.AddComponent<MeshFilter>().sharedMesh = mesh;
+                newMeshObj.AddComponent<MeshRenderer>().sharedMaterial = textureKVP.Value;
             }
 
-            if ( verts.Count == 0 || tris.Count == 0) 
-                return null;
-                
-            var mesh = new Mesh();
-            mesh.name = namePrefix + "-" + ent.ClassName + "#" + lastSolidID.ToString();
-            mesh.SetVertices(verts);
-            mesh.SetTriangles(tris, 0);
-            mesh.SetUVs(0, uvs);
-
-            mesh.RecalculateBounds();
-            mesh.RecalculateNormals();
-            mesh.Optimize();
-            meshList.Add( mesh );
-            
-            #if UNITY_EDITOR
-            UnityEditor.MeshUtility.SetMeshCompression(mesh, UnityEditor.ModelImporterMeshCompression.Medium);
-            #endif
-
-            // finally, add mesh as game object + do collision, while we still have all the entity information
-            var newMeshObj = new GameObject( mesh.name.Substring(namePrefix.Length+1) );
-            newMeshObj.transform.SetParent(rootGameObject.transform);
-            newMeshObj.AddComponent<MeshFilter>().sharedMesh = mesh;
-            newMeshObj.AddComponent<MeshRenderer>().sharedMaterial = defaultMaterial;
-
-            // collision pass
-            meshList.AddRange( Scopa.AddColliders( newMeshObj, ent, namePrefix ) );
+            // collision pass, now treat it all as one object and ignore texture names
+            if ( !IsEntityIllusionary(ent.ClassName) )
+                meshList.AddRange( Scopa.AddColliders( meshParent, ent, namePrefix ) );
             
             return meshList;
         }
 
-        /// <summary> given a brush / solid, either 
-        /// (a) adds mesh data to provided verts / tris / UV lists 
+        static bool IsEntityIllusionary(string className) {
+            return className.Contains("illusionary");
+        }
+
+        static bool IsEntityTrigger(string className) {
+            return className.Contains("trigger");
+        }
+
+        /// <summary> given a brush / solid (and optional textureFilter texture name) 
+        /// either (a) adds mesh data to provided verts / tris / UV lists 
         /// OR (b) returns a mesh if no lists provided</summary>
-        public static Mesh BuildMeshFromSolid(Solid solid, bool includeDiscardedFaces = false, List<Vector3> verts = null, List<int> tris = null, List<Vector2> uvs = null) {
+        public static Mesh BuildMeshFromSolid(Solid solid, string textureFilter = null, bool includeDiscardedFaces = false, List<Vector3> verts = null, List<int> tris = null, List<Vector2> uvs = null) {
             bool returnMesh = false;
 
             if (verts == null || tris == null) {
@@ -150,6 +202,9 @@ namespace Scopa {
                     continue;
 
                 if ( face.discardWhenBuildingMesh )
+                    continue;
+
+                if ( !string.IsNullOrEmpty(textureFilter) && textureFilter.GetHashCode() != face.TextureName.GetHashCode() )
                     continue;
 
                 // test for unseen / hidden faces, and discard
@@ -213,38 +268,34 @@ namespace Scopa {
         public static List<Mesh> AddColliders(GameObject gameObject, Entity ent, string namePrefix, bool forceBoxCollidersForAll = false) {
             var meshList = new List<Mesh>();
 
-            // ignore any "illusionary" entities
-            if ( ent.ClassName.ToLowerInvariant().Contains("illusionary") ) {
-                return meshList;
-            }
-
             var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
+            bool isTrigger = IsEntityTrigger(ent.ClassName);
 
             foreach ( var solid in solids ) {
                 // ignore solids that are textured in all invisible textures
-                bool exclude = true;
-                foreach ( var face in solid.Faces ) {
-                    if ( !IsExcludedTexName(face.TextureName) ) {
-                        exclude = false;
-                        break;
-                    }
-                }
-                if ( exclude )
-                    continue;
+                // bool exclude = true;
+                // foreach ( var face in solid.Faces ) {
+                //     if ( !IsExcludedTexName(face.TextureName) ) {
+                //         exclude = false;
+                //         break;
+                //     }
+                // }
+                // if ( exclude )
+                //     continue;
                 
-                if ( TryAddBoxCollider(gameObject, solid) ) // first, try to add a box collider
+                if ( TryAddBoxCollider(gameObject, solid, isTrigger) ) // first, try to add a box collider
                     continue;
 
                 // otherwise, use a mesh collider
-                var newMeshCollider = AddMeshCollider(gameObject, solid);
-                newMeshCollider.name = namePrefix + "-" + ent.ClassName + "#" + solid.id;
+                var newMeshCollider = AddMeshCollider(gameObject, solid, isTrigger);
+                newMeshCollider.name = namePrefix + "-" + ent.ClassName + "#" + solid.id + "-Collider";
                 meshList.Add( newMeshCollider ); 
             }
 
             return meshList;
         }
 
-        static bool TryAddBoxCollider(GameObject gameObject, Solid solid) {
+        static bool TryAddBoxCollider(GameObject gameObject, Solid solid, bool isTrigger = false) {
             var verts = new List<Vector3>();
             foreach ( var face in solid.Faces ) {
                 if (!face.Plane.IsOrthogonal() ) {
@@ -263,11 +314,12 @@ namespace Scopa {
             var boxCol = gameObject.AddComponent<BoxCollider>();
             boxCol.center = bounds.center;
             boxCol.size = bounds.size;
+            boxCol.isTrigger = isTrigger;
             return true;
         }
 
-        static Mesh AddMeshCollider(GameObject gameObject, Solid solid) {
-            var newMesh = BuildMeshFromSolid(solid, true);
+        static Mesh AddMeshCollider(GameObject gameObject, Solid solid, bool isTrigger = false) {
+            var newMesh = BuildMeshFromSolid(solid, null, true);
 
             if (!warnedUserAboutMultipleColliders) {
                 Debug.LogWarning(warningMessage);
@@ -281,6 +333,7 @@ namespace Scopa {
                 | MeshColliderCookingOptions.EnableMeshCleaning 
                 | MeshColliderCookingOptions.WeldColocatedVertices 
                 | MeshColliderCookingOptions.UseFastMidphase;
+            newMeshCollider.isTrigger = isTrigger;
             
             return newMesh;
         }
@@ -343,7 +396,7 @@ namespace Scopa {
 
                 // we have all pixel color data now, so we can build the Texture2D
                 var newTexture = new Texture2D( width, height, TextureFormat.RGB24, true);
-                newTexture.name = wad.Name + "." + texData.Name.ToLowerInvariant();
+                newTexture.name = texData.Name.ToLowerInvariant().Replace("*", "").Replace("+", "").Replace("{", "");
                 newTexture.SetPixels32(pixels);
                 newTexture.Apply();
                 if ( compressTextures ) {

@@ -77,6 +77,9 @@ namespace Scopa.Formats.Map.Formats
         public string[] AdditionalExtensions => new[] { "max" };
         public string[] SupportedStyleHints => new[] { "idTech2", "idTech3", "idTech4", "Worldcraft" };
 
+        static int entityCount = 0;
+        static int solidCount = 0;
+
         public MapFile Read(Stream stream)
         {
             var map = new MapFile();
@@ -100,17 +103,20 @@ namespace Scopa.Formats.Map.Formats
         private static void ReadEntities(StreamReader rdr, MapFile map)
         {
             string line;
-            int solidCountInEntireMap = 0;
+            entityCount = 0;
+            solidCount = 0;
             while ((line = CleanLine(rdr.ReadLine())) != null)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
-                if (line == "{") ReadEntity(rdr, map, solidCountInEntireMap);
+                if (line == "{") ReadEntity(rdr, map);
             }
         }
 
-        private static void ReadEntity(StreamReader rdr, MapFile map, int solidCount)
+        private static void ReadEntity(StreamReader rdr, MapFile map)
         {
             var e = new Entity();
+            e.ID = entityCount;
+            entityCount++;
 
             string line;
             while ((line = CleanLine(rdr.ReadLine())) != null)
@@ -227,7 +233,7 @@ namespace Scopa.Formats.Map.Formats
             var face = new Face()
             {
                 Plane = new Plane(a, b, c),
-                TextureName = parts[15]
+                TextureName = parts[15].ToLowerInvariant().Replace("*", "").Replace("+", "").Replace("{", "")
             };
 
             // idk why this is needed?
