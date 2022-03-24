@@ -70,7 +70,6 @@ To let people define game objects and add behaviours in the .MAP, you will need 
 ## Limitations
 
 - **This package doesn't have game code or entity logic.** It imports MAP files as 3D models, sets up colliders, and provides hooks for importing entity data. That's it.
-- **This package does not import Quake textures / WADs.** Instead, you must configure which Unity material pairs with each texture name.
 
 ## Acknowledgments / Credits
 
