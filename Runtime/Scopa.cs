@@ -1,7 +1,10 @@
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using Scopa.Formats.Map.Formats;
 using Scopa.Formats.Map.Objects;
+using Scopa.Formats.Texture.Wad;
+using Scopa.Formats.Id;
 using UnityEngine;
 using Mesh = UnityEngine.Mesh;
 
@@ -14,7 +17,7 @@ namespace Scopa {
             + "However, this is by design. You don't want a game object for each box colllder / a thousand box colliders. So just IGNORE UNITY'S WARNINGS.";
 
         /// <summary>Parses the .MAP text data into a usable data structure.</summary>
-        public static MapFile Parse( string pathToMapFile ) {
+        public static MapFile ParseMap( string pathToMapFile ) {
             IMapFormat importer = null;
             if ( pathToMapFile.EndsWith(".map")) {
                 importer = new QuakeMapFormat();
@@ -288,6 +291,69 @@ namespace Scopa {
             } else {
                 return (decimalNumber - Mathf.Floor(decimalNumber));
             }
+        }
+
+        public static WadFile ParseWad(string fileName)
+        {
+            using (var fStream = System.IO.File.OpenRead(fileName))
+            {
+                var newWad = new WadFile(fStream);
+                newWad.Name = System.IO.Path.GetFileNameWithoutExtension(fileName);
+                return newWad;
+            }
+        }
+
+        public static List<Texture2D> BuildWadTextures(WadFile wad, bool compressTextures = true) {
+            if ( wad == null || wad.Entries == null || wad.Entries.Count == 0) {
+                Debug.LogError("Couldn't parse WAD file " + wad.Name);
+            }
+
+            var textureList = new List<Texture2D>();
+
+            foreach ( var entry in wad.Entries ) {
+                // Debug.Log(entry.Name + " : " + entry.Type);
+                if ( entry.Type != LumpType.RawTexture && entry.Type != LumpType.MipTexture )
+                    continue;
+
+                var texData = (wad.GetLump(entry) as MipTexture);
+                // Debug.Log( "BITMAP: " + string.Join(", ", texData.MipData[0].Select( b => b.ToString() )) );
+                // Debug.Log( "PALETTE: " + string.Join(", ", texData.Palette.Select( b => b.ToString() )) );
+
+                // Half-Life GoldSrc textures use individualized 256 color palettes
+                var width = System.Convert.ToInt32(texData.Width);
+                var height = System.Convert.ToInt32(texData.Height);
+                var palette = new Color32[256];
+                for (int i=0; i<palette.Length; i++) {
+                    palette[i] = new Color32( texData.Palette[i*3], texData.Palette[i*3+1], texData.Palette[i*3+2], 0xff );
+                }
+                
+                var mipSize = texData.MipData[0].Length;
+                var pixels = new Color32[mipSize];
+
+                // for some reason, WAD texture bytes are flipped? have to unflip them for Unity
+                for( int y=0; y < height; y++) {
+                    for (int x=0; x < width; x++) {
+                        pixels[y*width+x] = palette[ texData.MipData[0][(height-1-y)*width + x] ];
+
+                        // TODO: in Quake WADs, some colors are reserved as fullbright colors / for transparency
+
+                        // TODO: in Half-Life WADs, blue 255 is reserved for transparency
+                    }
+                }
+
+                // we have all pixel color data now, so we can build the Texture2D
+                var newTexture = new Texture2D( width, height, TextureFormat.RGB24, true);
+                newTexture.name = wad.Name + "." + texData.Name.ToLowerInvariant();
+                newTexture.SetPixels32(pixels);
+                newTexture.Apply();
+                if ( compressTextures ) {
+                    newTexture.Compress(false);
+                }
+                textureList.Add( newTexture );
+                
+            }
+
+            return textureList;
         }
 
     }

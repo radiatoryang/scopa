@@ -1,9 +1,9 @@
 # Scopa
 
-*Scopa* ("broom" in Latin) is a Unity level design plugin that adds Quake 1 .MAP (Valve 220 version) file import. Relive the golden age of level design... today!
+*Scopa* ("broom" in Latin) is a Unity level design plugin that adds Quake 1 .MAP file import. Relive the golden age of level design... today!
 
 - generates a prefab with 3D meshes, colliders (box colliders and mesh colliders), hooks for entity data
-- editor time: auto-imports .MAP files as if they were 3D models, serializes meshes
+- editor time: auto-imports .MAP files as if they were 3D models
 - all parsing and model gen functions work at runtime too, if you want to add modding support... it's just a bunch of static functions in `Scopa.cs`
 
 To build .MAP levels, we recommend the free open source multiplatform 3D level design tool [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom).
@@ -49,7 +49,13 @@ To optimize world collisions as much as possible, Scopa generates two Unity coll
 
 ### Texturing
 
-(TODO) **This package does not import Quake textures / WADs.** Instead, you must configure which Unity material pairs with each texture name.
+Scopa can import Quake 1 WADs (WAD2 format) as Texture2Ds and generate basic Materials. Just put a .WAD file somewhere in the /Assets/ folder, and it will get detected and imported like any other asset file.
+
+- TODO: read Worldspawn wads path, attempt to auto-connect WAD textures already in the project
+- TODO: specify a "master material" template for generating opaque materials, alpha cutout materials
+- TODO: configure which Unity material pairs with each texture name in the .MAP
+- to author WADs, use tools like TexMex or Wally
+- TODO: Half-Life 1 GoldSrc WAD3 support
 
 ### Entity data / game logic
 

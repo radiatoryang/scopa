@@ -3,7 +3,7 @@ using UnityEditor;
 
 #if UNITY_2020_2_OR_NEWER
 using UnityEditor.AssetImporters;
-#elif UNITY_2017_1_OR_NEWER
+#else
 using UnityEditor.Experimental.AssetImporters;
 #endif
 
@@ -21,7 +21,7 @@ namespace Scopa.Editor {
         {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
 
-            var mapFile = Scopa.Parse(filepath);
+            var mapFile = Scopa.ParseMap(filepath);
  
             var defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
             if ( defaultMaterial == null ) {
