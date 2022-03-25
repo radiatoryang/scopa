@@ -29,10 +29,7 @@ namespace Scopa.Editor {
 
             foreach (var tex in textures) {
                 ctx.AddObjectToAsset(tex.name, tex);
-                var newMaterial = new Material( Shader.Find("Standard") );
-                newMaterial.name = tex.name;
-                newMaterial.mainTexture = tex;
-                // TODO: is it a transparent texture? if so, use cutout mode
+                var newMaterial = Scopa.BuildMaterialForTexture(tex);
                 ctx.AddObjectToAsset(tex.name, newMaterial);
             }
             

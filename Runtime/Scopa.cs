@@ -79,6 +79,16 @@ namespace Scopa {
             var allFaces = new List<Face>(); // used later for testing unseen faces
             var lastSolidID = -1;
 
+            var smoothNormalAngle = -1;
+            if (ent.Properties.ContainsKey("_phong") && ent.Properties["_phong"] == "1") {
+                Debug.Log("phong?");
+                if ( ent.Properties.ContainsKey("_phong_angle") ) {
+                    smoothNormalAngle = Mathf.RoundToInt( float.Parse(ent.Properties["_phong_angle"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture) );
+                } else {
+                    smoothNormalAngle = 80;
+                }
+            }
+
             // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
             var textureLookup = new Dictionary<string, Material>();
             foreach (var solid in solids) {
@@ -103,7 +113,7 @@ namespace Scopa {
                         // EDITOR ONLY: if still no better material found, then search the AssetDatabase for a matching texture name
                         #if UNITY_EDITOR
                         var searchQuery = face.TextureName + " t:Material";
-                        Debug.Log("search: " + searchQuery);
+                        // Debug.Log("search: " + searchQuery);
                         var materialSearchGUID = AssetDatabase.FindAssets(searchQuery).FirstOrDefault();
 
                         // if there's multiple Materials attached to one Asset, we have to do additional filtering
@@ -112,7 +122,7 @@ namespace Scopa {
                             foreach ( var asset in allAssets ) {
                                 if ( asset is Material && asset.name.Contains(face.TextureName) ) {
                                     newMaterial = asset as Material;
-                                    Debug.Log("found: " + newMaterial.name);
+                                    // Debug.Log("found: " + newMaterial.name);
                                     break;
                                 }
                             }
@@ -140,7 +150,7 @@ namespace Scopa {
                 uvs.Clear();
                 
                 foreach ( var solid in solids) {
-                    BuildMeshFromSolid( solid, textureKVP.Key, false, verts, tris, uvs);
+                    BuildMeshFromSolid( solid, textureKVP.Value != defaultMaterial ? textureKVP.Value : null, false, verts, tris, uvs);
                 }
 
                 if ( verts.Count == 0 || tris.Count == 0) 
@@ -153,7 +163,12 @@ namespace Scopa {
                 mesh.SetUVs(0, uvs);
 
                 mesh.RecalculateBounds();
-                mesh.RecalculateNormals();
+                if ( smoothNormalAngle > 0) {
+                    Debug.Log("phong shading!");
+                    mesh.RecalculateNormals(smoothNormalAngle);
+                } else {
+                    mesh.RecalculateNormals();
+                }
                 mesh.Optimize();
                 meshList.Add( mesh );
                 
@@ -187,7 +202,7 @@ namespace Scopa {
         /// <summary> given a brush / solid (and optional textureFilter texture name) 
         /// either (a) adds mesh data to provided verts / tris / UV lists 
         /// OR (b) returns a mesh if no lists provided</summary>
-        public static Mesh BuildMeshFromSolid(Solid solid, string textureFilter = null, bool includeDiscardedFaces = false, List<Vector3> verts = null, List<int> tris = null, List<Vector2> uvs = null) {
+        public static Mesh BuildMeshFromSolid(Solid solid, Material textureFilter = null, bool includeDiscardedFaces = false, List<Vector3> verts = null, List<int> tris = null, List<Vector2> uvs = null) {
             bool returnMesh = false;
 
             if (verts == null || tris == null) {
@@ -204,7 +219,7 @@ namespace Scopa {
                 if ( face.discardWhenBuildingMesh )
                     continue;
 
-                if ( !string.IsNullOrEmpty(textureFilter) && textureFilter.GetHashCode() != face.TextureName.GetHashCode() )
+                if ( textureFilter != null && textureFilter.name.GetHashCode() != face.TextureName.GetHashCode() )
                     continue;
 
                 // test for unseen / hidden faces, and discard
@@ -220,7 +235,7 @@ namespace Scopa {
                 // if ( face.discardWhenBuildingMesh )
                 //     continue;
 
-                BuildFaceMesh(face, verts, tris, uvs);
+                BuildFaceMesh(face, verts, tris, uvs, textureFilter != null ? textureFilter.mainTexture.width : 512, textureFilter != null ? textureFilter.mainTexture.height : 512);
             }
 
             if ( !returnMesh ) {
@@ -243,7 +258,7 @@ namespace Scopa {
         }
 
         /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BuildFaceMesh(Face face, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 1, int textureHeight = 1) {
+        static void BuildFaceMesh(Face face, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 128, int textureHeight = 128) {
             var lastVertIndexOfList = verts.Count;
 
             // add all verts and UVs
@@ -251,8 +266,8 @@ namespace Scopa {
                 verts.Add(face.Vertices[v]);
 
                 uvs.Add(new Vector2(
-                    (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / textureWidth,
-                    (Vector3.Dot(face.Vertices[v], face.VAxis / face.YScale) + (face.YShift % textureHeight)) / textureHeight
+                    (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth) * scalingFactor) / (textureWidth * scalingFactor),
+                    (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight) * scalingFactor) / (textureHeight * scalingFactor)
                 ));
             }
 
@@ -379,25 +394,30 @@ namespace Scopa {
                 for (int i=0; i<palette.Length; i++) {
                     palette[i] = new Color32( texData.Palette[i*3], texData.Palette[i*3+1], texData.Palette[i*3+2], 0xff );
                 }
+                // the last color is reserved for transparency
+                // palette[255].a = 0x00;
+                palette[255] = new Color32(0x00, 0x00, 0x00, 0x00);
                 
                 var mipSize = texData.MipData[0].Length;
                 var pixels = new Color32[mipSize];
+                var usesTransparency = false;
 
                 // for some reason, WAD texture bytes are flipped? have to unflip them for Unity
                 for( int y=0; y < height; y++) {
                     for (int x=0; x < width; x++) {
-                        pixels[y*width+x] = palette[ texData.MipData[0][(height-1-y)*width + x] ];
-
-                        // TODO: in Quake WADs, some colors are reserved as fullbright colors / for transparency
-
-                        // TODO: in Half-Life WADs, blue 255 is reserved for transparency
+                        int paletteIndex = texData.MipData[0][(height-1-y)*width + x];
+                        pixels[y*width+x] = palette[paletteIndex];
+                        if ( !usesTransparency && paletteIndex == 255) {
+                            usesTransparency = true;
+                        }
                     }
                 }
 
                 // we have all pixel color data now, so we can build the Texture2D
-                var newTexture = new Texture2D( width, height, TextureFormat.RGB24, true);
+                var newTexture = new Texture2D( width, height, usesTransparency ? TextureFormat.RGBA32 : TextureFormat.RGB24, true);
                 newTexture.name = texData.Name.ToLowerInvariant().Replace("*", "").Replace("+", "").Replace("{", "");
                 newTexture.SetPixels32(pixels);
+                newTexture.alphaIsTransparency = usesTransparency;
                 newTexture.Apply();
                 if ( compressTextures ) {
                     newTexture.Compress(false);
@@ -407,6 +427,26 @@ namespace Scopa {
             }
 
             return textureList;
+        }
+
+        public static Material BuildMaterialForTexture( Texture2D texture ) {
+            var material = new Material( Shader.Find("Standard") );
+            material.name = texture.name;
+            material.mainTexture = texture;
+            material.SetFloat("_Glossiness", 0.16f);
+
+            // is it a transparent texture? if so, use cutout mode
+            if ( texture.alphaIsTransparency) {
+                material.SetFloat("_Mode", 1);
+                // material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                // material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                // material.SetInt("_ZWrite", 1);
+                material.EnableKeyword("_ALPHATEST_ON");
+                material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+                material.renderQueue = 2450;
+            }
+
+            return material;
         }
 
     }

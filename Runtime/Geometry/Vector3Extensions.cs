@@ -48,6 +48,14 @@ namespace Scopa {
             return true;
         }
 
+        public static float GetMaxDelta(Vector3 a, Vector3 b) {
+            return Mathf.Max( Mathf.Abs( a.y - b.y), Mathf.Max( Mathf.Abs( a.x - b.x), Mathf.Abs( a.z - b.z) ) );           
+        }
+
+        public static float GetTotalDelta(Vector3 a, Vector3 b) {
+            return Mathf.Abs( a.x - b.x) + Mathf.Abs( a.y - b.y) + Mathf.Abs( a.z - b.z);
+        }
+
         public static Vector3 ToPrecisionVector3(this Vector3 vec) {
             return vec;
         }

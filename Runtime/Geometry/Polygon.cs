@@ -43,10 +43,14 @@ namespace Scopa
 
             var verts = new List<Vector3>
             {
+                // plane.PointOnPlane + right + up, // Top right
+                // plane.PointOnPlane - right + up, // Top left
+                // plane.PointOnPlane - right - up, // Bottom left
+                // plane.PointOnPlane + right - up, // Bottom right
                 plane.PointOnPlane + right + up, // Top right
-                plane.PointOnPlane - right + up, // Top left
-                plane.PointOnPlane - right - up, // Bottom left
                 plane.PointOnPlane + right - up, // Bottom right
+                plane.PointOnPlane - right - up, // Bottom left
+                plane.PointOnPlane - right + up, // Top left
             };
             
             // var origin = verts.Aggregate(Vector3.zero, (x, y) => x + y) / verts.Count;
