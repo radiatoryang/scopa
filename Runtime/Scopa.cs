@@ -16,8 +16,8 @@ namespace Scopa {
     public static class Scopa {
         public static float scalingFactor = 0.03125f; // 1/32, since 1.0 meters = 32 units
 
-        static bool warnedUserAboutMultipleColliders = false;
-        const string warningMessage = "WARNING! Unity will complain about too many colliders with same name on same object, because it may not re-import in the same order / same way again... "
+        public static bool warnedUserAboutMultipleColliders {get; private set;}
+        const string warningMessage = "IGNORE UNITY'S WARNINGS. Unity will complain about too many colliders with same name/type on the same object, because it may not re-import the same way again. "
             + "However, this is by design. You don't want a game object for each box colllder / a thousand box colliders. So just IGNORE UNITY'S WARNINGS.";
 
         /// <summary>Parses the .MAP text data into a usable data structure.</summary>
@@ -85,7 +85,7 @@ namespace Scopa {
                 if ( ent.Properties.ContainsKey("_phong_angle") ) {
                     smoothNormalAngle = Mathf.RoundToInt( float.Parse(ent.Properties["_phong_angle"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture) );
                 } else {
-                    smoothNormalAngle = 80;
+                    smoothNormalAngle = 89;
                 }
             }
 
@@ -172,15 +172,18 @@ namespace Scopa {
                     // Debug.Log("phong shading!");
                     mesh.RecalculateNormals(smoothNormalAngle);
                 } else {
-                    mesh.RecalculateNormals();
+                    // mesh.SnapVertices();
+                    mesh.RecalculateNormals(0);
                 }
                 mesh.RecalculateTangents();
-                mesh.Optimize();
                 meshList.Add( mesh );
                 
                 #if UNITY_EDITOR
-                UnityEditor.MeshUtility.SetMeshCompression(mesh, UnityEditor.ModelImporterMeshCompression.Medium);
+                Unwrapping.GenerateSecondaryUVSet( mesh );
+                UnityEditor.MeshUtility.SetMeshCompression(mesh, UnityEditor.ModelImporterMeshCompression.Low);
                 #endif
+
+                mesh.Optimize();
 
                 // finally, add mesh as game object, while we still have all the entity information
                 var newMeshObj = textureLookup.Count > 1 ? new GameObject( textureKVP.Key ) : meshParent; // but if there's only one texture name, then just reuse meshParent
@@ -252,6 +255,8 @@ namespace Scopa {
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
             mesh.SetUVs(0, uvs);
+
+            // mesh.SnapVertices();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
             mesh.Optimize();
@@ -316,6 +321,13 @@ namespace Scopa {
             return meshList;
         }
 
+        public static void ShowColliderWarning(bool always=false) {
+            if (always || !warnedUserAboutMultipleColliders) {
+                Debug.LogWarning(warningMessage);
+                warnedUserAboutMultipleColliders = true;
+            }
+        }
+
         static bool TryAddBoxCollider(GameObject gameObject, Solid solid, bool isTrigger = false) {
             var verts = new List<Vector3>();
             foreach ( var face in solid.Faces ) {
@@ -326,10 +338,7 @@ namespace Scopa {
                 }
             }
  
-            if (!warnedUserAboutMultipleColliders) {
-                Debug.LogWarning(warningMessage);
-                warnedUserAboutMultipleColliders = true;
-            }
+            ShowColliderWarning();
 
             var bounds = GeometryUtility.CalculateBounds(verts.ToArray(), Matrix4x4.identity);
             var boxCol = gameObject.AddComponent<BoxCollider>();
@@ -342,10 +351,7 @@ namespace Scopa {
         static Mesh AddMeshCollider(GameObject gameObject, Solid solid, bool isTrigger = false) {
             var newMesh = BuildMeshFromSolid(solid, null, true);
 
-            if (!warnedUserAboutMultipleColliders) {
-                Debug.LogWarning(warningMessage);
-                warnedUserAboutMultipleColliders = true;
-            }
+            ShowColliderWarning();
         
             var newMeshCollider = gameObject.AddComponent<MeshCollider>();
             newMeshCollider.sharedMesh = newMesh;

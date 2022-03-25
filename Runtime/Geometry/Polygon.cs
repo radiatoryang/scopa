@@ -68,31 +68,31 @@ namespace Scopa
         /// <param name="back">The number of vertices behind the plane</param>
         /// <param name="onplane">The number of vertices on the plane</param>
         /// <returns>A PlaneClassification value.</returns>
-        private PlaneClassification ClassifyAgainstPlane(Plane p, out int[] classifications, out int front, out int back, out int onplane)
-        {
-            var count = Vertices.Count;
-            front = 0;
-            back = 0;
-            onplane = 0;
-            classifications = new int[count];
+        // private PlaneClassification ClassifyAgainstPlane(Plane p, out int[] classifications, out int front, out int back, out int onplane)
+        // {
+        //     var count = Vertices.Count;
+        //     front = 0;
+        //     back = 0;
+        //     onplane = 0;
+        //     classifications = new int[count];
 
-            for (var i = 0; i < Vertices.Count; i++)
-            {
-                var test = p.OnPlane(Vertices[i]);
+        //     for (var i = 0; i < Vertices.Count; i++)
+        //     {
+        //         var test = p.OnPlane(Vertices[i]);
 
-                // Vertices on the plane are both in front and behind the plane in this context
-                if (test <= 0) back++;
-                if (test >= 0) front++;
-                if (test == 0) onplane++;
+        //         // Vertices on the plane are both in front and behind the plane in this context
+        //         if (test <= 0) back++;
+        //         if (test >= 0) front++;
+        //         if (test == 0) onplane++;
 
-                classifications[i] = test;
-            }
+        //         classifications[i] = test;
+        //     }
 
-            if (onplane == count) return PlaneClassification.OnPlane;
-            if (front == count) return PlaneClassification.Front;
-            if (back == count) return PlaneClassification.Back;
-            return PlaneClassification.Spanning;
-        }
+        //     if (onplane == count) return PlaneClassification.OnPlane;
+        //     if (front == count) return PlaneClassification.Front;
+        //     if (back == count) return PlaneClassification.Back;
+        //     return PlaneClassification.Spanning;
+        // }
 
         /// <summary>
         /// Splits this polygon by a clipping plane, returning the back and front planes.
@@ -118,75 +118,75 @@ namespace Scopa
         /// <param name="coplanarFront">If the polygon rests on the plane and points forward, this will not be null</param>
         /// <returns>True if the split was successful</returns>
 
-        public bool SplitOld(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
-        {
-            var count = Vertices.Count;
+        // public bool SplitOld(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
+        // {
+        //     var count = Vertices.Count;
 
-            var classify = ClassifyAgainstPlane(clip, out var classifications, out _, out _, out _);
+        //     var classify = ClassifyAgainstPlane(clip, out var classifications, out _, out _, out _);
 
-            Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() + "... " + classify.ToString() );
+        //     Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() + "... " + classify.ToString() );
 
-            // If the polygon doesn't span the plane, return false.
-            if (classify != PlaneClassification.Spanning)
-            {
-                back = front = null;
-                coplanarBack = coplanarFront = null;
-                if (classify == PlaneClassification.Back) back = this;
-                else if (classify == PlaneClassification.Front) front = this;
-                else if (Plane.Normal.Dot(clip.Normal) > 0) coplanarFront = this;
-                else coplanarBack = this;
-                return false;
-            }
+        //     // If the polygon doesn't span the plane, return false.
+        //     if (classify != PlaneClassification.Spanning)
+        //     {
+        //         back = front = null;
+        //         coplanarBack = coplanarFront = null;
+        //         if (classify == PlaneClassification.Back) back = this;
+        //         else if (classify == PlaneClassification.Front) front = this;
+        //         else if (Plane.Normal.Dot(clip.Normal) > 0) coplanarFront = this;
+        //         else coplanarBack = this;
+        //         return false;
+        //     }
 
-            // Get the new front and back vertices
-            var backVerts = new List<Vector3>();
-            var frontVerts = new List<Vector3>();
-            var prev = 0;
+        //     // Get the new front and back vertices
+        //     var backVerts = new List<Vector3>();
+        //     var frontVerts = new List<Vector3>();
+        //     var prev = 0;
 
-            for (var i = 0; i <= count; i++)
-            {
-                var idx = i % count;
-                var end = Vertices[idx];
-                var cls = classifications[idx];
+        //     for (var i = 0; i <= count; i++)
+        //     {
+        //         var idx = i % count;
+        //         var end = Vertices[idx];
+        //         var cls = classifications[idx];
 
-                // Check plane crossing
-                if (i > 0 && cls != 0 && prev != 0 && prev != cls)
-                {
-                    // This line end point has crossed the plane
-                    // Add the line intersect to the 
-                    var start = Vertices[i - 1];
-                    // var line = new Line(start, end);
-                    Debug.Log($"looking for intersection on {clip} between {start} and {end}");
-                    var isect = clip.GetIntersectionPoint(start, end);
-                    if (isect == null) Debug.LogError("Expected intersection, got null.");
-                    Debug.Log("found intersection at " + isect);
-                    frontVerts.Add(isect.Value);
-                    backVerts.Add(isect.Value);
-                }
+        //         // Check plane crossing
+        //         if (i > 0 && cls != 0 && prev != 0 && prev != cls)
+        //         {
+        //             // This line end point has crossed the plane
+        //             // Add the line intersect to the 
+        //             var start = Vertices[i - 1];
+        //             // var line = new Line(start, end);
+        //             Debug.Log($"looking for intersection on {clip} between {start} and {end}");
+        //             var isect = clip.GetIntersectionPoint(start, end);
+        //             if (isect == null) Debug.LogError("Expected intersection, got null.");
+        //             Debug.Log("found intersection at " + isect);
+        //             frontVerts.Add(isect.Value);
+        //             backVerts.Add(isect.Value);
+        //         }
 
-                // Add original points
-                if (i < Vertices.Count)
-                {
-                    // OnPlane points get put in both polygons, doesn't generate split
-                    if (cls >= 0) frontVerts.Add(end);
-                    if (cls <= 0) backVerts.Add(end);
-                }
+        //         // Add original points
+        //         if (i < Vertices.Count)
+        //         {
+        //             // OnPlane points get put in both polygons, doesn't generate split
+        //             if (cls >= 0) frontVerts.Add(end);
+        //             if (cls <= 0) backVerts.Add(end);
+        //         }
 
-                prev = cls;
-            }
+        //         prev = cls;
+        //     }
 
-            Debug.Log("resulting backVerts: " + string.Join(" ", backVerts));
+        //     Debug.Log("resulting backVerts: " + string.Join(" ", backVerts));
 
-            back = new Polygon(backVerts);
-            front = new Polygon(frontVerts);
-            coplanarBack = coplanarFront = null;
+        //     back = new Polygon(backVerts);
+        //     front = new Polygon(frontVerts);
+        //     coplanarBack = coplanarFront = null;
 
-            return true;
-        }
+        //     return true;
+        // }
 
         public bool SplitNew(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
-            const float epsilon = 0.00001f;
+            const float epsilon = 0.01f;
 
             // Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() );
             

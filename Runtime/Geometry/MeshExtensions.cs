@@ -17,6 +17,19 @@ public static class MeshExtensions {
         ///     The smoothing angle. Note that triangles that already share
         ///     the same vertex will be smooth regardless of the angle! 
         /// </param>
+
+        public static void SnapVertices(this Mesh mesh, int precision = 100) {
+            var vertices = mesh.vertices;
+            for ( int i=0; i<vertices.Length; i++ ) {
+                vertices[i] = new Vector3( 
+                    Mathf.Round(vertices[i].x * precision) / precision,
+                    Mathf.Round(vertices[i].y * precision) / precision,
+                    Mathf.Round(vertices[i].z * precision) / precision
+                );
+            }
+            mesh.vertices = vertices;
+        }
+
         public static void RecalculateNormals(this Mesh mesh, float angle, bool snapVertices = true)
         {
             // UnweldVertices(mesh);
@@ -124,9 +137,9 @@ public static class MeshExtensions {
             if ( snapVertices ) {
                 foreach ( var entryKVP in dictionary ) {
                     foreach( var vertEntry in entryKVP.Value ) {
-                        vertices[vertEntry.VertexIndex].x = entryKVP.Key._x / VertexKey.ToleranceF;
-                        vertices[vertEntry.VertexIndex].y = entryKVP.Key._y / VertexKey.ToleranceF;
-                        vertices[vertEntry.VertexIndex].z = entryKVP.Key._z / VertexKey.ToleranceF;
+                        vertices[vertEntry.VertexIndex].x = entryKVP.Key._x / VertexKey.Tolerance;
+                        vertices[vertEntry.VertexIndex].y = entryKVP.Key._y / VertexKey.Tolerance;
+                        vertices[vertEntry.VertexIndex].z = entryKVP.Key._z / VertexKey.Tolerance;
                     }
                 }
                 mesh.vertices = vertices;
@@ -142,8 +155,8 @@ public static class MeshExtensions {
             public readonly long _z;
 
             // Change this if you require a different precision.
-            public const int Tolerance = 100; // was 100000
-            public const float ToleranceF = 100f;
+            public const int Tolerance = 10; // was 100000
+            // public const float ToleranceF = 100f;
 
             // Magic FNV values. Do not change these.
             private const long FNV32Init = 0x811c9dc5;

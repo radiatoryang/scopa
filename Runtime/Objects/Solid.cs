@@ -25,6 +25,7 @@ namespace Scopa.Formats.Map.Objects
 
             foreach (var face in Faces)
             {
+                face.Plane.ReverseNormal();
                 var pgList = polyList.OrderBy( poly => Vector3Extensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
 
                 if ( pgList.FirstOrDefault() == null || !face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
@@ -33,16 +34,16 @@ namespace Scopa.Formats.Map.Objects
                     pgList = polyList.OrderBy( poly => Vector3Extensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
                     if ( pgList.FirstOrDefault() != null && face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
                         face.Vertices.AddRange( pgList.First().Vertices.Select(x => x.ToStandardVector3()) );
-                        foreach ( var vert in face.Vertices ) {
-                            Debug.DrawRay( vert, face.Plane.Normal, Color.cyan, 60f, true );
-                        }
+                        // foreach ( var vert in face.Vertices ) {
+                        //     Debug.DrawRay( vert, face.Plane.Normal, Color.cyan, 60f, true );
+                        // }
                         polyList.Remove(pgList.First());
                     }
                 } else {
                     face.Vertices.AddRange( pgList.First().Vertices.Select(x => x.ToStandardVector3()) );
-                    foreach ( var vert in face.Vertices ) {
-                        Debug.DrawRay( vert, face.Plane.Normal, Color.yellow, 60f, true );
-                    }
+                    // foreach ( var vert in face.Vertices ) {
+                    //     Debug.DrawRay( vert, face.Plane.Normal, Color.yellow, 60f, true );
+                    // }
                     polyList.Remove(pgList.First());
                 }
 
