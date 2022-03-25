@@ -17,7 +17,7 @@ public static class MeshExtensions {
         ///     The smoothing angle. Note that triangles that already share
         ///     the same vertex will be smooth regardless of the angle! 
         /// </param>
-        public static void RecalculateNormals(this Mesh mesh, float angle)
+        public static void RecalculateNormals(this Mesh mesh, float angle, bool snapVertices = true)
         {
             // UnweldVertices(mesh);
 
@@ -117,9 +117,19 @@ public static class MeshExtensions {
                             }
                         }
                     }
-
                     normals[lhsEntry.VertexIndex] = sum.normalized;
                 }
+            }
+
+            if ( snapVertices ) {
+                foreach ( var entryKVP in dictionary ) {
+                    foreach( var vertEntry in entryKVP.Value ) {
+                        vertices[vertEntry.VertexIndex].x = entryKVP.Key._x / VertexKey.ToleranceF;
+                        vertices[vertEntry.VertexIndex].y = entryKVP.Key._y / VertexKey.ToleranceF;
+                        vertices[vertEntry.VertexIndex].z = entryKVP.Key._z / VertexKey.ToleranceF;
+                    }
+                }
+                mesh.vertices = vertices;
             }
 
             mesh.normals = normals;
@@ -127,12 +137,13 @@ public static class MeshExtensions {
 
         private struct VertexKey
         {
-            private readonly long _x;
-            private readonly long _y;
-            private readonly long _z;
+            public readonly long _x;
+            public readonly long _y;
+            public readonly long _z;
 
             // Change this if you require a different precision.
-            private const int Tolerance = 100000;
+            public const int Tolerance = 100; // was 100000
+            public const float ToleranceF = 100f;
 
             // Magic FNV values. Do not change these.
             private const long FNV32Init = 0x811c9dc5;

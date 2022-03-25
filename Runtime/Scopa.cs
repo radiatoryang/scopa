@@ -81,7 +81,7 @@ namespace Scopa {
 
             var smoothNormalAngle = -1;
             if (ent.Properties.ContainsKey("_phong") && ent.Properties["_phong"] == "1") {
-                Debug.Log("phong?");
+                // Debug.Log("phong?");
                 if ( ent.Properties.ContainsKey("_phong_angle") ) {
                     smoothNormalAngle = Mathf.RoundToInt( float.Parse(ent.Properties["_phong_angle"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture) );
                 } else {
@@ -150,7 +150,12 @@ namespace Scopa {
                 uvs.Clear();
                 
                 foreach ( var solid in solids) {
-                    BuildMeshFromSolid( solid, textureKVP.Value != defaultMaterial ? textureKVP.Value : null, false, verts, tris, uvs);
+                    var matName = textureKVP.Value.name;
+                    if ( textureKVP.Value == defaultMaterial ) {
+                        textureKVP.Value.name = textureKVP.Key;
+                    }
+                    BuildMeshFromSolid( solid, textureKVP.Value, false, verts, tris, uvs);
+                    textureKVP.Value.name = matName;
                 }
 
                 if ( verts.Count == 0 || tris.Count == 0) 
@@ -164,11 +169,12 @@ namespace Scopa {
 
                 mesh.RecalculateBounds();
                 if ( smoothNormalAngle > 0) {
-                    Debug.Log("phong shading!");
+                    // Debug.Log("phong shading!");
                     mesh.RecalculateNormals(smoothNormalAngle);
                 } else {
                     mesh.RecalculateNormals();
                 }
+                mesh.RecalculateTangents();
                 mesh.Optimize();
                 meshList.Add( mesh );
                 
