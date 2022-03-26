@@ -13,7 +13,7 @@ using UnityEditor;
 #endif
 
 namespace Scopa {
-    public static class Scopa {
+    public static class ScopaCore {
         public static float scalingFactor = 0.03125f; // 1/32, since 1.0 meters = 32 units
 
         public static bool warnedUserAboutMultipleColliders {get; private set;}
@@ -45,7 +45,7 @@ namespace Scopa {
             // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
 
             warnedUserAboutMultipleColliders = false;
-            meshList = Scopa.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial);
+            meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial);
 
             return rootGameObject;
         }
@@ -195,7 +195,7 @@ namespace Scopa {
 
             // collision pass, now treat it all as one object and ignore texture names
             if ( !IsEntityIllusionary(ent.ClassName) )
-                meshList.AddRange( Scopa.AddColliders( meshParent, ent, namePrefix ) );
+                meshList.AddRange( ScopaCore.AddColliders( meshParent, ent, namePrefix ) );
             
             return meshList;
         }
@@ -383,7 +383,7 @@ namespace Scopa {
             }
         }
 
-        public static List<Texture2D> BuildWadTextures(WadFile wad, bool compressTextures = true) {
+        public static List<Texture2D> BuildWadTextures(WadFile wad, ScopaWadConfig config) {
             if ( wad == null || wad.Entries == null || wad.Entries.Count == 0) {
                 Debug.LogError("Couldn't parse WAD file " + wad.Name);
             }
@@ -426,12 +426,14 @@ namespace Scopa {
                 }
 
                 // we have all pixel color data now, so we can build the Texture2D
-                var newTexture = new Texture2D( width, height, usesTransparency ? TextureFormat.RGBA32 : TextureFormat.RGB24, true);
+                var newTexture = new Texture2D( width, height, usesTransparency ? TextureFormat.RGBA32 : TextureFormat.RGB24, true, config.useLinearColorSpace);
                 newTexture.name = texData.Name.ToLowerInvariant().Replace("*", "").Replace("+", "").Replace("{", "");
                 newTexture.SetPixels32(pixels);
                 newTexture.alphaIsTransparency = usesTransparency;
+                newTexture.filterMode = config.textureFilterMode;
+                newTexture.anisoLevel = config.anisoLevel;
                 newTexture.Apply();
-                if ( compressTextures ) {
+                if ( config.compressTextures ) {
                     newTexture.Compress(false);
                 }
                 textureList.Add( newTexture );
@@ -441,23 +443,31 @@ namespace Scopa {
             return textureList;
         }
 
-        public static Material BuildMaterialForTexture( Texture2D texture ) {
-            var material = new Material( Shader.Find("Standard") );
+        public static Material BuildMaterialForTexture( Texture2D texture, ScopaWadConfig config ) {
+            var material = texture.alphaIsTransparency ? 
+                (config.templateMaterialAlpha != null ? config.templateMaterialAlpha : GenerateDefaultMaterialAlpha())
+                : (config.templateMaterialOpaque != null ? config.templateMaterialOpaque : GenerateDefaultMaterialOpaque());
             material.name = texture.name;
             material.mainTexture = texture;
+
+            return material;
+        }
+
+        public static Material GenerateDefaultMaterialOpaque() {
+            // TODO: URP, HDRP
+            var material = new Material( Shader.Find("Standard") );
             material.SetFloat("_Glossiness", 0.16f);
+            return material;
+        }
 
-            // is it a transparent texture? if so, use cutout mode
-            if ( texture.alphaIsTransparency) {
-                material.SetFloat("_Mode", 1);
-                // material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                // material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                // material.SetInt("_ZWrite", 1);
-                material.EnableKeyword("_ALPHATEST_ON");
-                material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
-                material.renderQueue = 2450;
-            }
-
+        public static Material GenerateDefaultMaterialAlpha() {
+            // TODO: URP, HDRP
+            var material = new Material( Shader.Find("Standard") );
+            material.SetFloat("_Glossiness", 0.16f);
+            material.SetFloat("_Mode", 1);
+            material.EnableKeyword("_ALPHATEST_ON");
+            material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = 2450;
             return material;
         }
 

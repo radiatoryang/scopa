@@ -13,59 +13,41 @@ using System.IO;
 namespace Scopa.Editor {
 
     /// <summary>
-    /// custom Unity importer that detects .BSP files in /Assets/
-    /// and automatically imports them like any other 3D mesh
+    /// custom Unity importer that detects .WAD files in /Assets/ and automatically imports textures (and generates materials)
     /// </summary>
     [ScriptedImporter(1, "wad")]
     public class WadImporter : ScriptedImporter
     {
+        [Tooltip("(optional) override default WAD import settings with your own (texture filter mode, compression, material generation, etc.)... create via Project tab > Create > Scopa > Scopa Wad Config")]
+        public ScopaWadConfig config;
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
 
-            var wad = Scopa.ParseWad(filepath);
-            var textures = Scopa.BuildWadTextures(wad);
+            // if no config, then generate one for now
+            var tempConfig = config != null ? config : ScriptableObject.CreateInstance<ScopaWadConfig>();
+
+            var wad = ScopaCore.ParseWad(filepath);
+            var textures = ScopaCore.BuildWadTextures(wad, tempConfig);
 
             foreach (var tex in textures) {
                 ctx.AddObjectToAsset(tex.name, tex);
-                var newMaterial = Scopa.BuildMaterialForTexture(tex);
-                ctx.AddObjectToAsset(tex.name, newMaterial);
+
+                if (tempConfig.generateMaterials) {
+                    var newMaterial = ScopaCore.BuildMaterialForTexture(tex, tempConfig);
+                    ctx.AddObjectToAsset(tex.name, newMaterial);
+                }
             }
             
             // generate atlas sample thumbnail, set as main asset
-            var atlas = new Texture2D(4096, 4096);
+            int atlasSize = tempConfig.GetAtlasSize();
+            var atlas = new Texture2D(atlasSize, atlasSize, TextureFormat.RGBA32, false, tempConfig.useLinearColorSpace  );
             atlas.name = wad.Name;
-            atlas.PackTextures(textures.ToArray(), 0, 4096);
-            atlas.Compress(false);
+            atlas.PackTextures(textures.ToArray(), 0, atlasSize);
+            atlas.Compress(tempConfig.compressTextures);
             ctx.AddObjectToAsset(atlas.name, atlas);
             ctx.SetMainObject(atlas);
-
-
-            // var mapFile = Scopa.Parse(filepath);
- 
-            // var defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
-            // if ( defaultMaterial == null ) {
-            //     defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( AssetDatabase.FindAssets("BlockoutDark.mat")[0] );
-            //     if ( defaultMaterial == null ) {
-            //         defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
-            //     }
-            // }
-            // var gameObject = Scopa.BuildMapIntoGameObject(mapFile, defaultMaterial, out var meshList);
-
-            // // (Only the 'Main Asset' is eligible to become a Prefab.)
-            // ctx.AddObjectToAsset(gameObject.name, gameObject);
-            // foreach ( var mesh in meshList ) {
-            //     ctx.AddObjectToAsset(mesh.name, mesh);
-            // }
-            // ctx.SetMainObject(gameObject);
-
-            // Assets must be assigned a unique identifier string consistent across imports
-            // ctx.AddObjectToAsset("my Material", material);
-
-            // Assets that are not passed into the context as import outputs must be destroyed
-            // var tempMesh = new Mesh();
-            // DestroyImmediate(tempMesh);
         }
 
  

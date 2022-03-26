@@ -21,7 +21,7 @@ namespace Scopa.Editor {
         {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
 
-            var mapFile = Scopa.ParseMap(filepath);
+            var mapFile = ScopaCore.ParseMap(filepath);
  
             var defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
             if ( defaultMaterial == null ) {
@@ -30,7 +30,7 @@ namespace Scopa.Editor {
                     defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
                 }
             }
-            var gameObject = Scopa.BuildMapIntoGameObject(mapFile, defaultMaterial, out var meshList);
+            var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, defaultMaterial, out var meshList);
 
             // (Only the 'Main Asset' is eligible to become a Prefab.)
             ctx.AddObjectToAsset(gameObject.name, gameObject);
@@ -38,13 +38,6 @@ namespace Scopa.Editor {
                 ctx.AddObjectToAsset(mesh.name, mesh);
             }
             ctx.SetMainObject(gameObject);
-
-            // Assets must be assigned a unique identifier string consistent across imports
-            // ctx.AddObjectToAsset("my Material", material);
-
-            // Assets that are not passed into the context as import outputs must be destroyed
-            // var tempMesh = new Mesh();
-            // DestroyImmediate(tempMesh);
         }
     }
 
