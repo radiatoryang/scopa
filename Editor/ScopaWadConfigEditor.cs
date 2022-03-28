@@ -20,7 +20,7 @@ namespace Scopa.Editor {
             var indent = EditorGUI.indentLevel;
             EditorGUI.indentLevel = 0;
 
-            SerializedProperty prop = property.FindPropertyRelative("useLinearColorSpace");
+            SerializedProperty prop = property.FindPropertyRelative("linearColorspace");
             do {
                 EditorGUILayout.PropertyField(prop, true);
             }

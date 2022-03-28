@@ -43,7 +43,7 @@ namespace Scopa.Editor {
             
             // generate atlas sample thumbnail, set as main asset
             int atlasSize = config.GetAtlasSize();
-            var atlas = new Texture2D(atlasSize, atlasSize, TextureFormat.RGBA32, false, config.useLinearColorSpace  );
+            var atlas = new Texture2D(atlasSize, atlasSize, TextureFormat.RGBA32, false, config.linearColorspace  );
             atlas.name = wad.Name;
             atlas.PackTextures(textures.ToArray(), 0, atlasSize);
             atlas.Compress(config.compressTextures);

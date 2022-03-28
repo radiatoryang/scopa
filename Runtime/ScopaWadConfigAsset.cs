@@ -13,10 +13,10 @@ namespace Scopa {
     public class ScopaWadConfig {
         [Header("Textures")]
         [Tooltip("(default: false) WAD textures are more 'correct' in default Gamma sRGB color space, but you may prefer the washed-out look of importing them as Linear textures.")]
-        public bool useLinearColorSpace = false;
+        public bool linearColorspace = false;
 
         [Tooltip("(default: Point) For a retro pixel art Quake look, use Point. For a modern smoother look, use Bilinear or Trilinear.")]
-        public FilterMode textureFilterMode = FilterMode.Point;
+        public FilterMode filterMode = FilterMode.Point;
 
         [Tooltip("(default: true) Compression saves memory but adds noise. Good for most textures, bad for subtle gradients.")]
         public bool compressTextures = true;
@@ -30,7 +30,7 @@ namespace Scopa {
         public bool generateMaterials = true;
 
         [Tooltip("(optional) override the templates that Scopa uses to generate Materials; make sure the shader has a _MainTex property (or [MainTexture] attribute) for Scopa to use!\n   - opaque: used for most brushes\n   - alpha: fences, grates, etc. with transparency")]
-        public Material templateMaterialOpaque, templateMaterialAlpha;
+        public Material opaqueTemplate, alphaTemplate;
 
         [Header("Misc")]
         [Tooltip("(default: Small 1024x1024) maximum size of the preview atlas texture for the entire WAD")]

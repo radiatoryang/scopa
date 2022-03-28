@@ -426,11 +426,11 @@ namespace Scopa {
                 }
 
                 // we have all pixel color data now, so we can build the Texture2D
-                var newTexture = new Texture2D( width, height, usesTransparency ? TextureFormat.RGBA32 : TextureFormat.RGB24, true, config.useLinearColorSpace);
+                var newTexture = new Texture2D( width, height, usesTransparency ? TextureFormat.RGBA32 : TextureFormat.RGB24, true, config.linearColorspace);
                 newTexture.name = texData.Name.ToLowerInvariant().Replace("*", "").Replace("+", "").Replace("{", "");
                 newTexture.SetPixels32(pixels);
                 newTexture.alphaIsTransparency = usesTransparency;
-                newTexture.filterMode = config.textureFilterMode;
+                newTexture.filterMode = config.filterMode;
                 newTexture.anisoLevel = config.anisoLevel;
                 newTexture.Apply();
                 if ( config.compressTextures ) {
@@ -445,8 +445,8 @@ namespace Scopa {
 
         public static Material BuildMaterialForTexture( Texture2D texture, ScopaWadConfig config ) {
             var material = texture.alphaIsTransparency ? 
-                (config.templateMaterialAlpha != null ? config.templateMaterialAlpha : GenerateDefaultMaterialAlpha())
-                : (config.templateMaterialOpaque != null ? config.templateMaterialOpaque : GenerateDefaultMaterialOpaque());
+                (config.alphaTemplate != null ? config.alphaTemplate : GenerateDefaultMaterialAlpha())
+                : (config.opaqueTemplate != null ? config.opaqueTemplate : GenerateDefaultMaterialOpaque());
             material.name = texture.name;
             material.mainTexture = texture;
 
