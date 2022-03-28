@@ -16,6 +16,7 @@ namespace Scopa.Editor {
     [ScriptedImporter(1, "map")]
     public class MapImporter : ScriptedImporter
     {
+        public ScopaMapConfig config;
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
