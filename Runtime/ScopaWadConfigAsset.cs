@@ -5,7 +5,12 @@ using System.Collections.Generic;
 namespace Scopa {
     /// <summary> ScriptableObject to use for configuring how Scopa imports WADs, even for runtime imports too.</summary>
     [CreateAssetMenu(fileName = "New ScopaWadConfig", menuName = "Scopa/WAD Config", order = 1)]
-    public class ScopaWadConfig : ScriptableObject {
+    public class ScopaWadConfigAsset : ScriptableObject {
+        public ScopaWadConfig config = new ScopaWadConfig();
+    }
+
+    [System.Serializable]
+    public class ScopaWadConfig {
         [Header("Textures")]
         [Tooltip("(default: false) WAD textures are more 'correct' in default Gamma sRGB color space, but you may prefer the washed-out look of importing them as Linear textures.")]
         public bool useLinearColorSpace = false;
@@ -29,10 +34,11 @@ namespace Scopa {
 
         [Header("Misc")]
         [Tooltip("(default: Small 1024x1024) maximum size of the preview atlas texture for the entire WAD")]
-        public AtlasSize atlasSize = AtlasSize.Small_1024;
+        public AtlasSize atlasSize = AtlasSize.Tiny_512;
 
         public int GetAtlasSize() {
             switch(atlasSize) {
+                case AtlasSize.Mini_256: return 256;
                 case AtlasSize.Tiny_512: return 512;
                 case AtlasSize.Small_1024: return 1024;
                 case AtlasSize.Medium_2048: return 2048;
@@ -43,6 +49,7 @@ namespace Scopa {
     }
 
     public enum AtlasSize {
+        Mini_256,
         Tiny_512,
         Small_1024,
         Medium_2048,
