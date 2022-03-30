@@ -20,7 +20,7 @@ namespace Scopa.Formats.Map.Objects
         {
             if (Faces.Count < 4) return;
 
-            var poly = new Polyhedron(Faces.Select(x => new Plane(x.Plane.Normal.ToPrecisionVector3(), x.Plane.D)));
+            var poly = new Polyhedron(Faces.Select(x => new Plane(x.Plane.Normal, x.Plane.D)));
             var polyList = new List<Polygon>( poly.Polygons );
 
             foreach (var face in Faces)
@@ -33,14 +33,14 @@ namespace Scopa.Formats.Map.Objects
 
                     pgList = polyList.OrderBy( poly => Vector3Extensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
                     if ( pgList.FirstOrDefault() != null && face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
-                        face.Vertices.AddRange( pgList.First().Vertices.Select(x => x.ToStandardVector3()) );
+                        face.Vertices.AddRange( pgList.First().Vertices ); // .Select(x => x.ToStandardVector3()) );
                         // foreach ( var vert in face.Vertices ) {
                         //     Debug.DrawRay( vert, face.Plane.Normal, Color.cyan, 60f, true );
                         // }
                         polyList.Remove(pgList.First());
                     }
                 } else {
-                    face.Vertices.AddRange( pgList.First().Vertices.Select(x => x.ToStandardVector3()) );
+                    face.Vertices.AddRange( pgList.First().Vertices ); // .Select(x => x.ToStandardVector3()) );
                     // foreach ( var vert in face.Vertices ) {
                     //     Debug.DrawRay( vert, face.Plane.Normal, Color.yellow, 60f, true );
                     // }

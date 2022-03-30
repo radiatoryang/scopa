@@ -7,6 +7,8 @@ namespace Scopa.Formats.Map.Objects
     public class Face : Surface
     {
         public Plane Plane { get; set; }
+
+        /// <summary> the UNSCALED vertices generated after clipping the planes </summary>
         public List<Vector3> Vertices { get; set; }
         public bool discardWhenBuildingMesh = false;
 

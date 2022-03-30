@@ -22,19 +22,26 @@ namespace Scopa.Editor {
         {
             var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
 
+            if ( config == null ) {
+                config = new ScopaMapConfig();
+            }
+
             var mapFile = ScopaCore.ParseMap(filepath);
  
-            var defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
+            // try to find the default gridded blockout material... but if we can't find it, fallback to plain Unity gray material
+            var defaultMaterial = config.defaultMaterial != null ? config.defaultMaterial : AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
             if ( defaultMaterial == null ) {
                 defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( AssetDatabase.FindAssets("BlockoutDark.mat")[0] );
                 if ( defaultMaterial == null ) {
                     defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
                 }
             }
-            var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, defaultMaterial, out var meshList);
 
-            // (Only the 'Main Asset' is eligible to become a Prefab.)
+            // this is where the magic happens
+            var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, defaultMaterial, config, out var meshList);
             ctx.AddObjectToAsset(gameObject.name, gameObject);
+
+            // we have to serialize every mesh as a subasset, or else it won't get saved
             foreach ( var mesh in meshList ) {
                 ctx.AddObjectToAsset(mesh.name, mesh);
             }

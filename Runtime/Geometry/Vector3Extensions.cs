@@ -60,9 +60,9 @@ namespace Scopa {
             return vec;
         }
 
-        public static Vector3 ToStandardVector3(this Vector3 vec) {
-            return vec * ScopaCore.scalingFactor;
-        }
+        // public static Vector3 ToStandardVector3(this Vector3 vec) {
+        //     return vec * ScopaCore.scalingFactor;
+        // }
 
     }
 }
