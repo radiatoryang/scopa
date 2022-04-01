@@ -30,7 +30,7 @@ public static class MeshExtensions {
             mesh.vertices = vertices;
         }
 
-        public static void RecalculateNormals(this Mesh mesh, float angle, bool snapVertices = true)
+        public static void RecalculateNormals(this Mesh mesh, float angle, bool snapVertices = false)
         {
             // UnweldVertices(mesh);
 
@@ -155,7 +155,7 @@ public static class MeshExtensions {
             public readonly long _z;
 
             // Change this if you require a different precision.
-            public const int Tolerance = 10; // was 100000
+            public const int Tolerance = 1000; // was 100000
             // public const float ToleranceF = 100f;
 
             // Magic FNV values. Do not change these.

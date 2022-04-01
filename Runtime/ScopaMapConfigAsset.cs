@@ -7,8 +7,7 @@ namespace Scopa {
     /// <summary> ScriptableObject to use for configuring how Scopa imports .MAPs, even for runtime imports too. </summary>
     [CreateAssetMenu(fileName = "New ScopaMapConfig", menuName = "Scopa/MAP Config", order = 1)]
     public class ScopaMapConfigAsset : ScriptableObject {
-        
-
+        public ScopaMapConfig config = new ScopaMapConfig();
     }
 
     [System.Serializable]
@@ -17,17 +16,26 @@ namespace Scopa {
         [Tooltip("(default: 0.03125, 1 m = 32 units) The global scaling factor for all brush geometry and entity origins.")]
         public float scalingFactor = 0.03125f;
 
+        [Tooltip("(default: true) Generate tangent data needed for normal mapping. If you're not using normal maps, disable for small memory savings.")]
+        public bool addTangents = true;
+
+        [Tooltip("(EDITOR-ONLY) (default: true) Generate lightmap UVs using Unity's built-in lightmap unwrapper.")]
+        public bool addLightmapUV2 = true;
+
+        [Tooltip("(EDITOR-ONLY) (default: Off) Use Unity's built-in mesh compressor. Reduces file size but may cause glitches and seams.")]
+        public ModelImporterMeshCompression meshCompression = ModelImporterMeshCompression.Off;
+
         // TODO: merge brushes for each entity
         // TODO: remove unseen faces
         // TODO: vertex snapping
 
-        [Tooltip("(default: sky, trigger, skip, hint, nodraw, null) When a face's texture name is a partial match with this list, discard that face from the mesh; does not affect colliders")]
+        [Tooltip("(default: sky, trigger, skip, hint, nodraw, null, clip) When a face's texture name is a partial match with this list, discard that face from the mesh; does not affect colliders")]
         public List<string> cullTextures = new List<string>() {"sky", "trigger", "skip", "hint", "nodraw", "null", "clip"};
 
 
         [Header("Colliders")]
-        [Tooltip("(default: Both) For each brush, we generate a collider. Axis-aligned boxes use Box Colliders, anything else gets a convex Mesh Collider. You can also force all Box / all Mesh colliders.")]
-        public ColliderImportMode colliderMode = ColliderImportMode.Both;
+        [Tooltip("(default: Box and Convex) For each brush we add a collider. Axis-aligned boxy brushes use Box Colliders, anything else gets a convex Mesh Collider. You can also force all Box / all Mesh colliders. For lots of brushes, a single merged concave Mesh Collider might be better.")]
+        public ColliderImportMode colliderMode = ColliderImportMode.BoxAndConvex;
 
         [Tooltip("(default: illusionary) If an entity's classname is a partial match with this list, do not generate a collider for it.")]
         public List<string> nonsolidEntities = new List<string>() {"illusionary"};
@@ -51,15 +59,14 @@ namespace Scopa {
 
 
         [Header("Entities")]
-        [Tooltip("(optional) Prefab to use as a base template for every entity, including 'worldspawn'. Colliders go here too. Useful for setting layers, static flags, etc.")]
+        [Tooltip("(optional) Prefab to use for every entity including 'worldspawn'. Colliders go here too. Useful for setting layers, static flags, etc.")]
         public GameObject entityPrefab;
         
-        [Tooltip("(optional) Prefab to use as a base template when adding meshes, one set of mesh renderers / mesh filters for each material in the entity. Useful for setting layers, static flags, etc.")]
+        [Tooltip("(optional) Prefab to use for each mesh / material in each entity. meshFilter.sharedMesh and meshRenderer.sharedMaterial will be overridden. Useful for setting layers, renderer settings, etc.")]
         public GameObject meshPrefab;
 
         [Tooltip("(optional) For each entity type, you can set a different config. Useful for setting specific prefabs / mesh / collider settings.")]
         public ConfigOverride[] configOverrides;
-
 
         public bool IsTextureNameCulled(string textureName) {
             if ( string.IsNullOrWhiteSpace(textureName) )
@@ -99,8 +106,17 @@ namespace Scopa {
                 return null;
             }
 
-            var mat = materialOverrides.Where( ov => textureName.ToLowerInvariant().Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
-            return mat.material;
+            var search = materialOverrides.Where( ov => textureName.ToLowerInvariant().Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
+            return search.material;
+        }
+
+        public ScopaMapConfig GetConfigOverrideFor(string entityClassname) {
+            if ( configOverrides.Length == 0) {
+                return null;
+            }
+
+            var search = configOverrides.Where( cfg => entityClassname.ToLowerInvariant().Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
+            return search.configOverride.config;
         }
 
         [System.Serializable]
@@ -122,7 +138,16 @@ namespace Scopa {
             None,
             BoxColliderOnly,
             ConvexMeshColliderOnly,
-            Both
+            BoxAndConvex,
+            MergeAllToOneConcaveMeshCollider
+        }
+
+        public enum ModelImporterMeshCompression
+        {
+            Off = 0,
+            Low = 1,
+            Medium = 2,
+            High = 3
         }
     }
 

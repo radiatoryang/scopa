@@ -25,7 +25,7 @@ namespace Scopa.Editor {
                 EditorGUILayout.PropertyField(prop, true);
 
                 if ( prop.name == "colliderMode" ) {
-                    if (prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.None ) {
+                    if (prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.None && prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider ) {
                         EditorGUILayout.HelpBox( ScopaCore.colliderWarningMessage, MessageType.Info );
                     }
                 }
