@@ -20,9 +20,18 @@ namespace Scopa
         /// <param name="vertices">The vertices of the polygon</param>
         public Polygon(IEnumerable<Vector3> vertices)
         {
-            Vertices = vertices.ToList();
+            Vertices = new List<Vector3>(vertices);
             Plane = new Plane(Vertices[0], Vertices[1], Vertices[2]);
-            // Plane.ReverseNormal();
+        }
+
+        /// <summary>
+        /// Creates a polygon from a list of points
+        /// </summary>
+        /// <param name="vertices">The vertices of the polygon</param>
+        public Polygon(List<Vector3> vertices)
+        {
+            Vertices = new List<Vector3>(vertices);
+            Plane = new Plane(Vertices[0], Vertices[1], Vertices[2]);
         }
 
         /// <summary>
@@ -184,6 +193,11 @@ namespace Scopa
         //     return true;
         // }
 
+        // static buffers for Split function, to reduce GC
+        static List<float> distances = new List<float>(32);
+        static List<Vector3> backVerts = new List<Vector3>(32);
+        static List<Vector3> frontVerts = new List<Vector3>(32);
+
         public bool SplitNew(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
             const float epsilon = 0.01f;
@@ -191,15 +205,18 @@ namespace Scopa
             // Debug.Log("Splitting " + Plane.ToString() + " with " + clip.ToString() );
             
             bool isOrthogonal = this.Plane.IsOrthogonal();
-            var debugInfo = this.Plane.ToString() + " vs " + clip.ToString();
+            // var debugInfo = this.Plane.ToString() + " vs " + clip.ToString();
             // var tempClip = clip.Clone();
             // if ( isOrthogonal ) {
             //     tempClip.ReverseNormal();
             //     Debug.Log("non ortho, trying...");
             // }
 
-            //var distances = Vertices.Select(vert => tempClip.GetDistanceToPoint(-vert) ).ToList();
-            var distances = Vertices.Select(clip.EvalAtPoint).ToList();
+            // var distances = Vertices.Select(clip.EvalAtPoint).ToList();
+            distances.Clear();
+            for(int n=0; n<Vertices.Count; n++) {
+                distances.Add( clip.EvalAtPoint(Vertices[n]) );
+            }
 
             // Debug.Log("Split distances: " + string.Join(", ", distances) );
             
@@ -248,8 +265,8 @@ namespace Scopa
             // }
 
             // Get the new front and back vertices
-            var backVerts = new List<Vector3>();
-            var frontVerts = new List<Vector3>();
+            backVerts.Clear();
+            frontVerts.Clear();
 
             for (var i = 0; i < Vertices.Count; i++)
             {
@@ -271,8 +288,9 @@ namespace Scopa
                 }
             }
             
-            back = new Polygon(backVerts.Select(x => new Vector3(x.x, x.y, x.z)));
-            front = new Polygon(frontVerts.Select(x => new Vector3(x.x, x.y, x.z)));
+            back = new Polygon(backVerts);
+            // front = new Polygon(frontVerts);
+            front = null; // we throw away the front anyway, so why bother
             coplanarBack = coplanarFront = null;
 
             // if ( !isOrthogonal )

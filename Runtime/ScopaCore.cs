@@ -23,6 +23,9 @@ namespace Scopa {
         static List<int> tris = new List<int>(8192);
         static List<Vector2> uvs = new List<Vector2>(4096);
 
+        // (editor only) search for all materials in the project once per import, save results here
+        static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
+
         /// <summary>Parses the .MAP text data into a usable data structure.</summary>
         public static MapFile ParseMap( string pathToMapFile ) {
             IMapFormat importer = null;
@@ -48,9 +51,26 @@ namespace Scopa {
             // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
 
             warnedUserAboutMultipleColliders = false;
+            CacheMaterialSearch();
             meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial, config);
 
             return rootGameObject;
+        }
+
+        static void CacheMaterialSearch() {
+            #if UNITY_EDITOR
+            materials.Clear();
+            var materialSearch = AssetDatabase.FindAssets("t:Material");
+            foreach ( var materialSearchGUID in materialSearch) {
+                // if there's multiple Materials attached to one Asset, we have to do additional filtering
+                var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
+                foreach ( var asset in allAssets ) {
+                    if ( !materials.ContainsKey(asset.name) && asset is Material ) {
+                        materials.Add(asset.name, asset as Material);
+                    }
+                }
+            }
+            #endif
         }
 
         /// <summary> The main core function for converting entities (worldspawn, func_, etc.) into 3D meshes. </summary>
@@ -82,7 +102,7 @@ namespace Scopa {
             var lastSolidID = -1;
 
             // detect per-entity smoothing angle, if defined
-            var smoothNormalAngle = -1;
+            var smoothNormalAngle = 0;
             if (entData.TryGetInt("_phong", out var phong) && phong >= 1) {
                 if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
                     smoothNormalAngle = Mathf.RoundToInt( phongAngle );
@@ -127,34 +147,18 @@ namespace Scopa {
                     // match this face's texture name to a material
                     if ( !textureLookup.ContainsKey(face.TextureName) ) {
                         var newMaterial = defaultMaterial;
-                        var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
 
+                        var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
                         if ( materialOverride != null) {
                             newMaterial = materialOverride;
                         }
                         
-                        // EDITOR ONLY: if still no better material found, then search the AssetDatabase for a matching texture name
-                        #if UNITY_EDITOR
-                        if ( config.findMaterials && materialOverride == null ) {
-                            var searchQuery = face.TextureName + " t:Material";
-                            // Debug.Log("search: " + searchQuery);
-                            var materialSearchGUID = AssetDatabase.FindAssets(searchQuery).FirstOrDefault();
-
-                            // if there's multiple Materials attached to one Asset, we have to do additional filtering
-                            if ( !string.IsNullOrEmpty(materialSearchGUID) ) {
-                                var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
-                                foreach ( var asset in allAssets ) {
-                                    if ( asset is Material && asset.name.Contains(face.TextureName) ) {
-                                        newMaterial = asset as Material;
-                                        // Debug.Log("found: " + newMaterial.name);
-                                        break;
-                                    }
-                                }
-                            }
+                        // if still no better material found, then search the AssetDatabase for a matching texture name
+                        if ( config.findMaterials && materialOverride == null && materials.Count > 0 && materials.ContainsKey(face.TextureName) ) {
+                            newMaterial = materials[face.TextureName];
                         }
-                        #endif
 
-                        // merge entries with the same Material by renaming the face's texture name
+                        // temporarily merge entries with the same Material by renaming the face's texture name
                         if (textureLookup.ContainsValue(newMaterial)) {
                             face.TextureName = textureLookup.Where( kvp => kvp.Value == newMaterial).FirstOrDefault().Key;
                         } else { // otherwise add to lookup
@@ -270,9 +274,12 @@ namespace Scopa {
             mesh.SetUVs(0, uvs);
 
             mesh.RecalculateBounds();
-            mesh.RecalculateNormals(smoothNormalAngle);
+            if ( smoothNormalAngle > 0.1 )
+                mesh.RecalculateNormals(smoothNormalAngle);
+            else if ( smoothNormalAngle >= 0)
+                mesh.RecalculateNormals(); // built-in Unity method
 
-            if ( config.addTangents )
+            if ( config.addTangents && smoothNormalAngle >= 0 )
                 mesh.RecalculateTangents();
             
             #if UNITY_EDITOR
@@ -324,7 +331,7 @@ namespace Scopa {
                     BufferMeshDataFromSolid(solid, config, null, true);
                 }
 
-                var newMesh = BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position );
+                var newMesh = BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
                 var newMeshCollider = gameObject.AddComponent<MeshCollider>();
                 newMeshCollider.convex = false;
                 newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
@@ -390,7 +397,7 @@ namespace Scopa {
         static Mesh AddMeshCollider(GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
             ClearMeshBuffers();
             BufferMeshDataFromSolid(solid, config, null, true);
-            var newMesh = BuildMeshFromBuffers( solid.id.ToString(), config, gameObject.transform.position );
+            var newMesh = BuildMeshFromBuffers( solid.id.ToString() + "-Collider", config, gameObject.transform.position, -1);
 
             ShowColliderWarning();
         

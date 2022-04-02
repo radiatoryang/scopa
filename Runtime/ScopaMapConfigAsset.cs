@@ -68,11 +68,12 @@ namespace Scopa {
         [Tooltip("(optional) For each entity type, you can set a different config. Useful for setting specific prefabs / mesh / collider settings.")]
         public ConfigOverride[] configOverrides;
 
+        /// <summary> note: textureName must already be ToLowerInvariant() </summary>
         public bool IsTextureNameCulled(string textureName) {
             if ( string.IsNullOrWhiteSpace(textureName) )
                 return true;
 
-            var search = textureName.ToLowerInvariant();
+            var search = textureName;
             for(int i=0; i<cullTextures.Count; i++) {
                 if ( search.Contains(cullTextures[i]) ) {
                     return true;
@@ -81,8 +82,9 @@ namespace Scopa {
             return false;
         }
 
+        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
         public bool IsEntityNonsolid(string entityClassname) {
-            var search = entityClassname.ToLowerInvariant();
+            var search = entityClassname;
             for(int i=0; i<nonsolidEntities.Count; i++) {
                 if ( search.Contains(nonsolidEntities[i]) ) {
                     return true;
@@ -91,8 +93,9 @@ namespace Scopa {
             return false;
         }
 
+        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
         public bool IsEntityTrigger(string entityClassname) {
-            var search = entityClassname.ToLowerInvariant();
+            var search = entityClassname;
             for(int i=0; i<triggerEntities.Count; i++) {
                 if ( search.Contains(triggerEntities[i]) ) {
                     return true;
@@ -101,21 +104,23 @@ namespace Scopa {
             return false;
         }
 
+        /// <summary> note: textureName must already be ToLowerInvariant() </summary>
         public Material GetMaterialOverrideFor(string textureName) {
             if ( materialOverrides.Length == 0) {
                 return null;
             }
 
-            var search = materialOverrides.Where( ov => textureName.ToLowerInvariant().Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
+            var search = materialOverrides.Where( ov => textureName.Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
             return search.material;
         }
 
+        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
         public ScopaMapConfig GetConfigOverrideFor(string entityClassname) {
             if ( configOverrides.Length == 0) {
                 return null;
             }
 
-            var search = configOverrides.Where( cfg => entityClassname.ToLowerInvariant().Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
+            var search = configOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
             return search.configOverride.config;
         }
 

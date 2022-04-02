@@ -163,7 +163,7 @@ namespace Scopa.Formats.Map.Formats
 
             if (key == "classname")
             {
-                ent.ClassName = val;
+                ent.ClassName = val.ToLowerInvariant();
             }
             else if (key == "spawnflags")
             {
@@ -209,7 +209,7 @@ namespace Scopa.Formats.Map.Formats
         {
             const NumberStyles ns = NumberStyles.Float;
 
-            var parts = line.Split(' ').ToList();
+            var parts = line.Split(' ');
             // Debug.Log(line);
 
             Util.Assert(parts[0] == "(");
@@ -255,7 +255,7 @@ namespace Scopa.Formats.Map.Formats
             // Debug.Log($"normal: {face.Plane.normal}, distance: {face.Plane.distance}");
 
             // idTech2, idTech3
-            if (parts.Count == 21 || parts.Count == 24)
+            if (parts.Length == 21 || parts.Length == 24)
             {
                 var direction = face.Plane.GetClosestAxisToNormal();
                 face.UAxis = direction == Vector3.right ? Vector3.forward : Vector3.right;
@@ -274,7 +274,7 @@ namespace Scopa.Formats.Map.Formats
                 face.YShift = yshift;
 
                 // idTech3
-                if (parts.Count == 24)
+                if (parts.Length == 24)
                 {
                     face.ContentFlags = int.Parse(parts[18], CultureInfo.InvariantCulture);
                     face.SurfaceFlags = int.Parse(parts[19], CultureInfo.InvariantCulture);
@@ -282,7 +282,7 @@ namespace Scopa.Formats.Map.Formats
                 }
             }
             // Worldcraft / version 220
-            else if (parts.Count == 31)
+            else if (parts.Length == 31)
             {
                 Util.Assert(parts[16] == "[");
                 Util.Assert(parts[21] == "]");
@@ -299,7 +299,7 @@ namespace Scopa.Formats.Map.Formats
             }
             else
             {
-                Util.Assert(false, $"Unknown number of tokens ({parts.Count}) in face definition.");
+                Util.Assert(false, $"Unknown number of tokens ({parts.Length}) in face definition.");
             }
 
             return face;
