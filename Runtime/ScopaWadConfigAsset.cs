@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Scopa {
     /// <summary> ScriptableObject to use for configuring how Scopa imports WADs, even for runtime imports too.</summary>
-    [CreateAssetMenu(fileName = "New ScopaWadConfig", menuName = "Scopa/WAD Config", order = 1)]
+    [CreateAssetMenu(fileName = "New ScopaWadConfig", menuName = "Scopa/WAD Config Asset", order = 1)]
     public class ScopaWadConfigAsset : ScriptableObject {
         public ScopaWadConfig config = new ScopaWadConfig();
     }

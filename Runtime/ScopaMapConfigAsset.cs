@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace Scopa {
     /// <summary> ScriptableObject to use for configuring how Scopa imports .MAPs, even for runtime imports too. </summary>
-    [CreateAssetMenu(fileName = "New ScopaMapConfig", menuName = "Scopa/MAP Config", order = 1)]
+    [CreateAssetMenu(fileName = "New ScopaMapConfig", menuName = "Scopa/MAP Config Asset", order = 1)]
     public class ScopaMapConfigAsset : ScriptableObject {
         public ScopaMapConfig config = new ScopaMapConfig();
     }
