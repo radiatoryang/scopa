@@ -12,7 +12,8 @@ namespace Scopa {
 
     [System.Serializable]
     public class ScopaMapConfig {
-        [Header("Meshes")]
+        [Header("MESHES")]
+
         [Tooltip("(default: 0.03125, 1 m = 32 units) The global scaling factor for all brush geometry and entity origins.")]
         public float scalingFactor = 0.03125f;
 
@@ -33,23 +34,25 @@ namespace Scopa {
         public List<string> cullTextures = new List<string>() {"sky", "trigger", "skip", "hint", "nodraw", "null", "clip"};
 
 
-        [Header("Colliders")]
+        [Space(), Header("COLLIDERS")]
+
         [Tooltip("(default: Box and Convex) For each brush we add a collider. Axis-aligned boxy brushes use Box Colliders, anything else gets a convex Mesh Collider. You can also force all Box / all Mesh colliders. For lots of brushes, a single merged concave Mesh Collider might be better.")]
         public ColliderImportMode colliderMode = ColliderImportMode.BoxAndConvex;
 
-        [Tooltip("(default: illusionary) If an entity's classname is a partial match with this list, do not generate a collider for it.")]
+        [Tooltip("(default: illusionary) If an entity's classname is a partial match with this list, do not generate a collider for it and disable Navigation Static for it.")]
         public List<string> nonsolidEntities = new List<string>() {"illusionary"};
 
-        [Tooltip("(default: trigger) If an entity's classname is a partial match with this list, mark that collider as a non-solid trigger.")]
+        [Tooltip("(default: trigger, water) If an entity's classname is a partial match with this list, mark that collider as a non-solid trigger and disable Navigation Static for it.")]
         public List<string> triggerEntities = new List<string>() {"trigger", "water"};
 
 
-        [Header("Textures & Materials")]
+        [Space(), Header("TEXTURES & MATERIALS")]
+
+        [Tooltip("(EDITOR-ONLY) (default: true) try to automatically match each texture name to a similarly named Material already in the project")]
+        public bool findMaterials = true;
+
         [Tooltip("(default: 128) To calculate texture coordinates, we need to know the texture image size; but if we can't find a matching texture, use this default size")]
         public int defaultTexSize = 128;
-
-        [Tooltip("(EDITOR-ONLY) (default: true) try to automatically match each texture name to a similarly named Material already in the project; will only use manually set Materials below")]
-        public bool findMaterials = true;
 
         [Tooltip("(optional) when we can't find a matching Material name, then use this default Material instead")]
         public Material defaultMaterial;
@@ -57,16 +60,22 @@ namespace Scopa {
         [Tooltip("(optional) manually set a specific Material for each texture name")]
         public MaterialOverride[] materialOverrides;
 
+        [Space(), Header("GAMEOBJECTS & ENTITIES")]
+        
+        [Tooltip("(default: true) Set all mesh objects to be static -- batching, lightmapping, navigation, reflection, everything. However, non-solid and trigger entities will NOT be navigation static.")]
+        public bool isStatic = true;
 
-        [Header("Entities")]
-        [Tooltip("(optional) Prefab to use for every entity including 'worldspawn'. Colliders go here too. Useful for setting layers, static flags, etc.")]
+        [Tooltip("(default: Default) Set all objects to use this layer. For example, maybe you have a 'World' layer or something.")]
+        public int layer = 0;
+
+        [Tooltip("(optional) Prefab to use for the root of EVERY entity including worldspawn. Ignores the config-wide static / layer settings above.")]
         public GameObject entityPrefab;
         
-        [Tooltip("(optional) Prefab to use for each mesh / material in each entity. meshFilter.sharedMesh and meshRenderer.sharedMaterial will be overridden. Useful for setting layers, renderer settings, etc.")]
+        [Tooltip("(optional) Prefab to use for each mesh + material in each entity. meshFilter.sharedMesh and meshRenderer.sharedMaterial will be overridden. Useful for setting layers, renderer settings, etc. Ignores the config-wide static / layer settings above.")]
         public GameObject meshPrefab;
 
-        [Tooltip("(optional) For each entity type, you can set a different config. Useful for setting specific prefabs / mesh / collider settings.")]
-        public ConfigOverride[] configOverrides;
+        [Tooltip("(optional) Override the prefabs used for each entity type. For example, a door might need its own special prefab. Order matters, we use the first override that matches. Ignores the config-wide static / layer settings above.")]
+        public EntityOverride[] entityOverrides;
 
         /// <summary> note: textureName must already be ToLowerInvariant() </summary>
         public bool IsTextureNameCulled(string textureName) {
@@ -115,21 +124,39 @@ namespace Scopa {
         }
 
         /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
-        public ScopaMapConfig GetConfigOverrideFor(string entityClassname) {
-            if ( configOverrides.Length == 0) {
-                return null;
+        public GameObject GetEntityPrefabFor(string entityClassname) {
+            if ( entityOverrides.Length == 0) {
+                return entityPrefab;
             }
 
-            var search = configOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
-            return search.configOverride.config;
+            var search = entityOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
+            if ( search != null && search.entityPrefab != null) {
+                return search.entityPrefab;
+            }
+            return entityPrefab;
         }
 
+        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
+        public GameObject GetMeshPrefabFor(string entityClassname) {
+            if ( entityOverrides.Length == 0) {
+                return meshPrefab;
+            }
+
+            var search = entityOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
+            if ( search != null && search.meshPrefab != null) {
+                return search.meshPrefab;
+            }
+            return meshPrefab;
+        }
+
+
         [System.Serializable]
-        public class ConfigOverride {
+        public class EntityOverride {
             [Tooltip("for example: func_detail, func_wall, light, etc... worldspawn is for world brushes. Partial matches count, e.g. 'func' will match all func_ entities.")]
             public string entityClassName;
 
-            [SerializeReference] public ScopaMapConfigAsset configOverride;
+            [Tooltip("the prefabs to use, just for this entity type")]
+            public GameObject entityPrefab, meshPrefab;
         }
 
         [System.Serializable]

@@ -22,10 +22,14 @@ namespace Scopa.Editor {
 
             SerializedProperty prop = property.FindPropertyRelative("scalingFactor");
             do {
-                EditorGUILayout.PropertyField(prop, true);
+                if ( prop.name == "layer" ) {
+                    prop.intValue = EditorGUILayout.LayerField(new GUIContent(prop.displayName, prop.tooltip), prop.intValue );
+                } else {
+                    EditorGUILayout.PropertyField(prop, true);
+                }
 
                 if ( prop.name == "colliderMode" ) {
-                    if (prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.None && prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider ) {
+                    if (prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.None ) {
                         EditorGUILayout.HelpBox( ScopaCore.colliderWarningMessage, MessageType.Info );
                     }
                 }

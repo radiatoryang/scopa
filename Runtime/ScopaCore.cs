@@ -15,8 +15,7 @@ using UnityEditor;
 namespace Scopa {
     public static class ScopaCore {
         public static bool warnedUserAboutMultipleColliders {get; private set;}
-        public const string colliderWarningMessage = "WARNING: upon import, Unity will complain about too many colliders with same name/type on same object. "
-            + "But the alternative is worse. If you have 1000 colliders, making 1000 game objects would be very bad.";
+        public const string colliderWarningMessage = "WARNING: Unity may complain about importing too many colliders with same name/type. Ignore it.";
 
         // to avoid GC, we use big static lists so we just allocate once
         static List<Vector3> verts = new List<Vector3>(4096);
@@ -93,10 +92,6 @@ namespace Scopa {
         }
 
         public static List<Mesh> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
-            var configOverride = config.GetConfigOverrideFor(entData.ClassName);
-            if ( configOverride != null)
-                config = configOverride;
-            
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
             var allFaces = new List<Face>(); // used later for testing unseen faces
             var lastSolidID = -1;
@@ -118,6 +113,9 @@ namespace Scopa {
                 entityOrigin = newVec;
                 calculateOrigin = false;
             }
+
+            var needsCollider = !config.IsEntityNonsolid(entData.ClassName);
+            var isTrigger = config.IsEntityTrigger(entData.ClassName);
 
             // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
             var textureLookup = new Dictionary<string, Material>();
@@ -173,13 +171,21 @@ namespace Scopa {
             var meshList = new List<Mesh>();
 
             // user can specify a template entityPrefab if desired
-            var entityObject = config.entityPrefab != null ? UnityEngine.Object.Instantiate(config.entityPrefab) : new GameObject();
+            var entityPrefab = config.GetEntityPrefabFor(entData.ClassName);
+            var meshPrefab = config.GetMeshPrefabFor(entData.ClassName);
+
+            var entityObject = entityPrefab != null ? Instantiate(entityPrefab) : new GameObject();
 
             entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
             entityObject.transform.position = entityOrigin;
             entityObject.transform.localRotation = Quaternion.identity;
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
+
+            // only set Layer if it's a generic game object
+            if ( entityPrefab == null) { 
+                entityObject.layer = config.layer;
+            }
 
             // main loop: for each material, build a mesh and add a game object with mesh components
             foreach ( var textureKVP in textureLookup ) {
@@ -201,16 +207,21 @@ namespace Scopa {
                 meshList.Add(newMesh);
 
                 // finally, add mesh as game object, while we still have all the entity information
-                var newMeshObj = textureLookup.Count > 1 ? 
-                    (config.meshPrefab != null ? UnityEngine.Object.Instantiate(config.meshPrefab) : new GameObject() )
-                    : entityObject; // but if there's only one material group, then just reuse entityObject
+                var newMeshObj = meshPrefab != null ? Instantiate(meshPrefab) : new GameObject();
 
-                if ( newMeshObj != entityObject ) {
-                    newMeshObj.name = textureKVP.Key;
-                    newMeshObj.transform.SetParent(entityObject.transform);
-                    newMeshObj.transform.localPosition = Vector3.zero;
-                    newMeshObj.transform.localRotation = Quaternion.identity;
-                    newMeshObj.transform.localScale = Vector3.one;
+                newMeshObj.name = textureKVP.Key;
+                newMeshObj.transform.SetParent(entityObject.transform);
+                newMeshObj.transform.localPosition = Vector3.zero;
+                newMeshObj.transform.localRotation = Quaternion.identity;
+                newMeshObj.transform.localScale = Vector3.one;
+
+                // if user set a specific prefab, it probably has its own static flags and layer
+                // ... but if it's a generic game object we made, then we set it ourselves
+                if ( meshPrefab == null ) { 
+                    newMeshObj.layer = config.layer;
+                    if (config.isStatic) {
+                        SetGameObjectStatic(newMeshObj, needsCollider && !isTrigger);
+                    }
                 }
 
                 // populate components... if the mesh components aren't there, then add them
@@ -221,10 +232,33 @@ namespace Scopa {
             }
 
             // collision pass, now treat it all as one object and ignore texture names
-            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && !config.IsEntityNonsolid(entData.ClassName) )
+            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && needsCollider )
                 meshList.AddRange( ScopaCore.AddColliders( entityObject, entData, config, namePrefix ) );
             
             return meshList;
+        }
+
+        static GameObject Instantiate(GameObject prefab) {
+            // using InstantiatePrefab didn't actually help, since the instance still doesn't auto-update and requires manual reimport anyway
+            // #if UNITY_EDITOR
+            //     return PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            // #else
+                return UnityEngine.Object.Instantiate(prefab);
+            // #endif
+        }
+
+        static void SetGameObjectStatic(GameObject go, bool isNavigationStatic = true) {
+            if ( isNavigationStatic ) {
+                go.isStatic = true;
+            } else {
+                GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.ContributeGI 
+                    | StaticEditorFlags.OccluderStatic 
+                    | StaticEditorFlags.BatchingStatic 
+                    | StaticEditorFlags.OccludeeStatic 
+                    | StaticEditorFlags.OffMeshLinkGeneration 
+                    | StaticEditorFlags.ReflectionProbeStatic
+                );
+            }
         }
 
         /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers
@@ -322,6 +356,9 @@ namespace Scopa {
             var meshList = new List<Mesh>();
 
             var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
+            if ( solids.Count() == 0)
+                return meshList;
+
             bool isTrigger = config.IsEntityTrigger(ent.ClassName);
 
             // just one big Mesh Collider... one collider to rule them all
@@ -333,7 +370,7 @@ namespace Scopa {
 
                 var newMesh = BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
                 var newMeshCollider = gameObject.AddComponent<MeshCollider>();
-                newMeshCollider.convex = false;
+                newMeshCollider.convex = ent.TryGetInt("_convex", out var num) && num == 1;
                 newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
                     | MeshColliderCookingOptions.EnableMeshCleaning 
                     | MeshColliderCookingOptions.WeldColocatedVertices 
