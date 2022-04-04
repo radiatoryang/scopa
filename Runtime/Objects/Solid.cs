@@ -16,7 +16,7 @@ namespace Scopa.Formats.Map.Objects
             Meshes = new List<Mesh>();
         }
 
-        public void ComputeVertices(float weldingThreshold = 0.1f)
+        public void ComputeVertices(float weldingThreshold = 1f)
         {
             if (Faces.Count < 4) return;
 
@@ -67,22 +67,25 @@ namespace Scopa.Formats.Map.Objects
                 // }
             }
 
-            // TODO: how do we actually do reliable welding?
             // weld nearby vertices together within in each solid
-            // foreach(var face1 in Faces) {
-            //     foreach (var face2 in Faces) {
-            //         if ( face1 == face2 )
-            //             continue;
+            var origin = poly.Origin;
+            foreach(var face1 in Faces) {
+                foreach (var face2 in Faces) {
+                    if ( face1 == face2 )
+                        continue;
 
-            //         for(int a=0; a<face1.Vertices.Count; a++) {
-            //             for(int b=0; b<face2.Vertices.Count; b++ ) {
-            //                 if ( (face1.Vertices[a] - face2.Vertices[b]).sqrMagnitude < weldingThreshold * weldingThreshold ) {
-            //                     face2.Vertices[b] = face1.Vertices[a];
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
+                    for(int a=0; a<face1.Vertices.Count; a++) {
+                        for(int b=0; b<face2.Vertices.Count; b++ ) {
+                            if ( (face1.Vertices[a] - face2.Vertices[b]).sqrMagnitude < weldingThreshold * weldingThreshold ) {
+                                if ( (face1.Vertices[a] - origin).sqrMagnitude > (face2.Vertices[b] - origin).sqrMagnitude )
+                                    face2.Vertices[b] = face1.Vertices[a];
+                                else
+                                    face1.Vertices[a] = face2.Vertices[b];
+                            }
+                        }
+                    }
+                }
+            }
 
 
         }

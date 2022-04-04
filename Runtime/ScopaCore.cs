@@ -15,9 +15,10 @@ using UnityEditor;
 namespace Scopa {
     public static class ScopaCore {
         public static bool warnedUserAboutMultipleColliders {get; private set;}
-        public const string colliderWarningMessage = "WARNING: Unity may complain about importing too many colliders with same name/type. Ignore it.";
+        public const string colliderWarningMessage = "WARNING: Unity may complain about 'identifier uniqueness violations', importing too many colliders with same name and type. Ignore it.";
 
         // to avoid GC, we use big static lists so we just allocate once
+        static List<Face> allFaces = new List<Face>();
         static List<Vector3> verts = new List<Vector3>(4096);
         static List<int> tris = new List<int>(8192);
         static List<Vector2> uvs = new List<Vector2>(4096);
@@ -96,7 +97,7 @@ namespace Scopa {
 
         public static List<Mesh> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
-            var allFaces = new List<Face>(); // used later for testing unseen faces
+            allFaces.Clear(); // used later for testing unseen faces
             var lastSolidID = -1;
 
             // detect per-entity smoothing angle, if defined
@@ -279,17 +280,16 @@ namespace Scopa {
                     continue;
 
                 // test for unseen / hidden faces, and discard
-                // TODO: doesn't actually work? ugh
-                // foreach( var otherFace in allFaces ) {
-                //     if (otherFace.OccludesFace(face)) {
-                //         Debug.Log("discarding unseen face at " + face);
-                //         otherFace.discardWhenBuildingMesh = true;
-                //         break;
-                //     }
-                // }
+                foreach( var otherFace in allFaces ) {
+                    if (otherFace.OccludesFace(face)) {
+                        Debug.Log("discarding unseen face at " + face);
+                        face.DebugDrawVerts(Color.yellow);
+                        face.discardWhenBuildingMesh = true;
+                    }
+                }
 
-                // if ( face.discardWhenBuildingMesh )
-                //     continue;
+                if ( face.discardWhenBuildingMesh )
+                    continue;
 
                 BufferScaledMeshDataForFace(face, config.scalingFactor, verts, tris, uvs, textureFilter != null ? textureFilter.mainTexture.width : config.defaultTexSize, textureFilter != null ? textureFilter.mainTexture.height : config.defaultTexSize);
             }

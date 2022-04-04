@@ -115,7 +115,7 @@ namespace Scopa {
 
         /// <summary> note: textureName must already be ToLowerInvariant() </summary>
         public Material GetMaterialOverrideFor(string textureName) {
-            if ( materialOverrides.Length == 0) {
+            if ( materialOverrides == null || materialOverrides.Length == 0) {
                 return null;
             }
 
@@ -125,7 +125,7 @@ namespace Scopa {
 
         /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
         public GameObject GetEntityPrefabFor(string entityClassname) {
-            if ( entityOverrides.Length == 0) {
+            if ( entityOverrides == null || entityOverrides.Length == 0) {
                 return entityPrefab;
             }
 
@@ -138,7 +138,7 @@ namespace Scopa {
 
         /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
         public GameObject GetMeshPrefabFor(string entityClassname) {
-            if ( entityOverrides.Length == 0) {
+            if ( entityOverrides == null || entityOverrides.Length == 0) {
                 return meshPrefab;
             }
 

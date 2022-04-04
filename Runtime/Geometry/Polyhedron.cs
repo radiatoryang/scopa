@@ -58,6 +58,7 @@ namespace Scopa
                 var face = polygons[i];
                 if (face.Plane.OnPlane(origin) >= 0) {
                     polygons[i] = new Polygon(face.Vertices.Reverse());
+                    face.Plane.ReverseNormal();
                 //    Debug.Log($"reversing normal {face.Plane} away from {origin} -> {polygons[i].Plane} ");
                 }
             }
