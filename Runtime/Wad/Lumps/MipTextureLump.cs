@@ -10,7 +10,7 @@ namespace Scopa.Formats.Texture.Wad.Lumps
 
         public MipTextureLump(BinaryReader br) : base(br, false)
         {
-            texture = Read(br, false);
+            // texture = Read(br, false);
         }
 
         public override int Write(BinaryWriter bw)

@@ -15,10 +15,10 @@ namespace Scopa {
         [Tooltip("(default: false) WAD textures are more 'correct' in default Gamma sRGB color space, but you may prefer the washed-out look of importing them as Linear textures.")]
         public bool linearColorspace = false;
 
-        [Tooltip("(default: Point) For a retro pixel art Quake look, use Point. For a modern smoother look, use Bilinear or Trilinear.")]
+        [Tooltip("(default: Point) For a retro pixel art look, use Point. For a modern smoother look, use Bilinear or Trilinear.")]
         public FilterMode filterMode = FilterMode.Point;
 
-        [Tooltip("(default: true) Compression saves memory but adds noise. Good for most textures, bad for subtle gradients.")]
+        [Tooltip("(default: true) Compression saves memory but adds noise and longer import times. Good for most textures, bad for subtle gradients.")]
         public bool compressTextures = true;
 
         [Range(0, 16)]

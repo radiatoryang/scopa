@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Scopa.Formats.Texture.Wad.Lumps;
+using UnityEngine;
 
 namespace Scopa.Formats.Texture.Wad
 {
@@ -53,7 +54,7 @@ namespace Scopa.Formats.Texture.Wad
 
             if (loadLumps)
             {
-                LoadLumps(stream);
+                LoadLumps(Header.Version, stream);
             }
         }
 
@@ -100,12 +101,12 @@ namespace Scopa.Formats.Texture.Wad
         /// Load all lumps into memory. This is done already if <code>loadLumps</code> is true in the constructor.
         /// </summary>
         /// <param name="stream">The stream to load from</param>
-        public void LoadLumps(Stream stream)
+        public void LoadLumps(Version version, Stream stream)
         {
             _lumps = new Dictionary<Entry, ILump>();
             foreach (var entry in Entries.OrderBy(x => x.Offset))
             {
-                var lump = LoadLump(stream, entry);
+                var lump = LoadLump(version, stream, entry);
                 _lumps.Add(entry, lump);
             }
         }
@@ -127,7 +128,7 @@ namespace Scopa.Formats.Texture.Wad
         /// <param name="stream">The stream to load data from</param>
         /// <param name="entry">The entry to load</param>
         /// <returns>The loaded lump.</returns>
-        public ILump LoadLump(Stream stream, Entry entry)
+        public ILump LoadLump(Version version, Stream stream, Entry entry)
         {
             using (var br = new BinaryReader(stream, Encoding.ASCII, true))
             {
@@ -152,10 +153,10 @@ namespace Scopa.Formats.Texture.Wad
                         lump = new ImageLump(br);
                         break;
                     case LumpType.MipTexture:
-                        lump = new MipTextureLump(br);
+                        lump = new RawTextureLump(br, version == Version.Wad3);
                         break;
                     case LumpType.RawTexture:
-                        lump = new RawTextureLump(br);
+                        lump = new RawTextureLump(br, version == Version.Wad3);
                         break;
                     case LumpType.ColorMap2:
                         lump = new ColorMap2Lump(br);

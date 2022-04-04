@@ -1,10 +1,10 @@
 {
   "name": "com.radiatoryang.scopa",
-  "displayName": "Scopa (.MAP importer)",
+  "displayName": "Scopa (MAP/WAD importer)",
   "version": "1.0.0",
-  "description": "Level design plugin that adds Quake .MAP (Valve version 220) file import at editor time and/or runtime. To build .MAP files, we recommend a separate tool called TrenchBroom.",
+  "description": "Level design plugin that adds Quake .MAP import + Quake / Half-Life WAD import, at editor time and/or runtime. To maks .MAPs, use a tool like TrenchBroom.",
   "unity": "2019.4",
-  "keywords": [ "level design", "graybox", "blockout", "trenchbroom", "quake", "environment", "env", "map", "bsp", "csg" ],
+  "keywords": [ "level design", "graybox", "blockout", "trenchbroom", "quake", "half-life", "environment", "env", "map", "wad", "bsp", "csg", "texture" ],
   "documentationUrl": "https://github.com/radiatoryang/scopa",
   "licensesUrl": "https://github.com/radiatoryang/scopa/LICENSE.md",
   "author": {

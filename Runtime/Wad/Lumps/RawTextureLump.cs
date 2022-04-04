@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using UnityEngine;
 
 namespace Scopa.Formats.Texture.Wad.Lumps
 {
@@ -11,7 +12,7 @@ namespace Scopa.Formats.Texture.Wad.Lumps
             //
         }
 
-        protected RawTextureLump(BinaryReader br, bool readPalette)
+        public RawTextureLump(BinaryReader br, bool readPalette)
         {
             var t = Read(br, readPalette);
             Name = t.Name;

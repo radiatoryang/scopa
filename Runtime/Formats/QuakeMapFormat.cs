@@ -233,7 +233,7 @@ namespace Scopa.Formats.Map.Formats
             var face = new Face()
             {
                 Plane = new Plane(a, b, c),
-                TextureName = parts[15].ToLowerInvariant().Replace("*", "").Replace("+", "").Replace("{", "")
+                TextureName = parts[15].ToLowerInvariant()
             };
 
             // idk why this is needed?

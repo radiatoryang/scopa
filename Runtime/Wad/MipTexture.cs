@@ -41,10 +41,13 @@ namespace Scopa.Formats.Id
             texture.MipData = new byte[4][];
 
             int w = (int)texture.Width, h = (int)texture.Height;
-            for (var i = 0; i < 4; i++)
+            for (var i = 0; i < 4; i++) 
             {
                 br.BaseStream.Seek(position + offsets[i], SeekOrigin.Begin);
-                texture.MipData[i] = br.ReadBytes(w * h);
+                if ( i == 0)
+                    texture.MipData[i] = br.ReadBytes(w * h);
+                else
+                    br.ReadBytes(w * h); // for Unity, we don't care about the other mip levels (instead, Unity generates the mip levels)
                 w /= 2;
                 h /= 2;
             }
