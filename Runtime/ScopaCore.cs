@@ -171,6 +171,9 @@ namespace Scopa {
                 }
             }
             entityOrigin *= config.scalingFactor;
+            if ( entData.TryGetVector3Scaled("origin", out var pos, config.scalingFactor) ) {
+                entityOrigin = pos;
+            }
 
             // pass 2: now build one mesh + one game object per textureName
             var meshList = new List<Mesh>();
@@ -183,9 +186,11 @@ namespace Scopa {
 
             entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
             entityObject.transform.position = entityOrigin;
-            entityObject.transform.localRotation = Quaternion.identity;
+            // for point entities, import the "angle" property
+            entityObject.transform.localRotation = textureLookup.Count == 0 && entData.TryGetAngleSingle("angle", out var angle) ? angle : Quaternion.identity;
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
+            entityObject.AddComponent<ScopaEntity>().entityData = entData;
 
             // only set Layer if it's a generic game object
             if ( entityPrefab == null) { 

@@ -28,12 +28,12 @@ namespace Scopa.Formats.Map.Objects
             foreach (var face in Faces)
             {
                 face.Plane.ReverseNormal();
-                var pgList = polyList.OrderBy( poly => Vector3Extensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
+                var pgList = polyList.OrderBy( poly => VectorExtensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
 
                 if ( pgList.FirstOrDefault() == null || !face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
                     face.Plane.ReverseNormal();
 
-                    pgList = polyList.OrderBy( poly => Vector3Extensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
+                    pgList = polyList.OrderBy( poly => VectorExtensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
                     if ( pgList.FirstOrDefault() != null && face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
                         face.Vertices.AddRange( pgList.First().Vertices ); // .Select(x => x.ToStandardVector3()) );
                         // foreach ( var vert in face.Vertices ) {

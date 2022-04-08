@@ -105,7 +105,7 @@ We import WADs as a bundle of Texture2Ds, and we can also generate basic opaque 
 
 (inspector image)
 
-(In-editor only:) If "Find Materials" is enabled on the .MAP, we try to match each face's texture name with a similarly named Material anywhere in the project. You don't have to use WADs; this auto-detect function will work with all materials.
+If "Find Materials" is enabled on the .MAP, we try to match each face's texture name with a similarly named Material anywhere in the project. You don't have to use WADs; this auto-detect function will work with all materials. (Note: Find Materials only works at editor-time, not runtime.)
 
 You can also manually set a specific Material for each texture name.
 
@@ -120,7 +120,7 @@ To let people define game objects and add behaviours in the .MAP, you should wri
 
 Each entity has a classname, and based on that classname we can swap in a prefab template. For example, for every entity type "light_wall_torch_small", we can replace it with a "Light - Torch" prefab. 
 
-This gives you exact control over every entity. You can configure tags, layers, static flags, renderer settings, add extra colliders... or to read entity information, add a Scopa Entity component. 
+This gives you strong control over every entity. You can configure tags, layers, static flags, renderer settings, add extra colliders... or to read entity information, add a Scopa Entity component, and then have your components poll it for data.
 
 
 

@@ -3,7 +3,7 @@ using System;
 using System.Globalization;
 
 namespace Scopa {
-    public static class Vector3Extensions {
+    public static class VectorExtensions {
 
         public static Vector3 Absolute(this Vector3 vec) {
             return new Vector3(
@@ -25,11 +25,20 @@ namespace Scopa {
             return vec.normalized;
         }
  
-        public static Vector3 Parse(string x, string y, string z, NumberStyles ns, IFormatProvider provider) {
+        public static Vector3 Parse3(string x, string y, string z, NumberStyles ns, IFormatProvider provider) {
             return new Vector3(
                 float.Parse(x, ns, provider), 
                 float.Parse(y, ns, provider),
                 float.Parse(z, ns, provider)
+            );
+        }
+
+        public static Vector4 Parse4(string x, string y, string z, string w, NumberStyles ns, IFormatProvider provider) {
+            return new Vector4(
+                float.Parse(x, ns, provider), 
+                float.Parse(y, ns, provider),
+                float.Parse(z, ns, provider),
+                float.Parse(w, ns, provider)
             );
         }
 
