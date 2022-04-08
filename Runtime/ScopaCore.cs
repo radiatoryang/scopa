@@ -30,7 +30,7 @@ namespace Scopa {
         static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
 
         /// <summary>Parses the .MAP text data into a usable data structure.</summary>
-        public static MapFile ParseMap( string pathToMapFile ) {
+        public static MapFile ParseMap( string pathToMapFile, ScopaMapConfig config ) {
             IMapFormat importer = null;
             if ( pathToMapFile.EndsWith(".map")) {
                 importer = new QuakeMapFormat();
@@ -41,6 +41,7 @@ namespace Scopa {
                 return null;
             }
 
+            Solid.weldingThreshold = config.weldingThreshold;
             var mapFile = importer.ReadFromFile( pathToMapFile );
             mapFile.name = System.IO.Path.GetFileNameWithoutExtension( pathToMapFile );
 

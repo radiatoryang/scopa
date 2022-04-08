@@ -17,6 +17,9 @@ namespace Scopa {
         [Tooltip("(default: 0.03125, 1 m = 32 units) The global scaling factor for all brush geometry and entity origins.")]
         public float scalingFactor = 0.03125f;
 
+        [Tooltip("(default: 4) vertex welding distance threshold in unscaled map units; set to 0 to disable vertex welding (not recommended)")]
+        public float weldingThreshold = 4f;
+
         [Tooltip("(default: true) Generate tangent data needed for normal mapping. If you're not using normal maps, disable for small memory savings.")]
         public bool addTangents = true;
 

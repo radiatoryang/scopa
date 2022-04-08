@@ -26,7 +26,7 @@ namespace Scopa.Editor {
                 config = new ScopaMapConfig();
             }
 
-            var mapFile = ScopaCore.ParseMap(filepath);
+            var mapFile = ScopaCore.ParseMap(filepath, config);
  
             // try to find the default gridded blockout material... but if we can't find it, fallback to plain Unity gray material
             var defaultMaterial = config.defaultMaterial != null ? config.defaultMaterial : AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );

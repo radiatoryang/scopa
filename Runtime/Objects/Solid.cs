@@ -10,13 +10,15 @@ namespace Scopa.Formats.Map.Objects
         public List<Mesh> Meshes { get; set; }
         public int id = -1;
 
+        public static float weldingThreshold = 4f;
+
         public Solid()
         {
             Faces = new List<Face>();
             Meshes = new List<Mesh>();
         }
 
-        public void ComputeVertices(float weldingThreshold = 1f)
+        public void ComputeVertices()
         {
             if (Faces.Count < 4) return;
 
