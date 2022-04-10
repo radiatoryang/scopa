@@ -190,7 +190,12 @@ namespace Scopa {
             entityObject.transform.localRotation = textureLookup.Count == 0 && entData.TryGetAngleSingle("angle", out var angle) ? angle : Quaternion.identity;
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
-            entityObject.AddComponent<ScopaEntity>().entityData = entData;
+
+            // populate the rest of the entity data
+            var entityComponent = entityObject.GetComponent<ScopaEntity>();
+            if ( entityComponent == null)
+                entityComponent = entityObject.AddComponent<ScopaEntity>();
+            entityComponent.entityData = entData;
 
             // only set Layer if it's a generic game object
             if ( entityPrefab == null) { 

@@ -69,6 +69,10 @@ namespace Scopa {
             return vec;
         }
 
+        public static string ToStringIntWithNoPunctuation(this Vector3 vec) {
+            return Vector3Int.RoundToInt(vec).ToString().Replace(",", "").TrimStart('(').TrimEnd(')');
+        }
+
         // public static Vector3 ToStandardVector3(this Vector3 vec) {
         //     return vec * ScopaCore.scalingFactor;
         // }
