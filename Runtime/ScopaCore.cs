@@ -583,6 +583,16 @@ namespace Scopa {
             return material;
         }
 
+        public static void ExportFgdFile(ScopaFgdConfig fgd, string filepath) {
+            var fgdText = fgd.ToString();
+            System.IO.File.WriteAllText(filepath, fgdText, System.Text.Encoding.UTF8);
+            Debug.Log("wrote FGD to " + filepath);
+        }
+
+        public static bool IsValidPath(string newPath) {
+            return !string.IsNullOrWhiteSpace(newPath) && System.IO.Directory.Exists( System.IO.Path.GetDirectoryName(newPath) );
+        }
+
     }
 
 }

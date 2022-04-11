@@ -24,12 +24,14 @@ namespace Scopa {
         [Tooltip("a base is a reusable chunk of an entity definition, think of it as includes / templates you can mix and match")]
         public FgdClassBase[] entityBases;
 
+        [HideInInspector] public string lastSavePath;
+
         public string ToString(bool includeHeaderAndWorldspawnAndIncludes = true) {
             var text = "";
 
             if ( includeHeaderAndWorldspawnAndIncludes ) {
                 text += "\n//======================================================================";
-                text += "\n// FGD for " + Application.productName;
+                text += "\n// FGD for " + Application.productName + " " + Application.version;
                 text += "\n// generated on " + System.DateTime.Now.ToString("f");
                 text += "\n//======================================================================\n\n";
             }
@@ -38,90 +40,43 @@ namespace Scopa {
 
             if ( includeHeaderAndWorldspawnAndIncludes ) {
                 text += worldspawn.ToString() + "\n\n";
-            }
 
-            text += string.Join("\n\n", entityTypes.Select( ent => ent.ToString() ) ) + "\n\n";
-
-            if ( includeHeaderAndWorldspawnAndIncludes ) {
                 foreach ( var include in includeFgds ) {
                     text += include.config.ToString(false);
                 }
             }
 
+            text += string.Join("\n\n", entityTypes.Select( ent => ent.ToString() ) ) + "\n\n";
+
             return text;
         }
 
-        // /// <summary> note: textureName must already be ToLowerInvariant() </summary>
-        // public bool IsTextureNameCulled(string textureName) {
-        //     if ( string.IsNullOrWhiteSpace(textureName) )
-        //         return true;
+        /// <summary> utility function to collect all defined entity types together, as well as all the entities defined in any FGD includes </summary>
+        List<FgdClass> GetAllEntityTypesWithIncludes() {
+            var allEntityTypes = new List<FgdClass>( entityTypes );
+            foreach ( var include in includeFgds ) {
+                allEntityTypes.AddRange( include.config.entityTypes );
+            }
+            return allEntityTypes;
+        }
 
-        //     var search = textureName;
-        //     for(int i=0; i<cullTextures.Count; i++) {
-        //         if ( search.Contains(cullTextures[i]) ) {
-        //             return true;
-        //         }
-        //     }
-        //     return false;
-        // }
+        /// <summary> returns null if no entityPrefab defined; note: entityClassname must already be ToLowerInvariant() and match exactly </summary>
+        public GameObject GetEntityPrefabFor(string entityClassname) {
+            var search = GetAllEntityTypesWithIncludes().Where( cfg => entityClassname == cfg.className.ToLowerInvariant() ).FirstOrDefault();
+            if ( search != null && search.entityPrefab != null) {
+                return search.entityPrefab;
+            }
+            return null;
+        }
 
-        // /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
-        // public bool IsEntityNonsolid(string entityClassname) {
-        //     var search = entityClassname;
-        //     for(int i=0; i<nonsolidEntities.Count; i++) {
-        //         if ( search.Contains(nonsolidEntities[i]) ) {
-        //             return true;
-        //         }
-        //     }
-        //     return false;
-        // }
-
-        // /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
-        // public bool IsEntityTrigger(string entityClassname) {
-        //     var search = entityClassname;
-        //     for(int i=0; i<triggerEntities.Count; i++) {
-        //         if ( search.Contains(triggerEntities[i]) ) {
-        //             return true;
-        //         }
-        //     }
-        //     return false;
-        // }
-
-        // /// <summary> note: textureName must already be ToLowerInvariant() </summary>
-        // public Material GetMaterialOverrideFor(string textureName) {
-        //     if ( materialOverrides == null || materialOverrides.Length == 0) {
-        //         return null;
-        //     }
-
-        //     var search = materialOverrides.Where( ov => textureName.Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
-        //     return search.material;
-        // }
-
-        // /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
-        // public GameObject GetEntityPrefabFor(string entityClassname) {
-        //     if ( entityOverrides == null || entityOverrides.Length == 0) {
-        //         return entityPrefab;
-        //     }
-
-        //     var search = entityOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
-        //     if ( search != null && search.entityPrefab != null) {
-        //         return search.entityPrefab;
-        //     }
-        //     return entityPrefab;
-        // }
-
-        // /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
-        // public GameObject GetMeshPrefabFor(string entityClassname) {
-        //     if ( entityOverrides == null || entityOverrides.Length == 0) {
-        //         return meshPrefab;
-        //     }
-
-        //     var search = entityOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
-        //     if ( search != null && search.meshPrefab != null) {
-        //         return search.meshPrefab;
-        //     }
-        //     return meshPrefab;
-        // }
+        /// <summary> returns null if no meshPrefab found; note: entityClassname must already be ToLowerInvariant() and match exactly </summary>
+        public GameObject GetMeshPrefabFor(string entityClassname) {
+            var search = GetAllEntityTypesWithIncludes().Where( cfg => entityClassname == cfg.className.ToLowerInvariant() ).FirstOrDefault();
+            if ( search != null && search.meshPrefab != null) {
+                return search.meshPrefab;
+            }
+            return null;
+        }
 
         [System.Serializable]
         public class FgdClassBase {
@@ -196,7 +151,7 @@ namespace Scopa {
                     text += $"color({editorColor.r} {editorColor.g} {editorColor.b}) ";
                 }
 
-                text += $"= {className} : \"{editorHelp}\"\n[\n {string.Join("\n", properties.Select( prop => prop.ToString() ))}\n]";
+                text += $"= {className} : \"{editorHelp}\"\n[\n{string.Join("\n", properties.Select( prop => prop.ToString() ))}\n]";
 
                 return text;
             }
@@ -231,16 +186,16 @@ namespace Scopa {
             public FgdFlag[] flags;
 
             public override string ToString() {
-                var text = $"{key}({type.ToString().ToLowerInvariant()})";
+                var text = $"    {key}({type.ToString().ToLowerInvariant()})";
 
                 if ( type != FgdPropertyType.Flags ) {
                     text += $": \"{editorLabel}\" : {defaultValue} : \"{editorHelp}\"";
                 }
 
                 if ( type == FgdPropertyType.Choices ) {
-                    text += $" =\n[\n{ string.Join("\n", choices.Select( (choice, index) => choice.ToString(index)) ) } \n]";
+                    text += $" =\n    [\n        { string.Join("\n        ", choices.Select( (choice, index) => choice.ToString(index)) ) } \n    ]";
                 } else if ( type == FgdPropertyType.Flags ) {
-                    text += $" =\n[\n{ string.Join("\n", flags.Select( (flag, index) => flag.ToString(index)) ) } \n]";
+                    text += $" =\n    [\n        { string.Join("\n        ", flags.Select( (flag, index) => flag.ToString(index)) ) } \n    ]";
                 }
 
                 return text;
@@ -259,42 +214,38 @@ namespace Scopa {
             [Tooltip("the 'nice name' displayed only in the level editor")]
             public string label = "New Choice";
 
-            [Tooltip("-1 means 'use order in list'... otherwise, manually define the actual number index corresponding for each choice... e.g. 0, or 1, or 2, etc.")]
-            public int value = -1;
+            [Tooltip("actual number index corresponding for each choice... e.g. 0, or 1, or 2, etc.")]
+            public int value = 0;
 
             public string ToString(int index) {
-                if (value >= 0) {
-                    index = value;
-                }
-
-                return $"{index} : {label}";
+                return $"{index} : \"{label}\"";
             }
         }
 
         [System.Serializable]
         public class FgdFlag {
-            [Tooltip("the 'nice name' displayed only in the level editor")]
-            public string label = "New Choice";
-
             [Tooltip("default value for this flag")]
             public bool defaultValue = false;
 
-            [Tooltip("if left as auto, then the order in the list will be the bit; e.g. flag #1 will be 1, flag #2 will be 2, etc. ... or you can manually override the flag used")]
-            public FgdFlagBit bitValue = FgdFlagBit.Auto_UseOrderInList;
+            [Tooltip("the 'nice name' displayed only in the level editor")]
+            public string label = "New Flag";
+
+            [Tooltip("if Use Order In List, flag #1 will be 1, flag #2 will be 2, etc ... or you can manually override the bit value")]
+            public FgdFlagBit bitValue = FgdFlagBit.UseOrderInList;
 
             public string ToString(int index) {
-                if (bitValue != FgdFlagBit.Auto_UseOrderInList) {
+                if (bitValue != FgdFlagBit.UseOrderInList) {
                     index = int.Parse( bitValue.ToString().Substring(1) );
                 } else {
                     index = Mathf.ClosestPowerOfTwo( Mathf.RoundToInt(Mathf.Pow(2, index)) );
                 }
 
-                return $"{index} : {label} : { (defaultValue ? "1" : "0") }";
+                return $"{index} : \"{label}\" : { (defaultValue ? "1" : "0") }";
             }
         }
 
         public enum FgdFlagBit {
-            Auto_UseOrderInList, 
+            UseOrderInList, 
             _1, _2, _4, _8, _16, _32, _64, _128,
             _256, _512, _1024, _2048, _8192, _16384, _32768,
             _65536, _131072, _262144, _524288, _1048576, _2097152, _4194304, _8388608
