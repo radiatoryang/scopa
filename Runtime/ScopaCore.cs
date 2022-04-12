@@ -69,11 +69,15 @@ namespace Scopa {
                 // if there's multiple Materials attached to one Asset, we have to do additional filtering
                 var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
                 foreach ( var asset in allAssets ) {
-                    if ( !materials.ContainsKey(asset.name) && asset is Material ) {
+                    if ( asset != null && !materials.ContainsKey(asset.name) && asset is Material ) {
+                        Debug.Log("loaded " + asset.name);
                         materials.Add(asset.name, asset as Material);
                     }
                 }
+
             }
+            #else
+            Debug.Log("CacheMaterialSearch() is not available at runtime.");
             #endif
         }
 
@@ -123,7 +127,7 @@ namespace Scopa {
             var isTrigger = config.IsEntityTrigger(entData.ClassName);
 
             // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
-            var textureLookup = new Dictionary<string, Material>();
+            var materialLookup = new Dictionary<string, ScopaMapConfig.MaterialOverride>();
             foreach (var solid in solids) {
                 lastSolidID = solid.id;
                 foreach (var face in solid.Faces) {
@@ -148,24 +152,32 @@ namespace Scopa {
                     }
 
                     // match this face's texture name to a material
-                    if ( !textureLookup.ContainsKey(face.TextureName) ) {
+                    if ( !materialLookup.ContainsKey(face.TextureName) ) {
                         var newMaterial = defaultMaterial;
 
                         var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
-                        if ( materialOverride != null) {
-                            newMaterial = materialOverride;
-                        }
+                        // if ( materialOverride != null) {
+                        //     newMaterial = materialOverride;
+                        // }
                         
                         // if still no better material found, then search the AssetDatabase for a matching texture name
                         if ( config.findMaterials && materialOverride == null && materials.Count > 0 && materials.ContainsKey(face.TextureName) ) {
                             newMaterial = materials[face.TextureName];
                         }
 
+                        // if a material override wasn't found, generate one
+                        if ( materialOverride == null ) {
+                            if ( newMaterial == null)
+                                Debug.Log(face.TextureName + " This shouldn't be null!");
+                            materialOverride = new ScopaMapConfig.MaterialOverride(face.TextureName, newMaterial);
+                        }
+
                         // temporarily merge entries with the same Material by renaming the face's texture name
-                        if (textureLookup.ContainsValue(newMaterial)) {
-                            face.TextureName = textureLookup.Where( kvp => kvp.Value == newMaterial).FirstOrDefault().Key;
+                        var matchingKey = materialLookup.Where( kvp => kvp.Value.material == materialOverride.material && kvp.Value.hotspotAtlas == materialOverride.hotspotAtlas).FirstOrDefault().Key;
+                        if ( !string.IsNullOrEmpty(matchingKey) ) {
+                            face.TextureName = matchingKey;
                         } else { // otherwise add to lookup
-                            textureLookup.Add( face.TextureName, newMaterial );
+                            materialLookup.Add( face.TextureName, materialOverride );
                         }
                     }
                 }
@@ -187,7 +199,7 @@ namespace Scopa {
             entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
             entityObject.transform.position = entityOrigin;
             // for point entities, import the "angle" property
-            entityObject.transform.localRotation = textureLookup.Count == 0 && entData.TryGetAngleSingle("angle", out var angle) ? angle : Quaternion.identity;
+            entityObject.transform.localRotation = materialLookup.Count == 0 && entData.TryGetAngleSingle("angle", out var angle) ? angle : Quaternion.identity;
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
 
@@ -203,16 +215,16 @@ namespace Scopa {
             }
 
             // main loop: for each material, build a mesh and add a game object with mesh components
-            foreach ( var textureKVP in textureLookup ) {
+            foreach ( var textureKVP in materialLookup ) {
                 ClearMeshBuffers();
                 
                 foreach ( var solid in solids) {
-                    var matName = textureKVP.Value.name;
-                    if ( textureKVP.Value == defaultMaterial ) {
-                        textureKVP.Value.name = textureKVP.Key;
-                    }
+                    // var matName = textureKVP.Value.textureName;
+                    // if ( textureKVP.Value.material == defaultMaterial ) {
+                    //     textureKVP.Value.textureName = textureKVP.Key;
+                    // }
                     BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
-                    textureKVP.Value.name = matName;
+                    // textureKVP.Value.name = matName;
                 }
 
                 if ( verts.Count == 0 || tris.Count == 0) 
@@ -243,7 +255,7 @@ namespace Scopa {
                 var meshFilter = newMeshObj.GetComponent<MeshFilter>() ? newMeshObj.GetComponent<MeshFilter>() : newMeshObj.AddComponent<MeshFilter>();
                 meshFilter.sharedMesh = newMesh;
                 var meshRenderer = newMeshObj.GetComponent<MeshRenderer>() ? newMeshObj.GetComponent<MeshRenderer>() : newMeshObj.AddComponent<MeshRenderer>();
-                meshRenderer.sharedMaterial = textureKVP.Value;
+                meshRenderer.sharedMaterial = textureKVP.Value.material;
             }
 
             // collision pass, now treat it all as one object and ignore texture names
@@ -278,7 +290,7 @@ namespace Scopa {
 
         /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers
         ///  but if returnMesh is true, then it will also CLEAR THOSE BUFFERS and GENERATE A MESH </summary>
-        public static void BufferMeshDataFromSolid(Solid solid, ScopaMapConfig config, Material textureFilter = null, bool includeDiscardedFaces = false) {
+        public static void BufferMeshDataFromSolid(Solid solid, ScopaMapConfig config, ScopaMapConfig.MaterialOverride textureFilter = null, bool includeDiscardedFaces = false) {
            
             foreach (var face in solid.Faces) {
                 if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
@@ -287,7 +299,7 @@ namespace Scopa {
                 if ( face.discardWhenBuildingMesh )
                     continue;
 
-                if ( textureFilter != null && textureFilter.name.GetHashCode() != face.TextureName.GetHashCode() )
+                if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
                     continue;
 
                 // test for unseen / hidden faces, and discard
@@ -302,7 +314,16 @@ namespace Scopa {
                 if ( face.discardWhenBuildingMesh )
                     continue;
 
-                BufferScaledMeshDataForFace(face, config.scalingFactor, verts, tris, uvs, textureFilter != null ? textureFilter.mainTexture.width : config.defaultTexSize, textureFilter != null ? textureFilter.mainTexture.height : config.defaultTexSize);
+                BufferScaledMeshDataForFace(
+                    face, 
+                    config.scalingFactor, 
+                    verts, 
+                    tris, 
+                    uvs, 
+                    textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize, 
+                    textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize,
+                    textureFilter != null ? textureFilter.hotspotAtlas : null
+                );
             }
         }
 
@@ -344,17 +365,24 @@ namespace Scopa {
         }
 
         /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 128, int textureHeight = 128) {
+        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 128, int textureHeight = 128, HotspotTexture hotspotAtlas = null) {
             var lastVertIndexOfList = verts.Count;
 
             // add all verts and UVs
             for( int v=0; v<face.Vertices.Count; v++) {
                 verts.Add(face.Vertices[v] * scalingFactor);
 
-                uvs.Add(new Vector2(
-                    (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
-                    (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
-                ));
+                if ( hotspotAtlas == null) {
+                    uvs.Add(new Vector2(
+                        (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
+                        (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
+                    ));
+                }
+            }
+
+            if ( hotspotAtlas != null ) {
+                // uvs.AddRange( ScopaHotspot.GetHotspotUVs( verts.GetRange(lastVertIndexOfList, face.Vertices.Count), hotspotAtlas ) );
+                uvs.AddRange( ScopaHotspot.GetHotspotUVs( face.Vertices, hotspotAtlas ) );
             }
 
             // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)

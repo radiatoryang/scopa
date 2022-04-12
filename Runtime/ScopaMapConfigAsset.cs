@@ -117,13 +117,13 @@ namespace Scopa {
         }
 
         /// <summary> note: textureName must already be ToLowerInvariant() </summary>
-        public Material GetMaterialOverrideFor(string textureName) {
+        public MaterialOverride GetMaterialOverrideFor(string textureName) {
             if ( materialOverrides == null || materialOverrides.Length == 0) {
                 return null;
             }
 
             var search = materialOverrides.Where( ov => textureName.Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
-            return search.material;
+            return search;
         }
 
         /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
@@ -167,6 +167,14 @@ namespace Scopa {
             [Tooltip("If a face has a texture name that matches this override, then use this Material no matter what. Partial matches count, e.g. an override for 'stone' will match all faces with texture names that contain the word 'stone'")]
             public string textureName;
             public Material material;
+
+            [Tooltip("(optional) if defined, all faces textured with this override will be hotspot UV'd -- unwrapped to fit the nearest rectangle area ('hotspot')")]
+            public HotspotTexture hotspotAtlas;
+
+            public MaterialOverride(string texName, Material mat) {
+                this.textureName = texName;
+                this.material = mat;
+            }
         }
 
         public enum ColliderImportMode {
