@@ -48,7 +48,7 @@ namespace Scopa {
         /// <summary> parses property as an RGBA Color (and try to detect if it's 0.0-1.0 or 0-255); empty or whitespace will return false and Color.black</summary>
         public bool TryGetColorRGBA(string propertyKey, out Color color) => entityData.TryGetColorRGBA(propertyKey, out color);
 
-        /// <summary> parses property as an RGB Color (0-255) with a fourth number as light intensity scalar, common as the Half-Life 1 GoldSrc / Half-Life 2 Source light color format (e.g. "255 255 255 200"); empty or whitespace will return false and Color.black and intensity 0.0</summary>
+        /// <summary> parses property as an RGB Color (0-255) with a fourth number as light intensity scalar (255 = 1.0f), common as the Half-Life 1 GoldSrc / Half-Life 2 Source light color format (e.g. "255 255 255 200"); empty or whitespace will return false and Color.black and intensity 0.0</summary>
         public bool TryGetColorLight(string propertyKey, out Color color, out float intensity) => entityData.TryGetColorLight(propertyKey, out color, out intensity);
         
         /// <summary> returns a string of all entity data, including all properties and keyvalue pairs</summary>

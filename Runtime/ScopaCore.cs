@@ -209,8 +209,11 @@ namespace Scopa {
                 entityComponent = entityObject.AddComponent<ScopaEntity>();
             entityComponent.entityData = entData;
 
-            // only set Layer if it's a generic game object
-            if ( entityPrefab == null) { 
+            // only set Layer if it's a generic game object OR if there's a layer override
+            if ( entData.TryGetString("_layer", out var layerName) ) {
+                entityObject.layer = LayerMask.NameToLayer(layerName);
+            }
+            else if ( entityPrefab == null) { 
                 entityObject.layer = config.layer;
             }
 
@@ -244,11 +247,14 @@ namespace Scopa {
 
                 // if user set a specific prefab, it probably has its own static flags and layer
                 // ... but if it's a generic game object we made, then we set it ourselves
-                if ( meshPrefab == null ) { 
+                if ( !string.IsNullOrEmpty(layerName) ) { // or did they set a specifc override on this entity?
+                    entityObject.layer = LayerMask.NameToLayer(layerName);
+                } else if ( meshPrefab == null ) { 
                     newMeshObj.layer = config.layer;
-                    if (config.isStatic) {
-                        SetGameObjectStatic(newMeshObj, needsCollider && !isTrigger);
-                    }
+                }
+
+                if ( meshPrefab == null && config.isStatic) {
+                    SetGameObjectStatic(newMeshObj, needsCollider && !isTrigger);
                 }
 
                 // populate components... if the mesh components aren't there, then add them

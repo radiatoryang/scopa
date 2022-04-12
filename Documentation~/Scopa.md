@@ -4,6 +4,8 @@ This plugin and documentation assumes familiarity with Quake-style .MAP files an
 
 If you're never made a Quake / Half-Life / Source engine level before, then this tool will be less useful to you AND these docs will be hard to follow.
 
+# WARNING: much of this document isn't implemented / is broken / is subject to change. THIS TOOL IS NOT READY FOR PUBLIC USE.
+
 ## Installation
 
 This is a custom [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) that can be automatically installed / updated in Unity 2019.3 or later.
@@ -110,26 +112,105 @@ If "Find Materials" is enabled on the .MAP, we try to match each face's texture 
 You can also manually set a specific Material for each texture name.
 
 
-### Entity data / game logic
-
-To let people define game objects and add behaviours in the .MAP, you should write a custom .FGD file to load into the level editor.
-
-- (TODO) Basic .FGD example and template
-- (TODO) FGD generator?
-- (TODO) Tutorial: How to write a .FGD
+### Entities
 
 Each entity has a classname, and based on that classname we can swap in a prefab template. For example, for every entity type "light_wall_torch_small", we can replace it with a "Light - Torch" prefab. 
 
-This gives you strong control over every entity. You can configure tags, layers, static flags, renderer settings, add extra colliders... or to read entity information, add a Scopa Entity component, and then have your components poll it for data.
+This gives you strong control over every entity. You can configure tags, layers, static flags, renderer settings, add extra colliders... or to read entity information, add a `Scopa Entity` component, and then have your components poll it for data.
+
+### FGD generation
+
+To place items, NPCs, etc. in a level editor, you need to load a .FGD entity definition file into the tool.
+
+Quake modders still write their FGDs by hand, which is sad, so instead we provide a built-in FGD generator. The workflow looks like this:
+
+1. in Unity, go to the Project tab and select `Create > Scopa > FGD Config Asset`.
+2. select the new FGD Config Asset file and edit it in the Inspector tab: create new entity types, add properties, etc.
+3. when you're ready, click the `Export FGD...` button at the top of the Inspector, and save your new .FGD file
+
+(PLANNED) Additionally, it can also generate API docs as .MD or .HTML, to serve as documentation for level designers.
+
+We recommend saving the .FGD file **outside of the /Assets/ folder**, because you should not set your level editor to load your entire Unity project.
+
+### Built-in default entities
+
+We provide a basic `ScopaBuiltinFGD` that defines some basic useful entity types and demonstrates how to setup FGD bindings.
+
+TODO: move this documentation to generated API docs
+
+#### 1. (planned) Mesh groups
+
+**Scopa has no map compiling nor VIS process. The difference between world brushes vs. brush entities doesn't matter.** Instead, brush entities are useful because each entity creates another game object / mesh group. This gives you control over how your level geometry gets imported and chunked:
+
+- `func_detail`: static mesh with colliders
+- `func_detail_illusionary`: static mesh with NO colliders (also NOT Navigation Static)
+- `func_wall`: non-static mesh with colliders (can be moved, rotated, or resized during the game)
+- `func_illusionary`: non-static mesh with NO colliders (can be moved, rotated, or resized during the game)
+- `func_physbox`: non-static mesh with colliders AND a rigidbody with physics simulation
+
+World brushes are treated like func_detail, except they're bound to the worldspawn entity.
+
+Each entity brush also uses a `ScopaBuiltinBrush` entity base, which adds the following properties:
+
+- `_convex`: if enabled, merges all colliders into one convex mesh collider, useful for turning a func_detail staircase into a ramp... this obviously does nothing for illusionary entities, which have no colliders
+- `_shadow`: lets you control the Cast Shadows setting on the mesh renderers, can be set to Off, On, Both Sides, and Shadows Only.
+- `_phong`: smooth face normals for entire mesh to avoid hard seams
+- `_layer`: override the Unity layer for this entity; the name must match the layer name exactly!
+- `_tag`: set a Unity tag for this entity; the tag name must match an existing defined tag name exactly!
+
+Theoretically, the most optimized approach is to make your entire map one giant func_detail_illusionary. This would combine all brushes into the fewest meshes possible, mark it for static batching, and omit colliders.
+
+#### 2. (planned) Triggers, logic, buttons and doors
+
+We implement a basic trigger / scripting system. In Quake / Half-Life, it's up to the entity to decide what happens when it is activated
+
+- `trigger_once`: when a collider enters this brush group, it activates its `target`, and then never again
+- `trigger_multiple`: same as above, except it can reset itself and be triggered again
+
+- `logic_relay`: point entity, triggers something else when triggered
+- `logic_counter`: point entity, counts how many times it gets triggered, and then fires once it reaches a threshold
+- `logic_timer`: point entity, triggers repeatedly after a certain amount of seconds
+- `logic_lock`: point entity, can lock or unlock an entity; locked entities cannot activate at all
+
+- `func_button`: activated when a moving object touches it
+- `func_door`: if named, it slides open when triggered; otherwise, automatically opens when something enters its trigger; unless locked
+- `func_door_rotating`: same as above, except rotates around a user-defined local axis
+- `func_rotate`: spins around, like a fan
+
+These entities all use a `ScopaTriggerable` entity base, which adds the following properties:
+
+- `targetname`: the name of this object, only for trigger / logic purposes... it does not affect the Unity game object name at all
+- `delay`: time in seconds to wait before activating
+- `target`: the targetname of the thing to trigger... **if multiple entities share the same targetname, they will all be triggered**
+- `killtarget`: the targetname of the thing to `Destroy()`, or delete from the game state
+- `trigger_tag`: if set, only objects with this tag can physically trigger the object
+- `trigger_layer`: if set, only objects on this layer can physically trigger the object
+- `locked`: default state if the object starts locked
+
+There are no plans for a Half-Life 2 / Source Engine-like entity I/O system, since it is not implemented in TrenchBroom.
+
+#### 3. (planned) Lights
+
+We follow the Half-Life pattern here and provide three different light entities corresponding to basic light types in Unity:
+
+- `light`: Point light, local
+- `light_spot`: Spotlight, local
+- `light_environment`: Directional light, global
+
+We also borrow some inspiration from Half-Life 2 / Source Engine:
+
+- `env_cubemap`: Reflection probe
+    - overrides `OnScopaLateImport()` to fire raycasts in all directions and configure its own box bounds
+
+Unity does not have fully runtime lightmapping or GI baking. If you support modding for your game, then user-generated maps can only use realtime lights. 
+
+We purposely don't support ambient lighting, since overriding the Light Settings asset is a bit messy and complicated.
+
+#### 4. (planned) Audio
+
+- `ambient_generic`: All purpose audio source, can be looped with adjustable attenuation
 
 
+## Legal / Acknowledgments / Credits
 
-
-## Limitations
-
-- **This package doesn't have game code or entity logic.** It imports MAP files as 3D models, sets up colliders, and provides hooks for importing entity data. That's it.
-
-## Acknowledgments / Credits
-
-- based on [Sledge Formats](https://github.com/LogicAndTrick/sledge-formats)
-- looking for a BSP plugin? try [Unity3D BSP Importer](https://github.com/wfowler1/Unity3D-BSP-Importer)
+See the README.
