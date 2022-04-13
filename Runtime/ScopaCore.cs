@@ -388,7 +388,11 @@ namespace Scopa {
 
             if ( hotspotAtlas != null ) {
                 // uvs.AddRange( ScopaHotspot.GetHotspotUVs( verts.GetRange(lastVertIndexOfList, face.Vertices.Count), hotspotAtlas ) );
-                uvs.AddRange( ScopaHotspot.GetHotspotUVs( face.Vertices, hotspotAtlas ) );
+                if ( !ScopaHotspot.TryGetHotspotUVs( face.Vertices, hotspotAtlas, out var hotspotUVs, scalingFactor )) {
+                    // TODO: wow uhh I really fucked up with this design... no easy way to suddenly put this in a different material
+                    // ... it will need a pre-pass
+                }
+                uvs.AddRange( hotspotUVs );
             }
 
             // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)

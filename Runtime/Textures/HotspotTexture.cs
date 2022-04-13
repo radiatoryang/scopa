@@ -8,10 +8,34 @@ using UnityEngine;
 
 namespace Scopa
 {
+    public enum HotspotRotateMode {
+        Disabled,
+        Random,
+        RotateHorizontalToVertical,
+        RotateVerticalToHorizontal
+    }
+
     [CreateAssetMenu(fileName = "New Hotspot Texture", menuName = "Scopa/Hotspot Texture", order = 300)]
     public class HotspotTexture : ScriptableObject
     {
         public Texture target;
+
+        [Tooltip("(default: 0.05) increase to make higher resolution hotspots more likely")]
+        public float hotspotScalar = 0.05f;
+
+        [Tooltip("(default: 0.5) when trying to decide the best hotspot for a face, how much to prioritize aspect ratio / proportions vs. resolution?")]
+        [Range(0f, 1f)]
+        public float resolutionBias = 0.5f;
+
+        [Tooltip("(default: Random) rotate shapes for more variation, or in case the hotspot atlas doesn't have certain horizontal or vertical elements")]
+        public HotspotRotateMode hotspotRotate = HotspotRotateMode.Random;
+
+        [Tooltip("(optional) if a face is __ times bigger than the largest hotspot, use the fallback material instead")]
+        public float fallbackThreshold = 1.5f;
+
+        [Tooltip("(optional) if a face is bigger than the largest hotspot (e.g. a floor or ceiling) then instead fallback to this other material, preferably a tiling material")]
+        public Material fallbackMaterial;
+
         public List<Rect> rects = new List<Rect>();
 
         public Rect GetRandomRect()
@@ -24,7 +48,7 @@ namespace Scopa
             // smaller sorting score = better match
             return rects.OrderBy( rect => 
                 (Mathf.Abs(rect.width - pixelWidth) + Mathf.Abs(rect.height - pixelHeight))    
-                * (0.69f + 0.69f * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight))) // weight toward the closest aspect ratio
+                * (resolutionBias + (1f - resolutionBias) * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight))) // weight toward the closest aspect ratio
             ).FirstOrDefault();
         }
 
@@ -57,7 +81,7 @@ namespace Scopa
 
         public Vector2[] GetBestUVFromUVs(float uvWidth, float uvHeight)
         {
-            return RectToUV( GetBestRect(uvWidth * target.width * 2, uvHeight * target.height * 2));
+            return RectToUV( GetBestRect(uvWidth * target.width, uvHeight * target.height));
         }
     }
 

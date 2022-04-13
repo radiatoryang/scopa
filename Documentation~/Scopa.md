@@ -109,7 +109,8 @@ We import WADs as a bundle of Texture2Ds, and we can also generate basic opaque 
 
 If "Find Materials" is enabled on the .MAP, we try to match each face's texture name with a similarly named Material anywhere in the project. You don't have to use WADs; this auto-detect function will work with all materials. (Note: Find Materials only works at editor-time, not runtime.)
 
-You can also manually set a specific Material for each texture name.
+You can also manually set a specific `MaterialOverride` for each texture name. This also lets you bind additional properties to the material:
+- **`**Hotspot UVs**`**: automatically unwraps face to match a rectangle defined in a Hotspot Texture Atlas (`Project > Create > Scopa > Hotspot Texture`). The UVs can be randomly rotated and flipped for additional variation.
 
 
 ### Entities
