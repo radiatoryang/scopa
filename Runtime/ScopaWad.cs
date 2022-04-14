@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.IO;
 using System.Collections.Generic;
 using Scopa.Formats.Texture.Wad;
 using Scopa.Formats.Texture.Wad.Lumps;
@@ -13,9 +14,14 @@ using UnityEditor;
 namespace Scopa {
     /// <summary> main class for WAD import and export </summary>
     public static class ScopaWad {
+
+        // static buffers for all reading and writing operations, to try to reduce GC
         static Color32[] palette = new Color32[256];
-        static List<ColorBucket> buckets = new List<ColorBucket>(256*256);
-        static List<ColorBucket> newBuckets = new List<ColorBucket>(256*256);
+        static List<ColorBucket> buckets = new List<ColorBucket>(128*128);
+        static List<ColorBucket> newBuckets = new List<ColorBucket>(256);
+        static Texture2D resizedTexture;
+
+        #region WAD Reading
 
         public static WadFile ParseWad(string fileName)
         {
@@ -120,19 +126,32 @@ namespace Scopa {
             return material;
         }
 
-        public static WadFile GenerateWad3Data(string wadName, Material[] mats ) {
+        #endregion
+        #region WAD Writing
+
+        public static void SaveWad3File(string filepath, Material[] mats) {
+            var wadData = GenerateWad3Data( Path.GetFileNameWithoutExtension(filepath), mats);
+            using (var fStream = System.IO.File.OpenWrite(filepath))
+            {
+                wadData.Write(fStream);
+            }
+            Debug.Log("saved WAD3 file to " + filepath);
+        }
+
+        static WadFile GenerateWad3Data(string wadName, Material[] mats, int resizeFactor = 4) {
             var newWad = new WadFile(Formats.Texture.Wad.Version.Wad3);
+            newWad.Name = wadName;
             foreach ( var mat in mats ) {
                 var texName = mat.name.ToLowerInvariant();
                 texName = texName.Substring(0, Mathf.Min(texName.Length, 16) ); // texture names are limited to 16 characters
 
-                var mipTex = new MipTexture();
+                var mipTex = new MipTextureLump();
                 mipTex.Name = texName;
-                mipTex.Width = System.Convert.ToUInt32(mat.mainTexture.width);
-                mipTex.Height = System.Convert.ToUInt32(mat.mainTexture.height);
+                mipTex.Width = System.Convert.ToUInt32(mat.mainTexture.width / resizeFactor);
+                mipTex.Height = System.Convert.ToUInt32(mat.mainTexture.height / resizeFactor);
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
 
-                mipTex.MipData = QuantizeToMipmap( (Texture2D)mat.mainTexture, out var palette );
+                mipTex.MipData = QuantizeToMipmap( (Texture2D)mat.mainTexture, resizeFactor, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {
@@ -141,7 +160,7 @@ namespace Scopa {
                     mipTex.Palette[i*3+2] = palette[i].b;
                 }
 
-                
+                newWad.AddLump( texName, mipTex );
             }
             return newWad;
         }
@@ -150,12 +169,14 @@ namespace Scopa {
         // adapted from https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/MedianCut.cs
         // used under Unlicense License
         /// <summary> actual palette color count will be -=1, to insert blue 255 at the end for transparency </summary>
-        public static byte[][] QuantizeToMipmap(Texture2D texture, out Color32[] fixedPalette, int paletteColorCount = 256)
+        public static byte[][] QuantizeToMipmap(Texture2D original, int resizeFactor, out Color32[] fixedPalette, int paletteColorCount = 256)
         {
             // var colours = Enumerable.Range(0, bitmap.height)
             //     .SelectMany(y => Enumerable.Range(0, bitmap.width)
             //         .Select(x => bitmap.GetPixel(x, y)));
-            var colors = texture.GetPixels32();
+            ResizeCopyToBuffer(original, original.width / resizeFactor, original.height / resizeFactor); 
+            // we use Color32 because it's faster + avoids floating point comparison issues with HasColor() + we need to write out bytes anyway
+            var colors = resizedTexture.GetPixels32();
             buckets.Clear();
             paletteColorCount -= 1; // reserve space for blue 255
 
@@ -182,8 +203,8 @@ namespace Scopa {
             fixedPalette = buckets.Select( bucket => bucket.Color ).Append(new Color32(0x00, 0x00, 0xff, 0xff)).ToArray();
             
             // use bucket lookup to convert colors to palette indices
-            var width = texture.width;
-            var height = texture.height;
+            var width = resizedTexture.width;
+            var height = resizedTexture.height;
             var mipmap = new byte[4][];
             for( int mip=0; mip<4; mip++) {
                 int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
@@ -199,6 +220,38 @@ namespace Scopa {
                 }
             }
             return mipmap;
+        }
+
+        // code from https://github.com/ababilinski/unity-gpu-texture-resize
+        // very fast in most cases?
+        public static void ResizeCopyToBuffer(Texture2D source, int targetX, int targetY, bool mipmap = false, FilterMode filter = FilterMode.Bilinear) {
+            //create a temporary RenderTexture with the target size
+            var rt = RenderTexture.GetTemporary(targetX, targetY, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+
+            //set the active RenderTexture to the temporary texture so we can read from it
+            RenderTexture.active = rt;
+            
+            //Copy the texture data on the GPU - this is where the magic happens [(;]
+            Graphics.Blit(source, rt);
+
+            // initialize the texture obj to the target values (this sets the pixel data as undefined)
+            if ( resizedTexture == null) {
+                resizedTexture = new Texture2D(targetX, targetY, source.format, mipmap);
+            } else {
+                resizedTexture.Reinitialize(targetX, targetY, source.format, mipmap);
+            }
+            resizedTexture.filterMode = filter;
+
+            try {
+                // reads the pixel values from the temporary RenderTexture onto the resized texture
+                resizedTexture.ReadPixels(new Rect(0, 0, targetX, targetY), 0, 0);
+                // actually upload the changed pixels to the graphics card
+                resizedTexture.Apply();
+            } catch {
+                Debug.LogError("Read/Write is not enabled on texture "+ source.name);
+            }
+
+            RenderTexture.ReleaseTemporary(rt);
         }
 
         public class ColorBucket
@@ -276,5 +329,6 @@ namespace Scopa {
             }
         }
 
+        #endregion
     }
 }

@@ -13,6 +13,8 @@ namespace Scopa.Formats.Texture.Wad.Lumps
             // texture = Read(br, false);
         }
 
+        public MipTextureLump() { }
+
         public override int Write(BinaryWriter bw)
         {
             var pos = bw.BaseStream.Position;

@@ -7,6 +7,8 @@ namespace Scopa.Formats.Texture.Wad.Lumps
     {
         public virtual LumpType Type => LumpType.RawTexture;
 
+        public RawTextureLump() {}
+
         public RawTextureLump(BinaryReader br) : this(br, false)
         {
             //
