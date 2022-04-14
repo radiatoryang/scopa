@@ -29,14 +29,14 @@ namespace Scopa.Editor {
                 config = new ScopaWadConfig();
             }
 
-            var wad = ScopaCore.ParseWad(filepath);
-            var textures = ScopaCore.BuildWadTextures(wad, config);
+            var wad = ScopaWad.ParseWad(filepath);
+            var textures = ScopaWad.BuildWadTextures(wad, config);
 
             foreach (var tex in textures) {
                 ctx.AddObjectToAsset(tex.name, tex);
 
                 if (config.generateMaterials) {
-                    var newMaterial = ScopaCore.BuildMaterialForTexture(tex, config);
+                    var newMaterial = ScopaWad.BuildMaterialForTexture(tex, config);
                     ctx.AddObjectToAsset(tex.name, newMaterial);
                 }
             }
