@@ -99,6 +99,10 @@ namespace Scopa.Formats.Id
                 bw.Write((ushort) (texture.Palette.Length / 3));
                 bw.Write((byte[]) texture.Palette);
             }
+
+            // need 2 bytes to pad at the end, or else TrenchBroom doesn't like it
+            bw.Write(false);
+            bw.Write(false);
         }
     }
 }

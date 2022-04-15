@@ -34,10 +34,12 @@ namespace Scopa.Editor {
 
             foreach (var tex in textures) {
                 ctx.AddObjectToAsset(tex.name, tex);
+                EditorUtility.SetDirty(tex);
 
                 if (config.generateMaterials) {
                     var newMaterial = ScopaWad.BuildMaterialForTexture(tex, config);
                     ctx.AddObjectToAsset(tex.name, newMaterial);
+                    EditorUtility.SetDirty(newMaterial);
                 }
             }
             
@@ -49,7 +51,7 @@ namespace Scopa.Editor {
             atlas.Compress(config.compressTextures);
             ctx.AddObjectToAsset(atlas.name, atlas);
             ctx.SetMainObject(atlas);
-
+            EditorUtility.SetDirty(atlas);
         }
 
  

@@ -129,8 +129,8 @@ namespace Scopa {
         #endregion
         #region WAD Writing
 
-        public static void SaveWad3File(string filepath, Material[] mats) {
-            var wadData = GenerateWad3Data( Path.GetFileNameWithoutExtension(filepath), mats);
+        public static void SaveWad3File(string filepath, ScopaWadCreator wadConfig) {
+            var wadData = GenerateWad3Data( Path.GetFileNameWithoutExtension(filepath), wadConfig);
             using (var fStream = System.IO.File.OpenWrite(filepath))
             {
                 wadData.Write(fStream);
@@ -138,20 +138,23 @@ namespace Scopa {
             Debug.Log("saved WAD3 file to " + filepath);
         }
 
-        static WadFile GenerateWad3Data(string wadName, Material[] mats, int resizeFactor = 4) {
+        static WadFile GenerateWad3Data(string wadName, ScopaWadCreator wadConfig) {
+            Debug.Log("started generating wad data for " + wadName);
             var newWad = new WadFile(Formats.Texture.Wad.Version.Wad3);
             newWad.Name = wadName;
-            foreach ( var mat in mats ) {
+            foreach ( var mat in wadConfig.materials ) {
                 var texName = mat.name.ToLowerInvariant();
                 texName = texName.Substring(0, Mathf.Min(texName.Length, 16) ); // texture names are limited to 16 characters
+                Debug.Log("started working on " + texName);
 
                 var mipTex = new MipTextureLump();
                 mipTex.Name = texName;
-                mipTex.Width = System.Convert.ToUInt32(mat.mainTexture.width / resizeFactor);
-                mipTex.Height = System.Convert.ToUInt32(mat.mainTexture.height / resizeFactor);
+                mipTex.Width = System.Convert.ToUInt32(mat.mainTexture.width / (int)wadConfig.resolution);
+                mipTex.Height = System.Convert.ToUInt32(mat.mainTexture.height / (int)wadConfig.resolution);
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
+                Debug.Log($"{mipTex.Name} is {mipTex.Width} x {mipTex.Height}");
 
-                mipTex.MipData = QuantizeToMipmap( (Texture2D)mat.mainTexture, resizeFactor, out var palette );
+                mipTex.MipData = QuantizeToMipmap( (Texture2D)mat.mainTexture, mat.color, (int)wadConfig.resolution, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {
@@ -162,6 +165,7 @@ namespace Scopa {
 
                 newWad.AddLump( texName, mipTex );
             }
+            Debug.Log("finished generating wad data");
             return newWad;
         }
 
@@ -169,53 +173,72 @@ namespace Scopa {
         // adapted from https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/MedianCut.cs
         // used under Unlicense License
         /// <summary> actual palette color count will be -=1, to insert blue 255 at the end for transparency </summary>
-        public static byte[][] QuantizeToMipmap(Texture2D original, int resizeFactor, out Color32[] fixedPalette, int paletteColorCount = 256)
+        public static byte[][] QuantizeToMipmap(Texture2D original, Color colorTint, int resizeFactor, out Color32[] fixedPalette, int paletteColorCount = 256)
         {
-            // var colours = Enumerable.Range(0, bitmap.height)
-            //     .SelectMany(y => Enumerable.Range(0, bitmap.width)
-            //         .Select(x => bitmap.GetPixel(x, y)));
-            ResizeCopyToBuffer(original, original.width / resizeFactor, original.height / resizeFactor); 
+            // we have to do this in two passes, with two render textures
+
+            // pass 1: tint the texture, generate the color palette
+            ResizeCopyToBuffer(original, colorTint, original.width / resizeFactor, original.height / resizeFactor); 
+            
             // we use Color32 because it's faster + avoids floating point comparison issues with HasColor() + we need to write out bytes anyway
             var colors = resizedTexture.GetPixels32();
+            // for(int i=0; i<colors.Length; i++) {
+            //     colors[i].r = System.Convert.ToByte( Mathf.RoundToInt(colors[i].r * colorTint.r) );
+            //     colors[i].g = System.Convert.ToByte( Mathf.RoundToInt(colors[i].g * colorTint.g) );
+            //     colors[i].b = System.Convert.ToByte( Mathf.RoundToInt(colors[i].b * colorTint.b) );
+            //     colors[i].a = 0xff;
+            // }
+
             buckets.Clear();
+            buckets.Add( new ColorBucket(colors) );
             paletteColorCount -= 1; // reserve space for blue 255
 
             // build color buckets / palette groups
-            while (buckets.Count < paletteColorCount)
-            {
+            int iterations = 0;
+            while (buckets.Count < paletteColorCount && iterations < paletteColorCount) {
                 newBuckets.Clear();
-                for (var i = 0; i < buckets.Count; i++)
-                {
-                    if (newBuckets.Count + (buckets.Count - i) < paletteColorCount)
-                    {
-                        var split = buckets[i].Split();
-                        newBuckets.Add(split.Item1);
-                        newBuckets.Add(split.Item2);
+                for (var i = 0; i < buckets.Count; i++) {
+                    if (newBuckets.Count + (buckets.Count - i) < paletteColorCount) {
+                        buckets[i].Split(out var b1, out var b2);
+                        newBuckets.Add(b1);
+                        newBuckets.Add(b2);
                     }
-                    else
-                    {
+                    else {
                         newBuckets.AddRange(buckets.GetRange(i, buckets.Count - i));
                         break;
                     }
                 }
-                buckets = newBuckets;
+                buckets = newBuckets.ToArray().ToList();
+                iterations++;
             }
-            fixedPalette = buckets.Select( bucket => bucket.Color ).Append(new Color32(0x00, 0x00, 0xff, 0xff)).ToArray();
+            Debug.Log($"color palette has {buckets.Count} colors");
+
+            // pad out any unused palette slots
+            // actually, let's disable transparency for now
+            var emptyBucket = new ColorBucket( new Color32[] { new Color32(0x88, 0x88, 0x88, 0x88) } );
+            while ( buckets.Count < paletteColorCount+1 ) {
+                buckets.Add( emptyBucket );
+            }
+
+            // convert buckets to color palette
+            fixedPalette = buckets.Select( bucket => bucket.Color ).ToArray();
             
-            // use bucket lookup to convert colors to palette indices
+            // pass 2: now that we have a color palette, use render texture to palettize AND generate mipmaps all at once
             var width = resizedTexture.width;
             var height = resizedTexture.height;
             var mipmap = new byte[4][];
+            ResizeCopyToBuffer(original, colorTint, width, height, fixedPalette);
+
             for( int mip=0; mip<4; mip++) {
+                //Debug.Log("quanitizing mip#" + mip.ToString() );
                 int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
-                mipmap[mip] = new byte[ width/factor * height/factor ];
-                for( int y=0; y<height; y+=factor ) {
-                    for (int x=0; x<width; x+=factor ) {
-                        mipmap[mip][y*width+x] = System.Convert.ToByte( 
-                            buckets.IndexOf(
-                                buckets.First(b => b.HasColor(colors[y*width+x]))
-                            ) 
-                        );
+                mipmap[mip] = new byte[ (width/factor) * (height/factor) ];
+                
+                var indices = resizedTexture.GetPixels32(mip);
+                for( int y=0; y<height/factor; y++) {
+                    for( int x=0; x<width/factor; x++) {
+                        // textures are vertically flipped, so have to unflip them? idk
+                        mipmap[mip][(height/factor-1-y)*width/factor + x] = indices[y*width/factor+x].r;
                     }
                 }
             }
@@ -223,35 +246,50 @@ namespace Scopa {
         }
 
         // code from https://github.com/ababilinski/unity-gpu-texture-resize
-        // very fast in most cases?
-        public static void ResizeCopyToBuffer(Texture2D source, int targetX, int targetY, bool mipmap = false, FilterMode filter = FilterMode.Bilinear) {
-            //create a temporary RenderTexture with the target size
-            var rt = RenderTexture.GetTemporary(targetX, targetY, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+        // and https://support.unity.com/hc/en-us/articles/206486626-How-can-I-get-pixels-from-unreadable-textures-
+        // TODO: convert to https://forum.unity.com/threads/closest-color-shader.668689/ ?
 
-            //set the active RenderTexture to the temporary texture so we can read from it
-            RenderTexture.active = rt;
-            
-            //Copy the texture data on the GPU - this is where the magic happens [(;]
-            Graphics.Blit(source, rt);
+        public static void ResizeCopyToBuffer(Texture2D source, Color tint, int targetX, int targetY, Color32[] palette = null) {
+            RenderTexture tmp = RenderTexture.GetTemporary( 
+                targetX,
+                targetY,
+                0,
+                RenderTextureFormat.Default,
+                RenderTextureReadWrite.sRGB, 
+                1
+            );
 
-            // initialize the texture obj to the target values (this sets the pixel data as undefined)
-            if ( resizedTexture == null) {
-                resizedTexture = new Texture2D(targetX, targetY, source.format, mipmap);
+            // Blit the pixels on texture to the RenderTexture
+            if ( palette != null ) {
+                var mat = new Material( Shader.Find("Hidden/PalettizeBlit") );
+                // mat.SetColor("_Color", tint);
+                mat.SetColorArray( "_Colors", palette.Select( c => new Color(c.r / 255f, c.g / 255f, c.b / 255f) ).ToArray() );
+                Graphics.Blit(source, tmp, mat);
             } else {
-                resizedTexture.Reinitialize(targetX, targetY, source.format, mipmap);
-            }
-            resizedTexture.filterMode = filter;
-
-            try {
-                // reads the pixel values from the temporary RenderTexture onto the resized texture
-                resizedTexture.ReadPixels(new Rect(0, 0, targetX, targetY), 0, 0);
-                // actually upload the changed pixels to the graphics card
-                resizedTexture.Apply();
-            } catch {
-                Debug.LogError("Read/Write is not enabled on texture "+ source.name);
+                var mat = new Material( Shader.Find("Hidden/BlitTint") );
+                mat.SetColor("_Color", tint);
+                Graphics.Blit(source, tmp, mat);
+                // Graphics.Blit(source, tmp);
             }
 
-            RenderTexture.ReleaseTemporary(rt);
+            // Backup the currently set RenderTexture
+            RenderTexture previous = RenderTexture.active;
+
+            // Set the current RenderTexture to the temporary one we created
+            RenderTexture.active = tmp;
+
+            // Create a new readable Texture2D to copy the pixels to it
+            resizedTexture = new Texture2D(targetX, targetY, TextureFormat.RGB24, palette != null ? 4 : 0, true );
+
+            // Copy the pixels from the RenderTexture to the new Texture
+            resizedTexture.ReadPixels(new Rect(0, 0, targetX, targetY), 0, 0, palette != null);
+            resizedTexture.Apply();
+
+            // Reset the active RenderTexture
+            RenderTexture.active = previous;
+
+            // Release the temporary RenderTexture
+            RenderTexture.ReleaseTemporary(tmp);
         }
 
         public class ColorBucket
@@ -277,9 +315,9 @@ namespace Scopa {
             {
                 var totals = colors.Sum(c => c.Value);
                 return new Color32(
-                    r: System.Convert.ToByte(colors.Sum(c => c.Key.r * c.Value) / totals),
-                    g: System.Convert.ToByte(colors.Sum(c => c.Key.g * c.Value) / totals),
-                    b: System.Convert.ToByte(colors.Sum(c => c.Key.b * c.Value) / totals),
+                    r: System.Convert.ToByte(colors.Sum(c => c.Key.r * c.Value) / Mathf.Max(1, totals)),
+                    g: System.Convert.ToByte(colors.Sum(c => c.Key.g * c.Value) / Mathf.Max(1, totals)),
+                    b: System.Convert.ToByte(colors.Sum(c => c.Key.b * c.Value) / Mathf.Max(1, totals)),
                     a: 0xff
                 );
             }
@@ -289,7 +327,7 @@ namespace Scopa {
                 return colors.ContainsKey(color);
             }
 
-            public Tuple<ColorBucket, ColorBucket> Split()
+            public void Split(out ColorBucket bucket1, out ColorBucket bucket2)
             {
                 var redRange = colors.Keys.Max(c => c.r) - colors.Keys.Min(c => c.r);
                 var greenRange = colors.Keys.Max(c => c.g) - colors.Keys.Min(c => c.g);
@@ -300,22 +338,22 @@ namespace Scopa {
                 {
                     if (redRange > blueRange)
                     {
-                        sorter = c => System.Convert.ToInt32(c.r);
+                        sorter = c => c.r;
                     }
                     else
                     {
-                        sorter = c => System.Convert.ToInt32(c.b);
+                        sorter = c => c.b;
                     }
                 }
                 else
                 {
                     if (greenRange > blueRange)
                     {
-                        sorter = c => System.Convert.ToInt32(c.g);
+                        sorter = c => c.g;
                     }
                     else
                     {
-                        sorter = c => System.Convert.ToInt32(c.b);
+                        sorter = c => c.b;
                     }
                 }
 
@@ -323,9 +361,8 @@ namespace Scopa {
 
                 var firstBucketCount = sorted.Count() / 2;
 
-                var bucket1 = new ColorBucket(sorted.Take(firstBucketCount));
-                var bucket2 = new ColorBucket(sorted.Skip(firstBucketCount));
-                return new Tuple<ColorBucket, ColorBucket>(bucket1, bucket2);
+                bucket1 = new ColorBucket(sorted.Take(firstBucketCount));
+                bucket2 = new ColorBucket(sorted.Skip(firstBucketCount));
             }
         }
 

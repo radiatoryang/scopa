@@ -30,10 +30,10 @@ namespace Scopa {
             var text = "";
 
             if ( includeHeaderAndWorldspawnAndIncludes ) {
-                text += "\n//======================================================================";
+                text += "\n// ======================================================================";
                 text += "\n// FGD for " + Application.productName + " " + Application.version;
                 text += "\n// generated on " + System.DateTime.Now.ToString("f");
-                text += "\n//======================================================================\n\n";
+                text += "\n// ======================================================================\n\n";
             }
 
             text += string.Join("\n\n", entityBases.Select( ent => ent.ToString() ) ) + "\n\n";

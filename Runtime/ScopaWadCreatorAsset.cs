@@ -12,6 +12,9 @@ namespace Scopa {
 
     [System.Serializable]
     public class ScopaWadCreator {
+
+        [HideInInspector] public string lastSavePath;
+
         [Tooltip("(default: WAD3) what kind of WAD file to generate? only Half-Life WAD3 is supported for now")]
         public WadFormat format = WadFormat.WAD3;
 

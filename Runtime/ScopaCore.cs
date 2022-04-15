@@ -69,7 +69,7 @@ namespace Scopa {
                 var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
                 foreach ( var asset in allAssets ) {
                     if ( asset != null && !materials.ContainsKey(asset.name) && asset is Material ) {
-                        Debug.Log("loaded " + asset.name);
+                        // Debug.Log("loaded " + asset.name);
                         materials.Add(asset.name, asset as Material);
                     }
                 }
@@ -519,7 +519,8 @@ namespace Scopa {
 
         public static void ExportFgdFile(ScopaFgdConfig fgd, string filepath) {
             var fgdText = fgd.ToString();
-            System.IO.File.WriteAllText(filepath, fgdText, System.Text.Encoding.UTF8);
+            var encoding = new System.Text.UTF8Encoding(false); // no BOM
+            System.IO.File.WriteAllText(filepath, fgdText, encoding);
             Debug.Log("wrote FGD to " + filepath);
         }
 

@@ -44,8 +44,13 @@ namespace Scopa.Editor {
             // we have to serialize every mesh as a subasset, or else it won't get saved
             foreach ( var mesh in meshList ) {
                 ctx.AddObjectToAsset(mesh.name, mesh);
+                EditorUtility.SetDirty(mesh);
+            //    PrefabUtility.RecordPrefabInstancePropertyModifications(mesh);
             }
             ctx.SetMainObject(gameObject);
+
+            EditorUtility.SetDirty(gameObject);
+            //PrefabUtility.RecordPrefabInstancePropertyModifications(gameObject);
         }
     }
 
