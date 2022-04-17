@@ -310,8 +310,8 @@ namespace Scopa {
                 // test for unseen / hidden faces, and discard
                 foreach( var otherFace in allFaces ) {
                     if (otherFace.OccludesFace(face)) {
-                        Debug.Log("discarding unseen face at " + face);
-                        face.DebugDrawVerts(Color.yellow);
+                        // Debug.Log("discarding unseen face at " + face);
+                        // face.DebugDrawVerts(Color.yellow);
                         face.discardWhenBuildingMesh = true;
                     }
                 }

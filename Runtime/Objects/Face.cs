@@ -17,22 +17,24 @@ namespace Scopa.Formats.Map.Objects
             Vertices = new List<Vector3>();
         }
 
-        const float EPSILON = 0.001f;
+        const float EPSILON = 0.01f;
 
-        public bool OccludesFace(Face otherFace) {
+        public bool OccludesFace(Face maybeSmallerFace) {
             // first, test (1) share similar plane distance and (2) face opposite directions
             // we are testing the NEGATIVE case for early out
-            if ( Mathf.Abs(-Plane.distance - otherFace.Plane.distance) > 1f || Vector3.Dot(Plane.normal, otherFace.Plane.normal) >= -0.99f ) {
+            if ( Mathf.Abs( Plane.distance + maybeSmallerFace.Plane.distance) > 1f || Vector3.Dot(Plane.normal, maybeSmallerFace.Plane.normal) > -0.99f ) {
                 return false;
             }
 
             // then, test whether one face's vertices are completely inside the other
-            var ignoreAxis = otherFace.Plane.GetMainAxisToNormal(); // 2D math is easier, so let's ignore the least important axis
-            for( int i=0; i<otherFace.Vertices.Count; i++ ) {
+            var ignoreAxis = maybeSmallerFace.Plane.GetMainAxisToNormal(); // 2D math is easier, so let's ignore the least important axis
+            var otherFaceCenter = maybeSmallerFace.Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / maybeSmallerFace.Vertices.Count; // slightly contract the vert, edge is unreliable
+            for( int i=0; i<maybeSmallerFace.Vertices.Count; i++ ) {
+                var smallFaceVert = maybeSmallerFace.Vertices[i] + (otherFaceCenter - maybeSmallerFace.Vertices[i]).normalized * 0.1f;
                 switch (ignoreAxis) {
-                    case Axis.X: if (!IsInPolygonYZ2(otherFace.Vertices[i], Vertices)) return false; break;
-                    case Axis.Y: if (!IsInPolygonXZ2(otherFace.Vertices[i], Vertices)) return false; break;
-                    case Axis.Z: if (!IsInPolygonXY2(otherFace.Vertices[i], Vertices)) return false; break;
+                    case Axis.X: if (!IsInPolygonYZ3(smallFaceVert, Vertices)) return false; break;
+                    case Axis.Y: if (!IsInPolygonXZ3(smallFaceVert, Vertices)) return false; break;
+                    case Axis.Z: if (!IsInPolygonXY3(smallFaceVert, Vertices)) return false; break;
                 }
             }
 
