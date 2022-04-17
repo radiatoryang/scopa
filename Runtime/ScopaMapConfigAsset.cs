@@ -54,6 +54,9 @@ namespace Scopa {
         [Tooltip("(EDITOR-ONLY) (default: true) try to automatically match each texture name to a similarly named Material already in the project")]
         public bool findMaterials = true;
 
+        [Tooltip("(default: 1.0) scaling factor for all texture faces; < 1.0 enlarges textures, > 1.0 shrinks textures")]
+        public float globalTexelScale = 1.0f;
+
         [Tooltip("(default: 128) To calculate texture coordinates, we need to know the texture image size; but if we can't find a matching texture, use this default size")]
         public int defaultTexSize = 128;
 

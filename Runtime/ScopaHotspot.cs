@@ -11,30 +11,30 @@ namespace Scopa {
     /// <summary> hotspot UV texturing module </summary>
     public class ScopaHotspot {
 
-        /// <summary> main hotspot UV function; grabs verts, returns UVs</summary>
+        /// <summary> main hotspot UV function; grabs verts, returns FALSE if the face verts are too big for the hotspot atlas (based on the atlas' fallback threshold)</summary>
         public static bool TryGetHotspotUVs(List<Vector3> faceVerts, HotspotTexture atlas, out Vector2[] uvs, float scalar = 0.03125f) {
             uvs = PlanarProject(faceVerts);
 
-            var approximateSize = LargestVector2(uvs) - SmallestVector2(uvs);
+            var approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
 
             if ( atlas.hotspotRotate == HotspotRotateMode.Random ) {
                 RotateUVs(uvs, Random.Range(0, 4) * 90);
-                approximateSize = LargestVector2(uvs) - SmallestVector2(uvs);
+                approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
             } else if ( (atlas.hotspotRotate == HotspotRotateMode.RotateHorizontalToVertical && approximateSize.x > approximateSize.y) ||
                 (atlas.hotspotRotate == HotspotRotateMode.RotateVerticalToHorizontal && approximateSize.y > approximateSize.x) ) {
                 RotateUVs(uvs, Random.value > 0.5f ? -90 : 90);
-                approximateSize = LargestVector2(uvs) - SmallestVector2(uvs);
+                approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
             }
 
-            var bestHotspot = atlas.GetBestUVFromUVs(approximateSize.x * scalar * atlas.hotspotScalar, approximateSize.y * scalar * atlas.hotspotScalar);
+            var bestHotspot = atlas.GetBestUVFromUVs(approximateSize.x * atlas.hotspotScalar, approximateSize.y * atlas.hotspotScalar);
             var bestHotspotSize = LargestVector2(bestHotspot) - SmallestVector2(bestHotspot);
 
-            // if ( approximateSize.x / bestHotspotSize.x > atlas.fallbackThreshold || approximateSize.y / bestHotspotSize.y > atlas.fallbackThreshold ) {
-            //     return false;
-            // } else {
-                FitUVs(uvs, bestHotspot);
+            FitUVs(uvs, bestHotspot);
+            if ( approximateSize.x * atlas.hotspotScalar / bestHotspotSize.x > atlas.fallbackThreshold || approximateSize.y * atlas.hotspotScalar / bestHotspotSize.y > atlas.fallbackThreshold ) {
+                return false;
+            } else {
                 return true;
-            // }
+            }
             
         }
 
@@ -43,16 +43,27 @@ namespace Scopa {
                 Debug.LogError("Cannot planar project for less than 3 vertices.");
                 return null;
             }
-
             var uvs = new Vector2[faceVerts.Count];
             var plane = new Plane(faceVerts[0], faceVerts[1], faceVerts[2]);
             var normal = plane.normal * Mathf.Sign(plane.distance);
             
             var vAxis = plane.GetClosestAxisToNormal() != Vector3.up ? Vector3.up : Vector3.right; // assume V axis is up
             // TODO: but if facing up or down, instead we need to set U axis to the longest most-parallel edges, and then derive the V axis
-            var uAxis = Vector3.Cross( normal, vAxis );
+            
+
             // vAxis.Normalize();
             // uAxis.Normalize();
+
+            Vector3 longestEdge = Vector3.zero;
+            for(int i=0; i<faceVerts.Count; i++) {
+                var newEdge = faceVerts[(i+1)%faceVerts.Count] - faceVerts[i];
+                if ( newEdge.sqrMagnitude > longestEdge.sqrMagnitude ) {
+                    longestEdge = newEdge;
+                }
+            }
+            //normal = Vector3.Cross(longestEdge.normalized, vAxis);
+
+            var uAxis = Vector3.Cross( normal, vAxis );
             
             for(int i=0; i<faceVerts.Count; i++) {
                 uvs[i].x = Vector3.Dot(uAxis, faceVerts[i]);

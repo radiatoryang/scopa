@@ -155,9 +155,16 @@ namespace Scopa {
                         var newMaterial = defaultMaterial;
 
                         var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
-                        // if ( materialOverride != null) {
-                        //     newMaterial = materialOverride;
-                        // }
+
+                        // this face is using a hotspot material, so...
+                        if ( materialOverride != null && materialOverride.hotspotAtlas != null && materialOverride.hotspotAtlas.fallbackMaterial != null) {
+                            // detect if the face is too big to fit any hotspot! if it is, then use the fallback material (which is hopefully a regular tiling material?)
+                            if ( ScopaHotspot.TryGetHotspotUVs(face.Vertices, materialOverride.hotspotAtlas, out var uvs, config.scalingFactor ) == false ) {
+                                newMaterial = materialOverride.hotspotAtlas.fallbackMaterial;
+                                face.TextureName = newMaterial.name;
+                                materialOverride = null;
+                            }
+                        }
                         
                         // if still no better material found, then search the AssetDatabase for a matching texture name
                         if ( config.findMaterials && materialOverride == null && materials.Count > 0 && materials.ContainsKey(face.TextureName) ) {
@@ -325,6 +332,7 @@ namespace Scopa {
                     verts, 
                     tris, 
                     uvs, 
+                    config.globalTexelScale,
                     textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize, 
                     textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize,
                     textureFilter != null ? textureFilter.hotspotAtlas : null
@@ -370,7 +378,7 @@ namespace Scopa {
         }
 
         /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 128, int textureHeight = 128, HotspotTexture hotspotAtlas = null) {
+        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, float scalar = 1f, int textureWidth = 128, int textureHeight = 128, HotspotTexture hotspotAtlas = null) {
             var lastVertIndexOfList = verts.Count;
 
             // add all verts and UVs
@@ -381,7 +389,7 @@ namespace Scopa {
                     uvs.Add(new Vector2(
                         (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
                         (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
-                    ));
+                    ) * scalar);
                 }
             }
 
@@ -411,9 +419,10 @@ namespace Scopa {
                 return meshList;
 
             bool isTrigger = config.IsEntityTrigger(ent.ClassName);
+            bool forceConvex = ent.TryGetInt("_convex", out var num) && num == 1;
 
             // just one big Mesh Collider... one collider to rule them all
-            if ( !isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider ) {
+            if ( forceConvex || (!isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) ) {
                 ClearMeshBuffers();
                 foreach ( var solid in solids ) {
                     BufferMeshDataFromSolid(solid, config, null, true);
@@ -421,7 +430,7 @@ namespace Scopa {
 
                 var newMesh = BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
                 var newMeshCollider = gameObject.AddComponent<MeshCollider>();
-                newMeshCollider.convex = ent.TryGetInt("_convex", out var num) && num == 1;
+                newMeshCollider.convex = forceConvex;
                 newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
                     | MeshColliderCookingOptions.EnableMeshCleaning 
                     | MeshColliderCookingOptions.WeldColocatedVertices 
