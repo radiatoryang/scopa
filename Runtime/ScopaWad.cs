@@ -315,9 +315,9 @@ namespace Scopa {
             {
                 var totals = colors.Sum(c => c.Value);
                 return new Color32(
-                    r: System.Convert.ToByte(colors.Sum(c => c.Key.r * c.Value) / Mathf.Max(1, totals)),
-                    g: System.Convert.ToByte(colors.Sum(c => c.Key.g * c.Value) / Mathf.Max(1, totals)),
-                    b: System.Convert.ToByte(colors.Sum(c => c.Key.b * c.Value) / Mathf.Max(1, totals)),
+                    r: System.Convert.ToByte( Mathf.RoundToInt(colors.Sum(c => System.Convert.ToSingle(c.Key.r) * c.Value) / Mathf.Max(1, totals)) ),
+                    g: System.Convert.ToByte( Mathf.RoundToInt(colors.Sum(c => System.Convert.ToSingle(c.Key.g) * c.Value) / Mathf.Max(1, totals)) ),
+                    b: System.Convert.ToByte( Mathf.RoundToInt(colors.Sum(c => System.Convert.ToSingle(c.Key.b) * c.Value) / Mathf.Max(1, totals)) ),
                     a: 0xff
                 );
             }
