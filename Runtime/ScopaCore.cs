@@ -365,8 +365,11 @@ namespace Scopa {
                 mesh.RecalculateTangents();
             
             #if UNITY_EDITOR
-            if ( config.addLightmapUV2 )
-                Unwrapping.GenerateSecondaryUVSet( mesh );
+            if ( config.addLightmapUV2 ) {
+                UnwrapParam.SetDefaults( out var unwrap);
+                unwrap.packMargin *= 2;
+                Unwrapping.GenerateSecondaryUVSet( mesh, unwrap );
+            }
 
             if ( config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
                 UnityEditor.MeshUtility.SetMeshCompression(mesh, (ModelImporterMeshCompression)config.meshCompression);
