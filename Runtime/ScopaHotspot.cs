@@ -47,21 +47,7 @@ namespace Scopa {
             var plane = new Plane(faceVerts[0], faceVerts[1], faceVerts[2]);
             var normal = plane.normal * Mathf.Sign(plane.distance);
             
-            var vAxis = plane.GetClosestAxisToNormal() != Vector3.up ? Vector3.up : Vector3.right; // assume V axis is up
-            // TODO: but if facing up or down, instead we need to set U axis to the longest most-parallel edges, and then derive the V axis
-            
-
-            // vAxis.Normalize();
-            // uAxis.Normalize();
-
-            Vector3 longestEdge = Vector3.zero;
-            for(int i=0; i<faceVerts.Count; i++) {
-                var newEdge = faceVerts[(i+1)%faceVerts.Count] - faceVerts[i];
-                if ( newEdge.sqrMagnitude > longestEdge.sqrMagnitude ) {
-                    longestEdge = newEdge;
-                }
-            }
-            //normal = Vector3.Cross(longestEdge.normalized, vAxis);
+            var vAxis = plane.GetClosestAxisToNormal() != Vector3.up ? Vector3.up : Vector3.right; 
 
             var uAxis = Vector3.Cross( normal, vAxis );
             
@@ -69,6 +55,16 @@ namespace Scopa {
                 uvs[i].x = Vector3.Dot(uAxis, faceVerts[i]);
                 uvs[i].y = Vector3.Dot(vAxis, faceVerts[i]);
             }
+
+            // rotate planar projection to align with the longest edge
+            Vector2 longestEdge = Vector2.zero;
+            for(int i=0; i<uvs.Length; i++) {
+                var newEdge = uvs[(i+1)%uvs.Length] - uvs[i];
+                if ( newEdge.sqrMagnitude > longestEdge.sqrMagnitude ) {
+                    longestEdge = newEdge;
+                }
+            }
+            RotateUVs(uvs, Vector2.Angle( Vector2.right, longestEdge.normalized) );
 
             return uvs;
         }
