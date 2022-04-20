@@ -28,12 +28,11 @@ Shader "Hidden/PalettizeBlit" {
 	  		{
 	   			fixed4 original = tex2D(_MainTex, i.uv) * _Color;
 
-	   			fixed4 col = fixed4 (0,0,0,0);
+	   			fixed4 col = fixed4 (1,1,1,1);
 	   			fixed dist = 10000000.0;
 
 	   			for (int i = 0; i < 255; i++) { // ignore index 255, which is reserved for transparency
-	   				fixed4 c = _Colors[i];
-	   				fixed d = distance(original, c);
+	   				fixed d = distance(original, _Colors[i]);
 
 	   				if (d < dist) {
 	   					dist = d;

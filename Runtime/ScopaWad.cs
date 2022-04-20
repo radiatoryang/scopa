@@ -194,6 +194,8 @@ namespace Scopa {
             paletteColorCount -= 1; // reserve space for blue 255
 
             // build color buckets / palette groups
+            // TODO: switch quantizer to https://github.com/JeremyAnsel/JeremyAnsel.ColorQuant/blob/master/JeremyAnsel.ColorQuant/JeremyAnsel.ColorQuant/WuColorQuantizer.cs
+            // or maybe https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/Octree.cs
             int iterations = 0;
             while (buckets.Count < paletteColorCount && iterations < paletteColorCount) {
                 newBuckets.Clear();
@@ -208,7 +210,8 @@ namespace Scopa {
                         break;
                     }
                 }
-                buckets = newBuckets.ToArray().ToList();
+                buckets.Clear();
+                buckets.AddRange( newBuckets );
                 iterations++;
             }
             Debug.Log($"color palette has {buckets.Count} colors");
@@ -221,7 +224,18 @@ namespace Scopa {
             }
 
             // convert buckets to color palette
-            fixedPalette = buckets.Select( bucket => bucket.Color ).ToArray();
+            // fixedPalette = buckets.Select( bucket => bucket.Color ).ToArray();
+            
+            // DEBUG: grayscale palette looks great... so the problem is the palette generation code lol
+            fixedPalette = new Color32[256];
+            for (int i=0; i<256; i++) {
+                // fixedPalette[i] = new Color32( QuakePalette.Data[i*3], QuakePalette.Data[i*3+1], QuakePalette.Data[i*3+2], 0xff );
+                fixedPalette[i] = new Color32( 
+                    System.Convert.ToByte(Mathf.RoundToInt(i * colorTint.r)), 
+                    System.Convert.ToByte(Mathf.RoundToInt(i * colorTint.g)), 
+                    System.Convert.ToByte(Mathf.RoundToInt(i * colorTint.b)), 
+                    0xff);
+            }
             
             // pass 2: now that we have a color palette, use render texture to palettize AND generate mipmaps all at once
             var width = resizedTexture.width;
