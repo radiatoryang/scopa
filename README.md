@@ -1,22 +1,17 @@
 # Scopa
 
-*Scopa* ("broom" in Latin) is a Unity level design plugin that adds import and workflow tools for making .MAP levels with Quake 1 / Half-Life 1 BSP-style construction. Relive the golden age of level design... today!
+*Scopa* ("broom" in Latin) is a Unity level design plugin that adds Quake / Half-Life .MAP importing. Kind of like [Qodot](https://github.com/QodotPlugin/qodot-plugin) but for Unity.
 
 # WARNING: this is in early development, it's broken and not ready for public use yet.
 
-- generates a prefab with 3D meshes, colliders (box colliders and mesh colliders), parses entity data for your components
-- imports .MAPs (Quake 1 / Valve 220 format only) and .WADs (Quake 1 WAD2 / Half-Life GoldSrc WAD3 format only)
-- procedural environment art tools built into brush import pipeline
-    - configurable mesh normal smoothing
-    - hotspot UV texturing
-    - (PLANNED) mesh subdivisions
-    - (PLANNED) automatic rule-based detail placement (for grass, rocks, or whatever)
-- .FGD generator tool to export entity definitions for the level editor
-    - (PLANNED) default set of basic trigger, logic, light entities
-    - (PLANNED) bind any MonoBehaviour variable to an FGD entity property simply with an `[FGD]` attribute
-- works at editor time or runtime (so you can add modding support)
+- .MAP import (Quake 1 / Valve 220 format)
+    - generates a prefab with 3D meshes, colliders, and parsed entity data
+    - built-in procedural environment art tools (mesh normal smoothing, hotspot UV texturing, (PLANNED) detail placement like grass)
+- .WAD import / export (Quake 1 WAD2 / Half-Life WAD3 format)
+- .FGD generator (to export entity definitions to the level editor)
+- works at editor time or runtime (for modding support)
 
-To build .MAP levels, we recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom).
+To build .MAP levels, we strongly recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom).
 
 ## Installation
 
@@ -26,15 +21,15 @@ To install, just open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.h
 
 ## Usage
 
-Put a .MAP or .WAD file in your `/Assets/` folder and it'll import automatically, generating assets / prefabs for you to use. Play with the file import settings.
+Put a .MAP or .WAD file in your `/Assets/` folder and it'll import automatically, generating assets / prefabs for you to use.
 
-**Do your edits in the level editor, not in Unity!** If you edit the prefab instance, your changes may be erased when you re-import the .MAP again. We strongly recommend treating this .MAP file as the "single source of truth." 
+**Do your edits in the level editor, not in Unity!** If you edit the prefab instance, your changes may be erased when you re-import the .MAP again. Treating the .MAP file as the "single source of truth." 
 
 To learn about more features, such as runtime support, entity handling, and the FGD generator, read the [Documentation](https://github.com/radiatoryang/scopa/blob/main/Documentation~/Scopa.md).
 
 ## Limitations
 
-- **This package doesn't have game code.** It imports MAPs, sets up colliders, and imports entity data. You still have to make the game yourself.
+- **This package doesn't have game code.** It imports the file, sets up colliders, and imports entity data. You still have to make the game yourself.
 
 ## Contributions
 
