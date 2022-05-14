@@ -13,17 +13,21 @@
 
 To build .MAP levels, we strongly recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom).
 
+![Trenchbroom to Unity](https://raw.githubusercontent.com/radiatoryang/scopa/main/Documentation~/TrenchbroomToUnity.png)
+
 ## Installation
 
-This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2020.1 or later. It is self-contained with zero dependencies.
+This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2020.1 or later. It is self-contained with zero dependencies. No default URP or HDRP support yet, sorry.
 
 To install, just open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html) (TIP: You'll probably need to [install Git](https://git-scm.com/downloads) first.)
 
 ## Usage
 
-Put a .MAP or .WAD file in your `/Assets/` folder and it'll import automatically, generating assets / prefabs for you to use.
+<img src="https://raw.githubusercontent.com/radiatoryang/scopa/main/Documentation~/MapImportInspector.png" width=256 align=right alt="Map import inspector" />
 
-**Do your edits in the level editor, not in Unity!** If you edit the prefab instance, your changes may be erased when you re-import the .MAP again. Treating the .MAP file as the "single source of truth." 
+Put a .MAP or .WAD file in your `/Assets/` folder and it'll import automatically, generating assets / prefabs for you to use as if it were any other 3D model file. Defaults are tuned to typical Quake / Half-Life [level design metrics](https://book.leveldesignbook.com/process/blockout/metrics), 32 map units = 1 Unity meter.
+
+**Do your edits in the level editor, not in Unity!** If you edit the prefab instance, your changes may be erased when you re-import the .MAP again. Treat the .MAP file as the [single source of truth](https://en.wikipedia.org/wiki/Single_source_of_truth). 
 
 To learn about more features, such as runtime support, entity handling, and the FGD generator, read the [Documentation](https://github.com/radiatoryang/scopa/blob/main/Documentation~/Scopa.md).
 
