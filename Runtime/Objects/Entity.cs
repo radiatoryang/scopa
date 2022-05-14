@@ -13,6 +13,7 @@ namespace Scopa.Formats.Map.Objects
         [ReadOnly] public int SpawnFlags;
         [ReadOnly] public GenericDictionary<string, string> Properties = new GenericDictionary<string, string>();
         [ReadOnly] public int ID;
+        [HideInInspector] public bool discard = false;
 
         void LogNoKey(string propertyKey) {
             Debug.LogWarning($"{ClassName}#{ID} doesn't have a property with key: {propertyKey} ");

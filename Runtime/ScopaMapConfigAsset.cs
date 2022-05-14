@@ -17,8 +17,11 @@ namespace Scopa {
         [Tooltip("(default: 0.03125, 1 m = 32 units) The global scaling factor for all brush geometry and entity origins.")]
         public float scalingFactor = 0.03125f;
 
-        [Tooltip("(default: 4) vertex welding distance threshold in unscaled map units; set to 0 to disable vertex welding (not recommended)")]
+        [Tooltip("(default: 4) vertex welding distance threshold in unscaled map units; set to 0 to disable vertex welding (not recommended). Pretty important for minimizing seams and cracks. Avoid building smaller than the welding threshold.")]
         public float weldingThreshold = 4f;
+
+        [Tooltip("(default: true) Try to detect whether a face is completely covered by another face within the same entity, and discard it. It's not perfect; it can't detect if a face is covered by 2+ faces. But it helps. Note the extra calculations increase map import times.")]
+        public bool removeHiddenFaces = true;
 
         [Tooltip("(default: true) Generate tangent data needed for normal mapping. If you're not using normal maps, disable for small memory savings.")]
         public bool addTangents = true;
@@ -33,8 +36,8 @@ namespace Scopa {
         // TODO: remove unseen faces
         // TODO: vertex snapping
 
-        [Tooltip("(default: sky, trigger, skip, hint, nodraw, null, clip) When a face's texture name is a partial match with this list, discard that face from the mesh; does not affect colliders")]
-        public List<string> cullTextures = new List<string>() {"sky", "trigger", "skip", "hint", "nodraw", "null", "clip"};
+        [Tooltip("(default: sky, trigger, skip, hint, nodraw, null, clip, origin) When a face's texture name contains any word in this list, discard that face from the mesh. But this does not affect mesh colliders.")]
+        public List<string> cullTextures = new List<string>() {"sky", "trigger", "skip", "hint", "nodraw", "null", "clip", "origin"};
 
 
         [Space(), Header("COLLIDERS")]
@@ -42,10 +45,10 @@ namespace Scopa {
         [Tooltip("(default: Box and Convex) For each brush we add a collider. Axis-aligned boxy brushes use Box Colliders, anything else gets a convex Mesh Collider. You can also force all Box / all Mesh colliders. For lots of brushes, a single merged concave Mesh Collider might be better.")]
         public ColliderImportMode colliderMode = ColliderImportMode.BoxAndConvex;
 
-        [Tooltip("(default: illusionary) If an entity's classname is a partial match with this list, do not generate a collider for it and disable Navigation Static for it.")]
+        [Tooltip("(default: illusionary) If an entity's classname contains a word in this list, do not generate a collider for it and disable Navigation Static for it.")]
         public List<string> nonsolidEntities = new List<string>() {"illusionary"};
 
-        [Tooltip("(default: trigger, water) If an entity's classname is a partial match with this list, mark that collider as a non-solid trigger and disable Navigation Static for it.")]
+        [Tooltip("(default: trigger, water) If an entity's classname contains a word in this list, mark that collider as a non-solid trigger and disable Navigation Static for it.")]
         public List<string> triggerEntities = new List<string>() {"trigger", "water"};
 
 
@@ -54,7 +57,7 @@ namespace Scopa {
         [Tooltip("(EDITOR-ONLY) (default: true) try to automatically match each texture name to a similarly named Material already in the project")]
         public bool findMaterials = true;
 
-        [Tooltip("(default: 1.0) scaling factor for all texture faces; < 1.0 enlarges textures, > 1.0 shrinks textures")]
+        [Tooltip("(default: 1.0) map-wide scaling factor for all texture faces; < 1.0 enlarges textures, > 1.0 shrinks textures")]
         public float globalTexelScale = 1.0f;
 
         [Tooltip("(default: 128) To calculate texture coordinates, we need to know the texture image size; but if we can't find a matching texture, use this default size")]
@@ -66,21 +69,25 @@ namespace Scopa {
         [Tooltip("(optional) manually set a specific Material for each texture name")]
         public MaterialOverride[] materialOverrides;
 
+
         [Space(), Header("GAMEOBJECTS & ENTITIES")]
         
-        [Tooltip("(default: true) Set all mesh objects to be static -- batching, lightmapping, navigation, reflection, everything. However, non-solid and trigger entities will NOT be navigation static.")]
-        public bool isStatic = true;
+        [Tooltip("(default: true) Set all world mesh objects to be static -- batching, lightmapping, navigation, reflection, everything. However, non-solid and trigger entities will NOT be navigation static.")]
+        public bool worldIsStatic = true;
 
-        [Tooltip("(default: Default) Set all objects to use this layer. For example, maybe you have a 'World' layer or something.")]
+        [Tooltip("(default: func_group, func_detail) If an entity classname contains any word in this list, then merge its brushes (mesh and collider) into worldspawn and discard entity data. WARNING: most per-entity mesh and collider configs will be overriden by worldspawn; only the discarded entity's solidity will be respected.")]
+        public List<string> mergeToWorld = new List<string>() {"func_group", "func_detail"};
+
+        [Tooltip("(default: Default) Set ALL objects to use this layer. For example, maybe you have a 'World' layer. To set per-entity layers, see prefab slots below / Entity Overrides.")]
         public int layer = 0;
 
-        [Tooltip("(optional) Prefab to use for the root of EVERY entity including worldspawn. Ignores the config-wide static / layer settings above.")]
+        [Tooltip("(optional) Prefab template to use for the root of EVERY entity including worldspawn. Ignores the config-wide static / layer settings above.")]
         public GameObject entityPrefab;
         
-        [Tooltip("(optional) Prefab to use for each mesh + material in each entity. meshFilter.sharedMesh and meshRenderer.sharedMaterial will be overridden. Useful for setting layers, renderer settings, etc. Ignores the config-wide static / layer settings above.")]
+        [Tooltip("(optional) Prefab template to use for each mesh + material in each entity. meshFilter.sharedMesh and meshRenderer.sharedMaterial will be overridden. Useful for setting layers, renderer settings, etc. Ignores the global static / layer settings above.")]
         public GameObject meshPrefab;
 
-        [Tooltip("(optional) Override the prefabs used for each entity type. For example, a door might need its own special prefab. Order matters, we use the first override that matches. Ignores the config-wide static / layer settings above.")]
+        [Tooltip("(optional) Override the prefabs used for each entity type. For example, a door might need its own special prefab. Order matters, we use the first override that matches. Ignores the global static / layer settings above.")]
         public EntityOverride[] entityOverrides;
 
         /// <summary> note: textureName must already be ToLowerInvariant() </summary>
@@ -91,6 +98,17 @@ namespace Scopa {
             var search = textureName;
             for(int i=0; i<cullTextures.Count; i++) {
                 if ( search.Contains(cullTextures[i]) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
+        public bool IsEntityMergeToWorld(string entityClassname) {
+            var search = entityClassname;
+            for(int i=0; i<mergeToWorld.Count; i++) {
+                if ( search.Contains(mergeToWorld[i]) ) {
                     return true;
                 }
             }

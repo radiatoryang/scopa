@@ -54,6 +54,7 @@ namespace Scopa {
             // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
 
             warnedUserAboutMultipleColliders = false;
+            BuildMapPrepass( mapFile, config );
             CacheMaterialSearch();
             meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial, config);
 
@@ -80,6 +81,33 @@ namespace Scopa {
             #endif
         }
 
+        /// <summary>Before generating game objects, we may want to modify some of the MapFile data. For example, when merging entities into worldspawn.</summary>
+        static void BuildMapPrepass( MapFile mapFile, ScopaMapConfig config ) {
+            PrepassEntityRecursive( mapFile.Worldspawn, mapFile.Worldspawn, config );
+        }
+
+        /// <summary>Core recursive function for traversing entity tree and pre-passing each entity</summary>
+        static void PrepassEntityRecursive( Worldspawn worldspawn, Entity ent, ScopaMapConfig config) {
+            bool mergeToWorld = config.IsEntityMergeToWorld(ent.ClassName);
+            if ( mergeToWorld ) {
+                ent.discard = true;
+            }
+
+            for (int i=0; i<ent.Children.Count; i++) {
+                if ( ent.Children[i] is Entity ) {
+                    PrepassEntityRecursive( worldspawn, ent.Children[i] as Entity, config );
+                } // merge child brush to worldspawn
+                else if ( mergeToWorld && ent.Children[i] is Solid ) {
+                    ((Solid)ent.Children[i]).entityDataOverride = ent; // but preserve old entity data for mesh / collider generation
+                    worldspawn.Children.Add(ent.Children[i]);
+                    ent.Children.RemoveAt(i);
+                    i--;
+                    continue;
+                }
+            }
+
+        }
+
         /// <summary> The main core function for converting entities (worldspawn, func_, etc.) into 3D meshes. </summary>
         public static List<Mesh> AddGameObjectFromEntityRecursive( GameObject rootGameObject, Entity ent, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var allMeshes = new List<Mesh>();
@@ -89,7 +117,7 @@ namespace Scopa {
                 allMeshes.AddRange( newMeshes );
 
             foreach ( var child in ent.Children ) {
-                if ( child is Entity ) {
+                if ( child is Entity && ((Entity)child).discard == false ) {
                     var newMeshChildren = AddGameObjectFromEntityRecursive(rootGameObject, child as Entity, namePrefix, defaultMaterial, config);
                     if ( newMeshChildren.Count > 0)
                         allMeshes.AddRange( newMeshChildren );
@@ -105,12 +133,12 @@ namespace Scopa {
             var lastSolidID = -1;
 
             // detect per-entity smoothing angle, if defined
-            var smoothNormalAngle = 0;
+            var entitySmoothNormalAngle = 0;
             if (entData.TryGetInt("_phong", out var phong) && phong >= 1) {
                 if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
-                    smoothNormalAngle = Mathf.RoundToInt( phongAngle );
+                    entitySmoothNormalAngle = Mathf.RoundToInt( phongAngle );
                 } else {
-                    smoothNormalAngle = 89;
+                    entitySmoothNormalAngle = 89;
                 }
             }
 
@@ -122,8 +150,8 @@ namespace Scopa {
                 calculateOrigin = false;
             }
 
-            var needsCollider = !config.IsEntityNonsolid(entData.ClassName);
-            var isTrigger = config.IsEntityTrigger(entData.ClassName);
+            var entityNeedsCollider = !config.IsEntityNonsolid(entData.ClassName);
+            var entityIsTrigger = config.IsEntityTrigger(entData.ClassName);
 
             // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
             var materialLookup = new Dictionary<string, ScopaMapConfig.MaterialOverride>();
@@ -239,7 +267,12 @@ namespace Scopa {
                 if ( verts.Count == 0 || tris.Count == 0) 
                     continue;
                     
-                var newMesh = BuildMeshFromBuffers(namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, config, entityOrigin, smoothNormalAngle);
+                var newMesh = BuildMeshFromBuffers(
+                    namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
+                    config, 
+                    entityOrigin,
+                    entitySmoothNormalAngle
+                );
                 meshList.Add(newMesh);
 
                 // finally, add mesh as game object, while we still have all the entity information
@@ -259,8 +292,8 @@ namespace Scopa {
                     newMeshObj.layer = config.layer;
                 }
 
-                if ( meshPrefab == null && config.isStatic) {
-                    SetGameObjectStatic(newMeshObj, needsCollider && !isTrigger);
+                if ( meshPrefab == null && config.worldIsStatic) {
+                    SetGameObjectStatic(newMeshObj, entityNeedsCollider && !entityIsTrigger);
                 }
 
                 // populate components... if the mesh components aren't there, then add them
@@ -271,7 +304,7 @@ namespace Scopa {
             }
 
             // collision pass, now treat it all as one object and ignore texture names
-            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && needsCollider )
+            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider )
                 meshList.AddRange( ScopaCore.AddColliders( entityObject, entData, config, namePrefix ) );
             
             return meshList;
@@ -315,11 +348,12 @@ namespace Scopa {
                     continue;
 
                 // test for unseen / hidden faces, and discard
-                foreach( var otherFace in allFaces ) {
-                    if (otherFace.OccludesFace(face)) {
+                for(int i=0; i<allFaces.Count; i++) {
+                    if (allFaces[i].OccludesFace(face)) {
                         // Debug.Log("discarding unseen face at " + face);
                         // face.DebugDrawVerts(Color.yellow);
                         face.discardWhenBuildingMesh = true;
+                        break;
                     }
                 }
 
@@ -428,16 +462,20 @@ namespace Scopa {
             if ( forceConvex || (!isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) ) {
                 ClearMeshBuffers();
                 foreach ( var solid in solids ) {
+                    // omit non-solids and triggers
+                    if ( solid.entityDataOverride != null && (config.IsEntityNonsolid(solid.entityDataOverride.ClassName) || config.IsEntityTrigger(solid.entityDataOverride.ClassName)) )
+                        continue;
+
                     BufferMeshDataFromSolid(solid, config, null, true);
                 }
 
                 var newMesh = BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
                 var newMeshCollider = gameObject.AddComponent<MeshCollider>();
                 newMeshCollider.convex = forceConvex;
-                newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
-                    | MeshColliderCookingOptions.EnableMeshCleaning 
-                    | MeshColliderCookingOptions.WeldColocatedVertices 
-                    | MeshColliderCookingOptions.UseFastMidphase;
+                // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
+                //     | MeshColliderCookingOptions.EnableMeshCleaning 
+                //     | MeshColliderCookingOptions.WeldColocatedVertices 
+                //     | MeshColliderCookingOptions.UseFastMidphase;
                 newMeshCollider.isTrigger = isTrigger;
                 newMeshCollider.sharedMesh = newMesh;
 
@@ -447,12 +485,16 @@ namespace Scopa {
             else 
             { 
                 foreach ( var solid in solids ) {   
+                    // does the brush have an entity data override that was non solid? then ignore this brush
+                    if ( solid.entityDataOverride != null && config.IsEntityNonsolid(solid.entityDataOverride.ClassName) )
+                        continue;
+
                     // box collider is the simplest, so we should always try it first       
                     if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.ConvexMeshColliderOnly && TryAddBoxCollider(gameObject, solid, config, isTrigger) ) 
                         continue;
 
                     // otherwise, use a convex mesh collider
-                    var newMeshCollider = AddMeshCollider(gameObject, solid, config, isTrigger);
+                    var newMeshCollider = AddMeshCollider(gameObject, solid, config, solid.entityDataOverride != null ? config.IsEntityTrigger(solid.entityDataOverride.ClassName) : isTrigger);
                     newMeshCollider.name = namePrefix + "-" + ent.ClassName + "#" + solid.id + "-Collider";
                     meshList.Add( newMeshCollider ); 
                 }
@@ -503,10 +545,10 @@ namespace Scopa {
         
             var newMeshCollider = gameObject.AddComponent<MeshCollider>();
             newMeshCollider.convex = true;
-            newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
-                | MeshColliderCookingOptions.EnableMeshCleaning 
-                | MeshColliderCookingOptions.WeldColocatedVertices 
-                | MeshColliderCookingOptions.UseFastMidphase;
+            // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
+            //     | MeshColliderCookingOptions.EnableMeshCleaning 
+            //     | MeshColliderCookingOptions.WeldColocatedVertices 
+            //     | MeshColliderCookingOptions.UseFastMidphase;
             newMeshCollider.isTrigger = isTrigger;
             newMeshCollider.sharedMesh = newMesh;
             

@@ -6,6 +6,7 @@ namespace Scopa.Formats.Map.Objects
 {
     public class Solid : MapObject
     {
+        public Entity entityDataOverride;
         public List<Face> Faces { get; set; }
         public List<Mesh> Meshes { get; set; }
         public int id = -1;

@@ -28,7 +28,17 @@ namespace Scopa.Formats.Map.Objects
 
             // then, test whether one face's vertices are completely inside the other
             var ignoreAxis = maybeSmallerFace.Plane.GetMainAxisToNormal(); // 2D math is easier, so let's ignore the least important axis
-            var otherFaceCenter = maybeSmallerFace.Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / maybeSmallerFace.Vertices.Count; // slightly contract the vert, edge is unreliable
+
+            // slightly contract the vert, edge is unreliable
+            // var otherFaceCenter = maybeSmallerFace.Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / maybeSmallerFace.Vertices.Count; 
+
+            // manually aggregate and average for better perf?
+            var otherFaceCenter = maybeSmallerFace.Vertices[0];
+            for( int n=1; n<maybeSmallerFace.Vertices.Count; n++) {
+                otherFaceCenter += maybeSmallerFace.Vertices[n];
+            }
+            otherFaceCenter /= maybeSmallerFace.Vertices.Count;
+
             for( int i=0; i<maybeSmallerFace.Vertices.Count; i++ ) {
                 var smallFaceVert = maybeSmallerFace.Vertices[i] + (otherFaceCenter - maybeSmallerFace.Vertices[i]).normalized * 0.1f;
                 switch (ignoreAxis) {

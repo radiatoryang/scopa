@@ -205,12 +205,23 @@ namespace Scopa.Formats.Map.Formats
             return null;
         }
 
+        static List<string> parts = new List<string>(32);
         private static Face ReadFace(string line)
         {
             const NumberStyles ns = NumberStyles.Float;
 
-            var parts = line.Split(' ');
-            // Debug.Log(line);
+            // var parts = line.Split(' ');
+            
+            // trying to lower memory usage by manually splitting instead
+            parts.Clear();
+            int substringStart = 0;
+            for(int readIndex=0; readIndex<=line.Length; readIndex++) {
+                if (readIndex == line.Length || line[readIndex] == ' ') {
+                    parts.Add( line.Substring(substringStart, readIndex-substringStart) );
+                    substringStart = readIndex+1;
+                }
+            }
+            // Debug.Log( string.Join( ", ", parts) );
 
             Util.Assert(parts[0] == "(");
             Util.Assert(parts[4] == ")");
@@ -224,38 +235,17 @@ namespace Scopa.Formats.Map.Formats
             var b = NumericsExtensions.Parse(parts[6], parts[8], parts[7], ns, CultureInfo.InvariantCulture);
             var c = NumericsExtensions.Parse(parts[11], parts[13], parts[12], ns, CultureInfo.InvariantCulture);
 
-            // var ab = b - a;
-            // var ac = c - a;
-
-            // var normal = Vector3.Cross(ac, ab).normalized;
-            // var d = normal.Dot(a);
-
             var face = new Face()
             {
                 Plane = new Plane(a, b, c),
                 TextureName = parts[15].ToLowerInvariant()
             };
 
-            // idk why this is needed?
-            // if ( face.Plane.GetClosestAxisToNormal() != Vector3.up ) {
-            //     Debug.Log("reversing!");
+            // idk why this is needed? a quirk of how Unity handles planes?
             face.Plane.ReverseNormal();
-            // }
-
-            // Debug.Log(line + "\n" + face.Plane);
-
-            // if ( face.TextureName == "TOP") {
-            //     face.Plane.ReverseDistance();
-            //     Debug.Log("reverse: " + face.Plane);
-            // }
-
-            // if ( face.Plane.distance > 0)
-            //     face.Plane.ReverseDistance();
-
-            // Debug.Log($"normal: {face.Plane.normal}, distance: {face.Plane.distance}");
 
             // idTech2, idTech3
-            if (parts.Length == 21 || parts.Length == 24)
+            if (parts.Count == 21 || parts.Count == 24)
             {
                 var direction = face.Plane.GetClosestAxisToNormal();
                 face.UAxis = direction == Vector3.right ? Vector3.forward : Vector3.right;
@@ -274,7 +264,7 @@ namespace Scopa.Formats.Map.Formats
                 face.YShift = yshift;
 
                 // idTech3
-                if (parts.Length == 24)
+                if (parts.Count == 24)
                 {
                     face.ContentFlags = int.Parse(parts[18], CultureInfo.InvariantCulture);
                     face.SurfaceFlags = int.Parse(parts[19], CultureInfo.InvariantCulture);
@@ -282,7 +272,7 @@ namespace Scopa.Formats.Map.Formats
                 }
             }
             // Worldcraft / version 220
-            else if (parts.Length == 31)
+            else if (parts.Count == 31)
             {
                 Util.Assert(parts[16] == "[");
                 Util.Assert(parts[21] == "]");
@@ -299,7 +289,7 @@ namespace Scopa.Formats.Map.Formats
             }
             else
             {
-                Util.Assert(false, $"Unknown number of tokens ({parts.Length}) in face definition.");
+                Util.Assert(false, $"Unknown number of tokens ({parts.Count}) in face definition.");
             }
 
             return face;
