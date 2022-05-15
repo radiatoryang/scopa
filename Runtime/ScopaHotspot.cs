@@ -12,8 +12,8 @@ namespace Scopa {
     public class ScopaHotspot {
 
         /// <summary> main hotspot UV function; grabs verts, returns FALSE if the face verts are too big for the hotspot atlas (based on the atlas' fallback threshold)</summary>
-        public static bool TryGetHotspotUVs(List<Vector3> faceVerts, HotspotTexture atlas, out Vector2[] uvs, float scalar = 0.03125f) {
-            uvs = PlanarProject(faceVerts);
+        public static bool TryGetHotspotUVs(List<Vector3> faceVerts, Vector3 normal, HotspotTexture atlas, out Vector2[] uvs, float scalar = 0.03125f) {
+            uvs = PlanarProject(faceVerts, normal);
 
             var approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
 
@@ -38,16 +38,27 @@ namespace Scopa {
             
         }
 
-        static Vector2[] PlanarProject(List<Vector3> faceVerts) {
+        static Vector2[] PlanarProject(List<Vector3> faceVerts, Vector3 normal) {
             if ( faceVerts.Count < 3) {
                 Debug.LogError("Cannot planar project for less than 3 vertices.");
                 return null;
             }
             var uvs = new Vector2[faceVerts.Count];
-            var plane = new Plane(faceVerts[0], faceVerts[1], faceVerts[2]);
-            var normal = plane.normal * Mathf.Sign(plane.distance);
+            // var plane = new Plane(faceVerts[faceVerts.Count-3], faceVerts[faceVerts.Count-2], faceVerts[faceVerts.Count-1]);
+            // var normal = plane.normal * Mathf.Sign(plane.distance);
+
+            // use longest edge as vAxis
+            Vector3 longestEdge = Vector3.zero;
+            for(int i=0; i<faceVerts.Count; i++) {
+                var newEdge = faceVerts[(i+1)%faceVerts.Count] - faceVerts[i];
+                if ( newEdge.sqrMagnitude > longestEdge.sqrMagnitude ) {
+                    longestEdge = newEdge;
+                }
+            }
+            var vAxis = longestEdge;
             
-            var vAxis = plane.GetClosestAxisToNormal() != Vector3.up ? Vector3.up : Vector3.right; 
+            // var normalAbs = normal.Absolute();
+            // var vAxis = normalAbs.y > normalAbs.x && normalAbs.y > normalAbs.z ? Vector3.right : Vector3.up; 
 
             var uAxis = Vector3.Cross( normal, vAxis );
             
@@ -57,14 +68,14 @@ namespace Scopa {
             }
 
             // rotate planar projection to align with the longest edge
-            Vector2 longestEdge = Vector2.zero;
+            Vector2 longestEdge2 = Vector2.zero;
             for(int i=0; i<uvs.Length; i++) {
                 var newEdge = uvs[(i+1)%uvs.Length] - uvs[i];
-                if ( newEdge.sqrMagnitude > longestEdge.sqrMagnitude ) {
-                    longestEdge = newEdge;
+                if ( newEdge.sqrMagnitude > longestEdge2.sqrMagnitude ) {
+                    longestEdge2 = newEdge;
                 }
             }
-            RotateUVs(uvs, Vector2.Angle( Vector2.right, longestEdge.normalized) );
+            RotateUVs(uvs, Vector2.Angle( Vector2.right, longestEdge2.normalized) );
 
             return uvs;
         }

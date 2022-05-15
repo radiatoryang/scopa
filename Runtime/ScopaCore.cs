@@ -187,7 +187,7 @@ namespace Scopa {
                         // this face is using a hotspot material, so...
                         if ( materialOverride != null && materialOverride.hotspotAtlas != null && materialOverride.hotspotAtlas.fallbackMaterial != null) {
                             // detect if the face is too big to fit any hotspot! if it is, then use the fallback material (which is hopefully a regular tiling material?)
-                            if ( ScopaHotspot.TryGetHotspotUVs(face.Vertices, materialOverride.hotspotAtlas, out var uvs, config.scalingFactor ) == false ) {
+                            if ( ScopaHotspot.TryGetHotspotUVs(face.Vertices, face.Plane.normal, materialOverride.hotspotAtlas, out var uvs, config.scalingFactor ) == false ) {
                                 newMaterial = materialOverride.hotspotAtlas.fallbackMaterial;
                                 face.TextureName = newMaterial.name;
                                 materialOverride = null;
@@ -432,7 +432,7 @@ namespace Scopa {
 
             if ( hotspotAtlas != null ) {
                 // uvs.AddRange( ScopaHotspot.GetHotspotUVs( verts.GetRange(lastVertIndexOfList, face.Vertices.Count), hotspotAtlas ) );
-                if ( !ScopaHotspot.TryGetHotspotUVs( face.Vertices, hotspotAtlas, out var hotspotUVs, scalingFactor )) {
+                if ( !ScopaHotspot.TryGetHotspotUVs( face.Vertices, face.Plane.normal, hotspotAtlas, out var hotspotUVs, scalingFactor )) {
                     // TODO: wow uhh I really fucked up with this design... no easy way to suddenly put this in a different material
                     // ... it will need a pre-pass
                 }
