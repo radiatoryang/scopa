@@ -196,25 +196,25 @@ namespace Scopa {
             // build color buckets / palette groups
             // TODO: switch quantizer to https://github.com/JeremyAnsel/JeremyAnsel.ColorQuant/blob/master/JeremyAnsel.ColorQuant/JeremyAnsel.ColorQuant/WuColorQuantizer.cs
             // or maybe https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/Octree.cs
-            int iterations = 0;
-            while (buckets.Count < paletteColorCount && iterations < paletteColorCount) {
-                newBuckets.Clear();
-                for (var i = 0; i < buckets.Count; i++) {
-                    if (newBuckets.Count + (buckets.Count - i) < paletteColorCount) {
-                        buckets[i].Split(out var b1, out var b2);
-                        newBuckets.Add(b1);
-                        newBuckets.Add(b2);
-                    }
-                    else {
-                        newBuckets.AddRange(buckets.GetRange(i, buckets.Count - i));
-                        break;
-                    }
-                }
-                buckets.Clear();
-                buckets.AddRange( newBuckets );
-                iterations++;
-            }
-            Debug.Log($"color palette has {buckets.Count} colors");
+            // int iterations = 0;
+            // while (buckets.Count < paletteColorCount && iterations < paletteColorCount) {
+            //     newBuckets.Clear();
+            //     for (var i = 0; i < buckets.Count; i++) {
+            //         if (newBuckets.Count + (buckets.Count - i) < paletteColorCount) {
+            //             buckets[i].Split(out var b1, out var b2);
+            //             newBuckets.Add(b1);
+            //             newBuckets.Add(b2);
+            //         }
+            //         else {
+            //             newBuckets.AddRange(buckets.GetRange(i, buckets.Count - i));
+            //             break;
+            //         }
+            //     }
+            //     buckets.Clear();
+            //     buckets.AddRange( newBuckets );
+            //     iterations++;
+            // }
+            // Debug.Log($"color palette has {buckets.Count} colors");
 
             // pad out any unused palette slots
             // actually, let's disable transparency for now
