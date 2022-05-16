@@ -15,9 +15,6 @@ using UnityEditor;
 namespace Scopa {
     /// <summary>main class for core Scopa MAP functions</summary>
     public static class ScopaCore {
-        public static bool warnedUserAboutMultipleColliders {get; private set;}
-        public const string colliderWarningMessage = "WARNING: Unity may complain about 'identifier uniqueness violations', importing too many colliders with same name and type. Ignore it.";
-
         // to avoid GC, we use big static lists so we just allocate once
         static List<Face> allFaces = new List<Face>();
         static List<Vector3> verts = new List<Vector3>(4096);
@@ -51,9 +48,7 @@ namespace Scopa {
         /// Outputs a lists of built meshes (e.g. so UnityEditor can serialize them)</summary>
         public static GameObject BuildMapIntoGameObject( MapFile mapFile, Material defaultMaterial, ScopaMapConfig config, out List<Mesh> meshList ) {
             var rootGameObject = new GameObject( mapFile.name );
-            // gameObject.AddComponent<ScopaBehaviour>().mapFileData = mapFile;
 
-            warnedUserAboutMultipleColliders = false;
             BuildMapPrepass( mapFile, config );
             CacheMaterialSearch();
             meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial, config);
@@ -503,14 +498,6 @@ namespace Scopa {
             return meshList;
         }
 
-        /// <summary> when we generate many colliders for one object, they all have the same reference path and the import isn't deterministic... and Unity throws a lot of warnings at the user. This is a warning about the warnings. </summary>
-        public static void ShowColliderWarning(bool always=false) {
-            if (Application.isEditor && (always || !warnedUserAboutMultipleColliders) ) {
-                Debug.LogWarning(colliderWarningMessage);
-                warnedUserAboutMultipleColliders = true;
-            }
-        }
-
         /// <summary> given a brush solid, calculate the AABB bounds for all its vertices, and add that Box Collider to the gameObject </summary>
         static bool TryAddBoxCollider(GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
             verts.Clear();
@@ -524,11 +511,14 @@ namespace Scopa {
                     }
                 }
             }
- 
-            ShowColliderWarning();
 
             var bounds = GeometryUtility.CalculateBounds(verts.ToArray(), Matrix4x4.identity);
-            var boxCol = gameObject.AddComponent<BoxCollider>();
+            var newGO = new GameObject("BoxCollider#" + solid.id.ToString() );
+            newGO.transform.SetParent( gameObject.transform );
+            newGO.transform.localPosition = Vector3.zero;
+            newGO.transform.localRotation = Quaternion.identity;
+            newGO.transform.localScale = Vector3.one;
+            var boxCol = newGO.AddComponent<BoxCollider>();
             boxCol.center = bounds.center;
             boxCol.size = bounds.size;
             boxCol.isTrigger = isTrigger;
@@ -540,10 +530,13 @@ namespace Scopa {
             ClearMeshBuffers();
             BufferMeshDataFromSolid(solid, config, null, true);
             var newMesh = BuildMeshFromBuffers( solid.id.ToString() + "-Collider", config, gameObject.transform.position, -1);
-
-            ShowColliderWarning();
         
-            var newMeshCollider = gameObject.AddComponent<MeshCollider>();
+            var newGO = new GameObject("MeshColliderConvex#" + solid.id.ToString() );
+            newGO.transform.SetParent( gameObject.transform );
+            newGO.transform.localPosition = Vector3.zero;
+            newGO.transform.localRotation = Quaternion.identity;
+            newGO.transform.localScale = Vector3.one;
+            var newMeshCollider = newGO.AddComponent<MeshCollider>();
             newMeshCollider.convex = true;
             // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
             //     | MeshColliderCookingOptions.EnableMeshCleaning 

@@ -27,12 +27,6 @@ namespace Scopa.Editor {
                 } else {
                     EditorGUILayout.PropertyField(prop, true);
                 }
-
-                if ( prop.name == "colliderMode" ) {
-                    if (prop.enumValueIndex != (int)ScopaMapConfig.ColliderImportMode.None ) {
-                        EditorGUILayout.HelpBox( ScopaCore.colliderWarningMessage, MessageType.Info );
-                    }
-                }
             }
             while (prop.NextVisible(false));
 

@@ -42,7 +42,7 @@ namespace Scopa {
 
         [Space(), Header("COLLIDERS")]
 
-        [Tooltip("(default: Box and Convex) For each brush we add a collider. Axis-aligned boxy brushes use Box Colliders, anything else gets a convex Mesh Collider. You can also force all Box / all Mesh colliders. For lots of brushes, a single merged concave Mesh Collider might be better.")]
+        [Tooltip("(default: Box and Convex) For each brush we add a collider. Axis-aligned boxy brushes use Box Colliders, anything else gets a convex Mesh Collider. You can also force just one type, or use a big complex expensive concave Mesh Collider.")]
         public ColliderImportMode colliderMode = ColliderImportMode.BoxAndConvex;
 
         [Tooltip("(default: illusionary) If an entity's classname contains a word in this list, do not generate a collider for it and disable Navigation Static for it.")]
@@ -89,6 +89,9 @@ namespace Scopa {
 
         [Tooltip("(optional) Override the prefabs used for each entity type. For example, a door might need its own special prefab. Order matters, we use the first override that matches. Ignores the global static / layer settings above.")]
         public EntityOverride[] entityOverrides;
+
+        [Tooltip("(optional) If there isn't an entity override defined above, then the next place we look for entity prefabs is in this FGD asset.")]
+        public ScopaFgdConfigAsset fgdAsset;
 
         /// <summary> note: textureName must already be ToLowerInvariant() </summary>
         public bool IsTextureNameCulled(string textureName) {
@@ -149,14 +152,24 @@ namespace Scopa {
 
         /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
         public GameObject GetEntityPrefabFor(string entityClassname) {
-            if ( entityOverrides == null || entityOverrides.Length == 0) {
+            // special early out for default case
+            if ( fgdAsset == null && (entityOverrides == null || entityOverrides.Length == 0) ) {
                 return entityPrefab;
             }
 
+            // try looking in the MAP config
             var search = entityOverrides.Where( cfg => entityClassname.Contains(cfg.entityClassName.ToLowerInvariant()) ).FirstOrDefault();
             if ( search != null && search.entityPrefab != null) {
                 return search.entityPrefab;
             }
+
+            // try looking in the FGD config
+            if ( fgdAsset != null ) {
+                var fgdSearch = fgdAsset.config.GetEntityPrefabFor(entityClassname);
+                if ( fgdSearch != null)
+                    return fgdSearch;
+            }
+
             return entityPrefab;
         }
 
