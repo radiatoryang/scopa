@@ -108,7 +108,19 @@ namespace Scopa.Formats.Map.Objects
             return false;
         }
 
-        /// <summary> parses an entity property as an unscaled Vector3 (swizzled for Unity in XZY format) useful for raw euler angles, if it exists as a valid Vector3; empty or whitespace will return false </summary>
+        /// <summary> parses an entity property as an unscaled Vector3 and applies axis corrections </summary>
+        public bool TryGetAngles3D(string propertyKey, out Quaternion rotation, bool verbose = false) {
+            rotation = Quaternion.identity;
+
+            if ( TryGetVector3Unscaled(propertyKey, out var angles, verbose) ) {
+                rotation = Quaternion.Euler(angles.x, -angles.z + 90, angles.y);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary> parses an entity property as an unscaled Vector3 (swizzled for Unity in XZY format), if it exists as a valid Vector3; empty or whitespace will return false </summary>
         public bool TryGetVector3Unscaled(string propertyKey, out Vector3 vec, bool verbose = false) {
             vec = Vector3.zero;
 

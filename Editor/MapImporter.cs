@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEditor;
+using System.Diagnostics;
 
 #if UNITY_2020_2_OR_NEWER
 using UnityEditor.AssetImporters;
@@ -26,7 +27,10 @@ namespace Scopa.Editor {
                 config = new ScopaMapConfig();
             }
 
+            var parseTimer = new Stopwatch();
+            parseTimer.Start();
             var mapFile = ScopaCore.ParseMap(filepath, config);
+            parseTimer.Stop();
  
             // try to find the default gridded blockout material... but if we can't find it, fallback to plain Unity gray material
             var defaultMaterial = config.defaultMaterial != null ? config.defaultMaterial : AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
@@ -38,7 +42,11 @@ namespace Scopa.Editor {
             }
 
             // this is where the magic happens
+            var buildTimer = new Stopwatch();
+            buildTimer.Start();
             var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, defaultMaterial, config, out var meshList);
+            buildTimer.Stop();
+
             ctx.AddObjectToAsset(gameObject.name, gameObject);
 
             // we have to serialize every mesh as a subasset, or else it won't get saved
@@ -50,6 +58,8 @@ namespace Scopa.Editor {
             ctx.SetMainObject(gameObject);
 
             EditorUtility.SetDirty(gameObject);
+
+            UnityEngine.Debug.Log($"imported {filepath}\n Parsed in {parseTimer.ElapsedMilliseconds} ms, Built in {buildTimer.ElapsedMilliseconds} ms");
             //PrefabUtility.RecordPrefabInstancePropertyModifications(gameObject);
         }
     }

@@ -19,7 +19,7 @@ namespace Scopa {
         static Color32[] palette = new Color32[256];
         static List<ColorBucket> buckets = new List<ColorBucket>(128*128);
         static List<ColorBucket> newBuckets = new List<ColorBucket>(256);
-        static Texture2D resizedTexture;
+        public static Texture2D resizedTexture { get; private set; }
 
         #region WAD Reading
 

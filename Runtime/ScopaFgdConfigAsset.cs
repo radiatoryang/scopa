@@ -122,6 +122,9 @@ namespace Scopa {
             [Tooltip("(optional) custom prefab templates to use, just for this entity type")]
             public GameObject entityPrefab, meshPrefab;
 
+            [Tooltip("if exporting an OBJ preview, should we scale the model? Set to <= 0 to disable OBJ generation for this entity.")]
+            public float objScale = 0f;
+
             [Tooltip("(optional) base property templates to include")] 
             public string[] baseIncludes;
 
@@ -133,11 +136,13 @@ namespace Scopa {
             }
 
             public override string ToString() {
+                // TODO: use StringBuilder
+
                 var text = $"@{classType.ToString()} ";
 
-                if ( classType == FgdClassType.PointClass) {
-                    text += "flags(Angle) ";
-                }
+                // if ( classType == FgdClassType.PointClass) {
+                //     text += "flags(Angle) ";
+                // }
                 
                 if ( baseIncludes.Length > 0) {
                     text += $"base({string.Join(", ", baseIncludes)}) ";
@@ -149,6 +154,10 @@ namespace Scopa {
 
                 if ( editorColor.a != 0x00 ) {
                     text += $"color({editorColor.r} {editorColor.g} {editorColor.b}) ";
+                }
+
+                if ( classType == FgdClassType.PointClass && entityPrefab != null && objScale > 0 ) {
+                    text += $"model(\"assets/{className}.obj\") ";
                 }
 
                 text += $"= {className} : \"{editorHelp}\"\n[\n{string.Join("\n", properties.Select( prop => prop.ToString() ))}\n]";
@@ -189,7 +198,7 @@ namespace Scopa {
                 var text = $"    {key}({type.ToString().ToLowerInvariant()})";
 
                 if ( type != FgdPropertyType.Flags ) {
-                    text += $": \"{editorLabel}\" : {defaultValue} : \"{editorHelp}\"";
+                    text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\"";
                 }
 
                 if ( type == FgdPropertyType.Choices ) {

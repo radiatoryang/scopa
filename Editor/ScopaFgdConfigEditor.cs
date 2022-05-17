@@ -21,7 +21,7 @@ namespace Scopa.Editor {
                 var newPath = EditorUtility.SaveFilePanel("Export FGD file to...", defaultPath, defaultFilename, "fgd");
                 if ( ScopaCore.IsValidPath(newPath) ) {
                     fgd.lastSavePath = newPath;
-                    ScopaCore.ExportFgdFile(fgd, newPath);
+                    ScopaFgd.ExportFgdFile(fgd, newPath);
                     property.serializedObject.ApplyModifiedProperties();
                 }
                 GUIUtility.ExitGUI();

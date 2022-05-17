@@ -228,7 +228,13 @@ namespace Scopa {
             entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
             entityObject.transform.position = entityOrigin;
             // for point entities, import the "angle" property
-            entityObject.transform.localRotation = materialLookup.Count == 0 && entData.TryGetAngleSingle("angle", out var angle) ? angle : Quaternion.identity;
+            entityObject.transform.localRotation = Quaternion.identity;
+            if ( materialLookup.Count == 0 ) { // if there's no meshes and it's a point entity, then it has angles
+                if ( entData.TryGetAngles3D("angles", out var angles) )
+                    entityObject.transform.localRotation = angles;
+                else if (entData.TryGetAngleSingle("angle", out var angle))
+                    entityObject.transform.localRotation = angle;
+            }
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
 
@@ -336,24 +342,27 @@ namespace Scopa {
                 if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
                     continue;
 
-                if ( face.discardWhenBuildingMesh )
+                if ( !includeDiscardedFaces && face.discardWhenBuildingMesh )
                     continue;
 
                 if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
                     continue;
 
                 // test for unseen / hidden faces, and discard
-                for(int i=0; i<allFaces.Count; i++) {
-                    if (allFaces[i].OccludesFace(face)) {
-                        // Debug.Log("discarding unseen face at " + face);
-                        // face.DebugDrawVerts(Color.yellow);
-                        face.discardWhenBuildingMesh = true;
-                        break;
+                if ( !includeDiscardedFaces ) {
+                    for(int i=0; i<allFaces.Count; i++) {
+                        if (allFaces[i].OccludesFace(face)) {
+                            // Debug.Log("discarding unseen face at " + face);
+                            // face.DebugDrawVerts(Color.yellow);
+                            face.discardWhenBuildingMesh = true;
+                            break;
+                        }
                     }
-                }
+                    
 
-                if ( face.discardWhenBuildingMesh )
-                    continue;
+                    if ( face.discardWhenBuildingMesh )
+                        continue;
+                }
 
                 BufferScaledMeshDataForFace(
                     face, 
@@ -560,15 +569,6 @@ namespace Scopa {
             verts.Clear();
             tris.Clear();
             uvs.Clear();
-        }
-
-
-
-        public static void ExportFgdFile(ScopaFgdConfig fgd, string filepath) {
-            var fgdText = fgd.ToString();
-            var encoding = new System.Text.UTF8Encoding(false); // no BOM
-            System.IO.File.WriteAllText(filepath, fgdText, encoding);
-            Debug.Log("wrote FGD to " + filepath);
         }
 
         public static bool IsValidPath(string newPath) {
