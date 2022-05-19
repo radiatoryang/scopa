@@ -223,7 +223,16 @@ namespace Scopa {
             var entityPrefab = config.GetEntityPrefabFor(entData.ClassName);
             var meshPrefab = config.GetMeshPrefabFor(entData.ClassName);
 
-            var entityObject = entityPrefab != null ? Instantiate(entityPrefab) : new GameObject();
+            GameObject entityObject = null; 
+            if ( entityPrefab != null ) {
+                #if UNITY_EDITOR
+                entityObject = UnityEditor.PrefabUtility.InstantiatePrefab(entityPrefab) as GameObject; // maintain prefab linkage
+                #else
+                entityObject = Instantiate(entityPrefab);
+                #endif
+            } else {
+                entityObject = new GameObject();
+            }
 
             entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
             entityObject.transform.position = entityOrigin;
@@ -277,7 +286,16 @@ namespace Scopa {
                 meshList.Add(newMesh);
 
                 // finally, add mesh as game object, while we still have all the entity information
-                var newMeshObj = meshPrefab != null ? Instantiate(meshPrefab) : new GameObject();
+                GameObject newMeshObj = null;
+                if ( meshPrefab != null ) {
+                    #if UNITY_EDITOR
+                    newMeshObj = UnityEditor.PrefabUtility.InstantiatePrefab(meshPrefab) as GameObject; // maintain prefab linkage
+                    #else
+                    newMeshObj = Instantiate(meshPrefab);
+                    #endif
+                } else {
+                    newMeshObj = new GameObject();
+                }
 
                 newMeshObj.name = textureKVP.Key;
                 newMeshObj.transform.SetParent(entityObject.transform);
