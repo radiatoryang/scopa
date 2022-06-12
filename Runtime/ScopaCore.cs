@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Reflection;
 using Scopa.Formats.Map.Formats;
 using Scopa.Formats.Map.Objects;
 using Scopa.Formats.Texture.Wad;
@@ -325,6 +326,32 @@ namespace Scopa {
             // collision pass, now treat it all as one object and ignore texture names
             if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider )
                 meshList.AddRange( ScopaCore.AddColliders( entityObject, entData, config, namePrefix ) );
+
+            // now that we've finished building the gameobject, notify any custom user components that import is complete
+            var allEntityComponents = entityObject.GetComponentsInChildren<IScopaEntity>();
+            foreach( var entComp in allEntityComponents ) {
+                // scan for any FGD attribute and update accordingly
+                FieldInfo[] objectFields = entComp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public);
+                for (int i = 0; i < objectFields.Length; i++) {
+                    var attribute = Attribute.GetCustomAttribute(objectFields[i], typeof(FgdVar)) as FgdVar;
+                    if (attribute != null) {
+                        switch( attribute.propertyType ) {
+                            case FgdVar.VarType.Float:
+                                if ( entData.TryGetFloat(attribute.propertyKey, out var floatProp) )
+                                    objectFields[i].SetValue(entComp, floatProp);
+                                break;
+                            case FgdVar.VarType.Vector3Scaled:
+                                if ( entData.TryGetVector3Scaled(attribute.propertyKey, out var vec3Scaled, config.scalingFactor) )
+                                    objectFields[i].SetValue(entComp, vec3Scaled);
+                                break;
+                            default:
+                                Debug.LogError( $"FgdVar named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");
+                                break;
+                        }
+                    }
+                }
+                entComp.OnScopaImport( entityComponent );
+            }
             
             return meshList;
         }

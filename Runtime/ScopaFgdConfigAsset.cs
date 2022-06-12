@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace Scopa {
     /// <summary> ScriptableObject to use for configuring how Scopa exports .FGDs / setup entity bindings. </summary>
@@ -27,28 +28,28 @@ namespace Scopa {
         [HideInInspector] public string lastSavePath;
 
         public string ToString(bool includeHeaderAndWorldspawnAndIncludes = true) {
-            var text = "";
+            var sb = new System.Text.StringBuilder();
 
             if ( includeHeaderAndWorldspawnAndIncludes ) {
-                text += "\n// ======================================================================";
-                text += "\n// FGD for " + Application.productName + " " + Application.version;
-                text += "\n// generated on " + System.DateTime.Now.ToString("f");
-                text += "\n// ======================================================================\n\n";
+                sb.AppendLine("// ======================================================================");
+                sb.AppendLine("// FGD for " + Application.productName + " " + Application.version);
+                sb.AppendLine("// generated on " + System.DateTime.Now.ToString("f"));
+                sb.AppendLine("// ======================================================================\n");
             }
 
-            text += string.Join("\n\n", entityBases.Select( ent => ent.ToString() ) ) + "\n\n";
+            sb.Append(string.Join("\n\n", entityBases.Select( ent => ent.ToString() ) ) + "\n\n");
 
             if ( includeHeaderAndWorldspawnAndIncludes ) {
-                text += worldspawn.ToString() + "\n\n";
+                sb.Append(worldspawn.ToString() + "\n\n");
 
                 foreach ( var include in includeFgds ) {
-                    text += include.config.ToString(false);
+                    sb.Append(include.config.ToString(false));
                 }
             }
 
-            text += string.Join("\n\n", entityTypes.Select( ent => ent.ToString() ) ) + "\n\n";
+            sb.Append(string.Join("\n\n", entityTypes.Select( ent => ent.ToString() ) ) + "\n\n");
 
-            return text;
+            return sb.ToString();
         }
 
         /// <summary> utility function to collect all defined entity types together, as well as all the entities defined in any FGD includes </summary>
@@ -90,15 +91,15 @@ namespace Scopa {
             public FgdProperty[] properties;
 
             public override string ToString() {
-                var text = $"@BaseClass ";
+                var sb = new System.Text.StringBuilder($"@BaseClass ");
                 
                 if ( baseIncludes.Length > 0) {
-                    text += $"base({string.Join(", ", baseIncludes)}) ";
+                    sb.Append($"base({string.Join(", ", baseIncludes)}) ");
                 }
 
-                text += $" = {baseName}\n[\n {string.Join("\n", properties.Select( prop => prop.ToString() ))}\n]";
+                sb.Append($" = {baseName}\n[\n {string.Join("\n", properties.Select( prop => prop.ToString() ))}\n]");
 
-                return text;
+                return sb.ToString();
             }
         }
 
@@ -136,33 +137,63 @@ namespace Scopa {
             }
 
             public override string ToString() {
-                // TODO: use StringBuilder
-
-                var text = $"@{classType.ToString()} ";
+                var sb = new System.Text.StringBuilder($"@{classType.ToString()} ");
 
                 // if ( classType == FgdClassType.PointClass) {
                 //     text += "flags(Angle) ";
                 // }
                 
                 if ( baseIncludes.Length > 0) {
-                    text += $"base({string.Join(", ", baseIncludes)}) ";
+                    sb.Append($"base({string.Join(", ", baseIncludes)}) ");
                 }
 
                 if ( classType == FgdClassType.PointClass && editorSize.size.sqrMagnitude > 0 ) {
-                    text += $"size({editorSize.min.ToStringIntWithNoPunctuation()}, {editorSize.max.ToStringIntWithNoPunctuation()}) ";
+                    sb.Append($"size({editorSize.min.ToStringIntWithNoPunctuation()}, {editorSize.max.ToStringIntWithNoPunctuation()}) ");
                 }
 
                 if ( editorColor.a != 0x00 ) {
-                    text += $"color({editorColor.r} {editorColor.g} {editorColor.b}) ";
+                    sb.Append($"color({editorColor.r} {editorColor.g} {editorColor.b}) ");
                 }
 
                 if ( classType == FgdClassType.PointClass && entityPrefab != null && objScale > 0 ) {
-                    text += $"model(\"assets/{className}.obj\") ";
+                    sb.Append($"model(\"assets/{className}.obj\") ");
                 }
 
-                text += $"= {className} : \"{editorHelp}\"\n[\n{string.Join("\n", properties.Select( prop => prop.ToString() ))}\n]";
+                // gather additional properties with [FgdVar] attribute in the entityPrefab
+                var allProperties = properties.ToDictionary( p => p.key, p => p );
+                if ( entityPrefab != null) {
+                    var allEntityComponents = entityPrefab.GetComponents<IScopaEntity>();
+                    foreach( var entComp in allEntityComponents ) {
+                        // scan for any FGD attribute and update accordingly
+                        FieldInfo[] objectFields = entComp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public);
+                        for (int i = 0; i < objectFields.Length; i++) {
+                            var attribute = System.Attribute.GetCustomAttribute(objectFields[i], typeof(FgdVar)) as FgdVar;
+                            // if the propertyKey was already defined, then don't define it again
+                            if (attribute != null && !allProperties.ContainsKey(attribute.propertyKey) ) {
+                                var tooltip = System.Attribute.GetCustomAttribute(objectFields[i], typeof(TooltipAttribute)) as TooltipAttribute;
+                                var propType = FgdPropertyType.String;
+                                var defaultValue = objectFields[i].GetValue(entComp).ToString();
+                                switch( attribute.propertyType ) {
+                                    case FgdVar.VarType.Float:
+                                        propType = FgdPropertyType.Float;
+                                        break;
+                                    case FgdVar.VarType.Vector3Scaled:
+                                        propType = FgdPropertyType.String;
+                                        defaultValue = defaultValue.Substring(1, defaultValue.Length-2).Replace(",", "");
+                                        break;
+                                    default:
+                                        Debug.LogError( $"FgdVar named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");
+                                        break;
+                                }
+                                allProperties.Add( attribute.propertyKey, new FgdProperty(attribute.propertyKey, propType, attribute.editorLabel, tooltip != null ? tooltip.tooltip : "", defaultValue ));
+                            }
+                        }
+                    }
+                }
 
-                return text;
+                sb.Append($"= {className} : \"{editorHelp}\"\n[\n{string.Join("\n", allProperties.Values.Select( prop => prop.ToString() ))}\n]");
+
+                return sb.ToString();
             }
         }
 
@@ -194,17 +225,33 @@ namespace Scopa {
             [Tooltip("define the bitwise boolean spawnflags here")]
             public FgdFlag[] flags;
 
+            public FgdProperty (string key, FgdPropertyType type, string editorLabel, string editorHelp, string defaultValue) {
+                this.key = key;
+                this.type = type;
+                this.editorLabel = editorLabel;
+                this.editorHelp = editorHelp;
+                this.defaultValue = defaultValue;
+            }
+
             public override string ToString() {
                 var text = $"    {key}({type.ToString().ToLowerInvariant()})";
 
-                if ( type != FgdPropertyType.Flags ) {
-                    text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\"";
-                }
-
-                if ( type == FgdPropertyType.Choices ) {
-                    text += $" =\n    [\n        { string.Join("\n        ", choices.Select( (choice, index) => choice.ToString(index)) ) } \n    ]";
-                } else if ( type == FgdPropertyType.Flags ) {
-                    text += $" =\n    [\n        { string.Join("\n        ", flags.Select( (flag, index) => flag.ToString(index)) ) } \n    ]";
+                switch(type) {
+                    case FgdPropertyType.String:
+                        text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\"";
+                        break;
+                    case FgdPropertyType.Integer:
+                        text += $": \"{editorLabel}\" : {defaultValue} : \"{editorHelp}\"";
+                        break;
+                    case FgdPropertyType.Float:
+                        text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\"";
+                        break;
+                    case FgdPropertyType.Choices:
+                        text += $" =\n    [\n        { string.Join("\n        ", choices.Select( (choice, index) => choice.ToString(index)) ) } \n    ]";
+                        break;
+                    case FgdPropertyType.Flags:
+                        text += $" =\n    [\n        { string.Join("\n        ", flags.Select( (flag, index) => flag.ToString(index)) ) } \n    ]";
+                        break;
                 }
 
                 return text;
@@ -214,6 +261,7 @@ namespace Scopa {
         public enum FgdPropertyType {
             String,
             Integer,
+            Float,
             Choices,
             Flags
         }

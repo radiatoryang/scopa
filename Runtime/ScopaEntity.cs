@@ -4,6 +4,12 @@ using UnityEngine;
 using Scopa.Formats.Map.Objects;
 
 namespace Scopa {
+    /// <summary> interface for components that will grab entity data from a ScopaEntity component </summary>
+    public interface IScopaEntity {
+        /// <summary> on your component, implement OnScopaImport() to configure a component at import time </summary>
+        public virtual void OnScopaImport( ScopaEntity entity ) { }
+    }
+
     /// <summary> container to hold entity data; call GetComponent<ScopaEntity>().TryGet*() to poll for data </summary>
     public class ScopaEntity : MonoBehaviour
     {
