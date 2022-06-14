@@ -176,8 +176,8 @@ namespace Scopa {
 			}
 		}
 
-        /// <summary> resizeFactor must be a power of two number </summary>
-        static void WriteTextures(string folderPath, List<Material> materials, int resizeFactor = 8, int jpgQuality = 50) {
+        /// <summary> resizeFactor must be a power of two number, larger factor = smaller texture (e.g. 8 = 1/8 size)</summary>
+        static void WriteTextures(string folderPath, List<Material> materials, int resizeFactor = 16, int jpgQuality = 50) {
             foreach(var mat in materials) {
                 ScopaWad.ResizeCopyToBuffer( (Texture2D)mat.mainTexture, mat.color, mat.mainTexture.width / resizeFactor, mat.mainTexture.height / resizeFactor);
                 var bytes = ImageConversion.EncodeToJPG( ScopaWad.resizedTexture, jpgQuality);

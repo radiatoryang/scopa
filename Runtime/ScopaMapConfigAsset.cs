@@ -71,15 +71,18 @@ namespace Scopa {
 
 
         [Space(), Header("GAMEOBJECTS & ENTITIES")]
-        
-        [Tooltip("(default: true) Set all world mesh objects to be static -- batching, lightmapping, navigation, reflection, everything. However, non-solid and trigger entities will NOT be navigation static.")]
-        public bool worldIsStatic = true;
 
         [Tooltip("(default: func_group, func_detail) If an entity classname contains any word in this list, then merge its brushes (mesh and collider) into worldspawn and discard entity data. WARNING: most per-entity mesh and collider configs will be overriden by worldspawn; only the discarded entity's solidity will be respected.")]
         public List<string> mergeToWorld = new List<string>() {"func_group", "func_detail"};
 
+        [Tooltip("(default: worldspawn, func_wall) If an entity classname contains any word in this list AND it doesn't have prefab overrides (see Entity Overrides), then set its mesh objects to be static -- batching, lightmapping, navigation, reflection, everything. However, non-solid and trigger entities will NOT be navigation static.")]
+        public List<string> staticEntities = new List<string>() {"worldspawn", "func_wall"};
+
         [Tooltip("(default: Default) Set ALL objects to use this layer. For example, maybe you have a 'World' layer. To set per-entity layers, see prefab slots below / Entity Overrides.")]
         public int layer = 0;
+
+        [Tooltip("(default: true) if enabled, automatically add ScopaEntity component to all game objects (if not already present in the entityPrefab)... disable this if you don't want to use the built-in ScopaEntity at all, and override it with your own")]
+        public bool addScopaEntityComponent = true;
 
         [Tooltip("(optional) Prefab template to use for the root of EVERY entity including worldspawn. Ignores the config-wide static / layer settings above.")]
         public GameObject entityPrefab;
@@ -112,6 +115,17 @@ namespace Scopa {
             var search = entityClassname;
             for(int i=0; i<mergeToWorld.Count; i++) {
                 if ( search.Contains(mergeToWorld[i]) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
+        public bool IsEntityStatic(string entityClassname) {
+            var search = entityClassname;
+            for(int i=0; i<staticEntities.Count; i++) {
+                if ( search.Contains(staticEntities[i]) ) {
                     return true;
                 }
             }
@@ -166,8 +180,10 @@ namespace Scopa {
             // try looking in the FGD config
             if ( fgdAsset != null ) {
                 var fgdSearch = fgdAsset.config.GetEntityPrefabFor(entityClassname);
-                if ( fgdSearch != null)
+                if ( fgdSearch != null) {
+                    // Debug.Log("found FGD prefab for " + entityClassname);
                     return fgdSearch;
+                }
             }
 
             return entityPrefab;

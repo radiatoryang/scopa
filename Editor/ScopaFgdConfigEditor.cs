@@ -21,7 +21,7 @@ namespace Scopa.Editor {
                 var newPath = EditorUtility.SaveFilePanel("Export FGD file to...", defaultPath, defaultFilename, "fgd");
                 if ( ScopaCore.IsValidPath(newPath) ) {
                     fgd.lastSavePath = newPath;
-                    ScopaFgd.ExportFgdFile(fgd, newPath);
+                    ScopaFgd.ExportFgdFile(fgd, newPath, fgd.exportModels);
                     property.serializedObject.ApplyModifiedProperties();
                 }
                 GUIUtility.ExitGUI();
@@ -39,7 +39,7 @@ namespace Scopa.Editor {
             var indent = EditorGUI.indentLevel;
             EditorGUI.indentLevel = 0;
 
-            SerializedProperty prop = property.FindPropertyRelative("worldspawn");
+            SerializedProperty prop = property.FindPropertyRelative("exportModels");
             do {
                 EditorGUILayout.PropertyField(prop, true);
             }

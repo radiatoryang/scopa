@@ -12,7 +12,12 @@ namespace Scopa {
     }
 
     [System.Serializable]
-    public class ScopaFgdConfig {       
+    public class ScopaFgdConfig {
+        [Header("Export Config")]
+        [Tooltip("(default: true) if enabled, will attempt to generate a .OBJ preview model for each entity prefab (based on Mesh Renderers and Skinned Mesh Renderers) and export it alongside the FGD with low res textures.")]
+        public bool exportModels = true;
+
+        [Header("FGD Config")]
         [Tooltip("worldspawn is a required brush entity type, the root of all entities")]
         public FgdClass worldspawn = new FgdClass("worldspawn", FgdClassType.SolidClass);
 
@@ -159,33 +164,53 @@ namespace Scopa {
                     sb.Append($"model(\"assets/{className}.obj\") ");
                 }
 
-                // gather additional properties with [FgdVar] attribute in the entityPrefab
+                // gather additional properties with [BindFgd] attribute in the entityPrefab
                 var allProperties = properties.ToDictionary( p => p.key, p => p );
                 if ( entityPrefab != null) {
-                    var allEntityComponents = entityPrefab.GetComponents<IScopaEntity>();
+                    var allEntityComponents = entityPrefab.GetComponents<IScopaEntityImport>();
                     foreach( var entComp in allEntityComponents ) {
+
                         // scan for any FGD attribute and update accordingly
                         FieldInfo[] objectFields = entComp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public);
                         for (int i = 0; i < objectFields.Length; i++) {
-                            var attribute = System.Attribute.GetCustomAttribute(objectFields[i], typeof(FgdVar)) as FgdVar;
-                            // if the propertyKey was already defined, then don't define it again
-                            if (attribute != null && !allProperties.ContainsKey(attribute.propertyKey) ) {
-                                var tooltip = System.Attribute.GetCustomAttribute(objectFields[i], typeof(TooltipAttribute)) as TooltipAttribute;
+                            var attribute = System.Attribute.GetCustomAttribute(objectFields[i], typeof(BindFgd)) as BindFgd;
+
+                            if (attribute != null && !allProperties.ContainsKey(attribute.propertyKey) ) { // if the propertyKey was already manually defined, then don't define it again
+                                var propHelp = System.Attribute.GetCustomAttribute(objectFields[i], typeof(TooltipAttribute)) as TooltipAttribute;
                                 var propType = FgdPropertyType.String;
-                                var defaultValue = objectFields[i].GetValue(entComp).ToString();
+                                var propDefaultValue = objectFields[i].GetValue(entComp).ToString();
+                                var propChoices = new List<FgdEnum>();
                                 switch( attribute.propertyType ) {
-                                    case FgdVar.VarType.Float:
+                                    case BindFgd.VarType.String:
+                                        propType = FgdPropertyType.String;
+                                        break;
+                                    case BindFgd.VarType.Bool:
+                                        propType = FgdPropertyType.Choices;
+                                        propChoices.Add( new FgdEnum("No", 0));
+                                        propChoices.Add( new FgdEnum("Yes", 1));
+                                        propDefaultValue = propDefaultValue == null || propDefaultValue == "0" || propDefaultValue == "False" ? "0" : "1";
+                                        break;
+                                    case BindFgd.VarType.Int:
+                                    case BindFgd.VarType.IntScaled:
+                                        propType = FgdPropertyType.Integer;
+                                        break;
+                                    case BindFgd.VarType.Float:
+                                    case BindFgd.VarType.FloatScaled:
                                         propType = FgdPropertyType.Float;
                                         break;
-                                    case FgdVar.VarType.Vector3Scaled:
+                                    case BindFgd.VarType.Vector3Scaled:
                                         propType = FgdPropertyType.String;
-                                        defaultValue = defaultValue.Substring(1, defaultValue.Length-2).Replace(",", "");
+                                        propDefaultValue = propDefaultValue.Substring(1, propDefaultValue.Length-2).Replace(",", "");
                                         break;
                                     default:
-                                        Debug.LogError( $"FgdVar named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");
+                                        Debug.LogError( $"BindFgd named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");
                                         break;
                                 }
-                                allProperties.Add( attribute.propertyKey, new FgdProperty(attribute.propertyKey, propType, attribute.editorLabel, tooltip != null ? tooltip.tooltip : "", defaultValue ));
+                                var fgdProperty = new FgdProperty(attribute.propertyKey, propType, attribute.editorLabel, propHelp != null ? propHelp.tooltip : "", propDefaultValue );
+                                if ( propType == FgdPropertyType.Choices && propChoices.Count > 0 ) {
+                                    fgdProperty.choices = propChoices.ToArray();
+                                }
+                                allProperties.Add( attribute.propertyKey, fgdProperty );
                             }
                         }
                     }
@@ -247,10 +272,10 @@ namespace Scopa {
                         text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\"";
                         break;
                     case FgdPropertyType.Choices:
-                        text += $" =\n    [\n        { string.Join("\n        ", choices.Select( (choice, index) => choice.ToString(index)) ) } \n    ]";
+                        text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\" =\n    [\n        { string.Join("\n        ", choices.Select( (choice, index) => choice.ToString(index)) ) } \n    ]";
                         break;
                     case FgdPropertyType.Flags:
-                        text += $" =\n    [\n        { string.Join("\n        ", flags.Select( (flag, index) => flag.ToString(index)) ) } \n    ]";
+                        text += $": \"{editorLabel}\" : \"{defaultValue}\" : \"{editorHelp}\" =\n    [\n        { string.Join("\n        ", flags.Select( (flag, index) => flag.ToString(index)) ) } \n    ]";
                         break;
                 }
 
@@ -273,6 +298,11 @@ namespace Scopa {
 
             [Tooltip("actual number index corresponding for each choice... e.g. 0, or 1, or 2, etc.")]
             public int value = 0;
+
+            public FgdEnum( string label, int value ) {
+                this.label = label;
+                this.value = value;
+            }
 
             public string ToString(int index) {
                 return $"{index} : \"{label}\"";

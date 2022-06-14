@@ -52,6 +52,18 @@ namespace Scopa.Formats.Map.Objects
             return true;
         }
 
+        /// <summary> parses an entity property as a bool ("0" or "False" = false, anything else = true); empty or whitespace will return false </summary>
+        public bool TryGetBool(string propertyKey, out bool boolValue, bool verbose = false) {
+            boolValue = false;
+
+            if ( TryGetString(propertyKey, out var data, verbose) ) {
+                boolValue = data != "0" && data != "False";
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary> parses an entity property as an int; empty or whitespace will return false </summary>
         public bool TryGetInt(string propertyKey, out int num, bool verbose = false) {
             num = 0;
@@ -71,6 +83,18 @@ namespace Scopa.Formats.Map.Objects
             return int.TryParse(Properties[propertyKey], System.Globalization.NumberStyles.Integer, CultureInfo.InvariantCulture, out num);
         }
 
+        /// <summary> parses an entity property as an int affected by scaling factor, by default 0.03125f (32 map units = 1 Unity meter); empty or whitespace will return false </summary>
+        public bool TryGetIntScaled(string propertyKey, out int num, float scalar = 0.03125f, bool verbose = false) {
+            num = 0;
+
+            if ( TryGetInt(propertyKey, out num, verbose) ) {
+                num = Mathf.RoundToInt(num * scalar);
+                return true;
+            }
+            
+            return false;
+        }
+
         /// <summary> parses an entity property as a float; empty or whitespace will return false </summary>
         public bool TryGetFloat(string propertyKey, out float num, bool verbose = false) {
             num = 0;
@@ -88,6 +112,18 @@ namespace Scopa.Formats.Map.Objects
             }
             
             return float.TryParse(Properties[propertyKey], System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out num);
+        }
+
+        /// <summary> parses an entity property as a float affected by scaling factor, by default 0.03125f (32 map units = 1 Unity meter); empty or whitespace will return false </summary>
+        public bool TryGetFloatScaled(string propertyKey, out float num, float scalar = 0.03125f, bool verbose = false) {
+            num = 0;
+
+            if ( TryGetFloat(propertyKey, out num, verbose) ) {
+                num *= scalar;
+                return true;
+            }
+            
+            return false;
         }
 
         /// <summary> parses an entity property as a Quake-style single number rotation; > 0 is negative yaw + 90 degrees, -1 is up, -2 is down; empty or whitespace will return false / Quaternion.identity </summary>

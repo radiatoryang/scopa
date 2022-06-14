@@ -236,6 +236,8 @@ namespace Scopa {
             }
 
             entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
+            if ( entData.TryGetString("targetname", out var targetName) )
+                entityObject.name += " " + targetName;
             entityObject.transform.position = entityOrigin;
             // for point entities, import the "angle" property
             entityObject.transform.localRotation = Quaternion.identity;
@@ -248,11 +250,14 @@ namespace Scopa {
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
 
-            // populate the rest of the entity data
-            var entityComponent = entityObject.GetComponent<ScopaEntity>();
-            if ( entityComponent == null)
+            // populate the rest of the entity data    
+            var entityComponent = entityObject.GetComponent<IScopaEntityData>();
+
+            if ( config.addScopaEntityComponent && entityComponent == null)
                 entityComponent = entityObject.AddComponent<ScopaEntity>();
-            entityComponent.entityData = entData;
+
+            if ( entityComponent != null)
+                entityComponent.entityData = entData;
 
             // only set Layer if it's a generic game object OR if there's a layer override
             if ( entData.TryGetString("_layer", out var layerName) ) {
@@ -312,7 +317,7 @@ namespace Scopa {
                     newMeshObj.layer = config.layer;
                 }
 
-                if ( meshPrefab == null && config.worldIsStatic) {
+                if ( meshPrefab == null && config.IsEntityStatic(entData.ClassName)) {
                     SetGameObjectStatic(newMeshObj, entityNeedsCollider && !entityIsTrigger);
                 }
 
@@ -328,29 +333,49 @@ namespace Scopa {
                 meshList.AddRange( ScopaCore.AddColliders( entityObject, entData, config, namePrefix ) );
 
             // now that we've finished building the gameobject, notify any custom user components that import is complete
-            var allEntityComponents = entityObject.GetComponentsInChildren<IScopaEntity>();
+            var allEntityComponents = entityObject.GetComponentsInChildren<IScopaEntityImport>();
             foreach( var entComp in allEntityComponents ) {
                 // scan for any FGD attribute and update accordingly
                 FieldInfo[] objectFields = entComp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public);
                 for (int i = 0; i < objectFields.Length; i++) {
-                    var attribute = Attribute.GetCustomAttribute(objectFields[i], typeof(FgdVar)) as FgdVar;
+                    var attribute = Attribute.GetCustomAttribute(objectFields[i], typeof(BindFgd)) as BindFgd;
                     if (attribute != null) {
                         switch( attribute.propertyType ) {
-                            case FgdVar.VarType.Float:
+                            case BindFgd.VarType.String:
+                                if ( entData.TryGetString(attribute.propertyKey, out var stringProp) )
+                                    objectFields[i].SetValue(entComp, stringProp);
+                                break;
+                            case BindFgd.VarType.Bool:
+                                if ( entData.TryGetBool(attribute.propertyKey, out var boolValue) )
+                                    objectFields[i].SetValue(entComp, boolValue);
+                                break;
+                            case BindFgd.VarType.Int:
+                                if ( entData.TryGetInt(attribute.propertyKey, out var intProp) )
+                                    objectFields[i].SetValue(entComp, intProp);
+                                break;
+                            case BindFgd.VarType.IntScaled:
+                                if ( entData.TryGetIntScaled(attribute.propertyKey, out var intScaledProp, config.scalingFactor) )
+                                    objectFields[i].SetValue(entComp, intScaledProp);
+                                break;
+                            case BindFgd.VarType.Float:
                                 if ( entData.TryGetFloat(attribute.propertyKey, out var floatProp) )
                                     objectFields[i].SetValue(entComp, floatProp);
                                 break;
-                            case FgdVar.VarType.Vector3Scaled:
+                            case BindFgd.VarType.FloatScaled:
+                                if ( entData.TryGetFloatScaled(attribute.propertyKey, out var floatScaledProp, config.scalingFactor) )
+                                    objectFields[i].SetValue(entComp, floatScaledProp);
+                                break;
+                            case BindFgd.VarType.Vector3Scaled:
                                 if ( entData.TryGetVector3Scaled(attribute.propertyKey, out var vec3Scaled, config.scalingFactor) )
                                     objectFields[i].SetValue(entComp, vec3Scaled);
                                 break;
                             default:
-                                Debug.LogError( $"FgdVar named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");
+                                Debug.LogError( $"BindFgd named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");
                                 break;
                         }
                     }
                 }
-                entComp.OnScopaImport( entityComponent );
+                entComp.OnEntityImport( entData );
             }
             
             return meshList;
