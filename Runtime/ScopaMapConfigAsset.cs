@@ -242,6 +242,10 @@ namespace Scopa {
             Medium = 2,
             High = 3
         }
+
+        public ScopaMapConfig ShallowCopy() {
+            return (ScopaMapConfig) this.MemberwiseClone();
+        }
     }
 
     

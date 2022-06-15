@@ -64,7 +64,7 @@ namespace Scopa {
 
             foreach( var entity in fgd.entityTypes ) {
                 if ( entity.objScale > 0)
-                    ObjExport.SaveObjFile( folder + entity.className + ".obj", entity.entityPrefab, Vector3.one * entity.objScale);
+                    ObjExport.SaveObjFile( folder + entity.className + ".obj", new GameObject[] {entity.entityPrefab}, Vector3.one * entity.objScale);
             }
         }
 
