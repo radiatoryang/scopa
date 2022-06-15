@@ -94,7 +94,7 @@ namespace Scopa {
 		}
 
         static string GetMaterialFilename(Material mat) {
-            return (mat.name + "-" + mat.mainTexture.name).Replace(" ", "_");
+            return (mat.name + "-" + (mat.mainTexture ? mat.mainTexture.name : "texture") ).Replace(" ", "_");
         }
 		
 		public static string SaveObjFile(string fileName, GameObject gameObject, Vector3 scale, bool makeSubmeshes = false)
@@ -179,7 +179,11 @@ namespace Scopa {
         /// <summary> resizeFactor must be a power of two number, larger factor = smaller texture (e.g. 8 = 1/8 size)</summary>
         static void WriteTextures(string folderPath, List<Material> materials, int resizeFactor = 16, int jpgQuality = 50) {
             foreach(var mat in materials) {
-                ScopaWad.ResizeCopyToBuffer( (Texture2D)mat.mainTexture, mat.color, mat.mainTexture.width / resizeFactor, mat.mainTexture.height / resizeFactor);
+				var tex = mat.mainTexture;
+				if ( tex == null ) {
+					tex = new Texture2D(resizeFactor * 4, resizeFactor * 4);
+				}
+                ScopaWad.ResizeCopyToBuffer( (Texture2D)tex, mat.color, tex.width / resizeFactor, tex.height / resizeFactor);
                 var bytes = ImageConversion.EncodeToJPG( ScopaWad.resizedTexture, jpgQuality);
                 File.WriteAllBytes( $"{ folderPath }/{ GetMaterialFilename(mat) }.jpg", bytes);
             }
