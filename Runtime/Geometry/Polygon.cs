@@ -5,7 +5,7 @@ using System.Linq;
 namespace Scopa
 {
     /// <summary>
-    /// Represents a coplanar, directed polygon with at least 3 vertices. Uses high-precision value types.
+    /// Represents a coplanar, directed polygon with at least 3 vertices.
     /// </summary>
     public class Polygon
     {
@@ -13,6 +13,16 @@ namespace Scopa
 
         public Plane Plane;
         public Vector3 Origin => Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / Vertices.Count;
+
+        /// <summary>
+        /// Creates a polygon from a list of points
+        /// </summary>
+        /// <param name="vertices">The vertices of the polygon</param>
+        public Polygon(params Vector3[] vertices)
+        {
+            Vertices = new List<Vector3>(vertices);
+            Plane = new Plane(Vertices[0], Vertices[1], Vertices[2]);
+        }
 
         /// <summary>
         /// Creates a polygon from a list of points
@@ -62,6 +72,33 @@ namespace Scopa
             Vertices = verts.ToList();
 
             Plane = plane.Clone();
+        }
+
+        /// <summary> based on the first 3 vertices (a triangle), sample a random point barycentrically </summary>
+        public Vector3 GetRandomPointAsTriangle() {
+            // from https://gist.github.com/danieldownes/b1c9bab09cce013cc30a4198bfeda0aa
+            float r = Random.value;
+            float s = Random.value;
+
+            if (r + s >= 1)
+            {
+                r = 1 - r;
+                s = 1 - s;
+            }
+
+            return Vertices[0] + r * (Vertices[1] - Vertices[0]) + s * (Vertices[2] - Vertices[0]);
+        }
+
+        /// <summary> based on the first 3 vertices (a triangle), calculate area </summary>
+        public float GetSizeAsTriangle() {
+            // from https://gist.github.com/danieldownes/b1c9bab09cce013cc30a4198bfeda0aa
+            return 0.5f * Vector3.Cross(Vertices[1] - Vertices[0], Vertices[2] - Vertices[0]).magnitude;
+        }
+
+        /// <summary> based on the first 3 vertices (a triangle), calculate area </summary>
+        public float GetSizeAsTriangle(Vector3 scale) {
+            // from https://gist.github.com/danieldownes/b1c9bab09cce013cc30a4198bfeda0aa
+            return 0.5f * Vector3.Cross(Vector3.Scale(Vertices[1], scale) - Vector3.Scale(Vertices[0], scale), Vector3.Scale(Vertices[2], scale) - Vector3.Scale(Vertices[0], scale)).magnitude;
         }
 
         /// <summary>

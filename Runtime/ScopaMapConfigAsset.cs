@@ -79,7 +79,7 @@ namespace Scopa {
         public List<string> staticEntities = new List<string>() {"worldspawn", "func_wall"};
 
         [Tooltip("(default: Default) Set ALL objects to use this layer. For example, maybe you have a 'World' layer. To set per-entity layers, see prefab slots below / Entity Overrides.")]
-        public int layer = 0;
+        [Layer] public int layer = 0;
 
         [Tooltip("(default: true) if enabled, automatically add ScopaEntity component to all game objects (if not already present in the entityPrefab)... disable this if you don't want to use the built-in ScopaEntity at all, and override it with your own")]
         public bool addScopaEntityComponent = true;
@@ -219,7 +219,7 @@ namespace Scopa {
             public Material material;
 
             [Tooltip("(optional) if defined, all faces textured with this override will be hotspot UV'd -- unwrapped to fit the nearest rectangle area ('hotspot')")]
-            public HotspotTexture hotspotAtlas;
+            public ScopaMaterialConfig hotspotAtlas;
 
             public MaterialOverride(string texName, Material mat) {
                 this.textureName = texName;

@@ -12,7 +12,7 @@ namespace Scopa {
     public class ScopaHotspot {
 
         /// <summary> main hotspot UV function; grabs verts, returns FALSE if the face verts are too big for the hotspot atlas (based on the atlas' fallback threshold)</summary>
-        public static bool TryGetHotspotUVs(List<Vector3> faceVerts, Vector3 normal, HotspotTexture atlas, out Vector2[] uvs, float scalar = 0.03125f) {
+        public static bool TryGetHotspotUVs(List<Vector3> faceVerts, Vector3 normal, ScopaMaterialConfig atlas, out Vector2[] uvs, float scalar = 0.03125f) {
             uvs = PlanarProject(faceVerts, normal);
 
             var approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
@@ -26,7 +26,7 @@ namespace Scopa {
                 approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
             }
 
-            var bestHotspot = atlas.GetBestUVFromUVs(approximateSize.x * atlas.hotspotScalar, approximateSize.y * atlas.hotspotScalar);
+            var bestHotspot = atlas.GetBestHotspotUVFromUVs(approximateSize.x * atlas.hotspotScalar, approximateSize.y * atlas.hotspotScalar);
             var bestHotspotSize = LargestVector2(bestHotspot) - SmallestVector2(bestHotspot);
 
             FitUVs(uvs, bestHotspot);

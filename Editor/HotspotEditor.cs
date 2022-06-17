@@ -9,33 +9,33 @@ namespace Scopa.Editor
     public class HotspotEditor : EditorWindow
     {
 
-        [MenuItem("Window/Scopa/HotspotEditor", false, 999)]
+        [MenuItem("Scopa/Hotspot Atlas Editor", false, 999)]
         private static void ShowWindow()
         {
             var window = GetWindow<HotspotEditor>();
-            window.titleContent = new GUIContent("Hotspot Editor");
+            window.titleContent = new GUIContent("HotspotEditor");
             window.Show();
         }
 
-        public static HotspotTexture editingHotspotTexture;
+        public static ScopaMaterialConfig editingHotspotTexture;
 
         [OnOpenAssetAttribute(1)]
         public static bool OpenHostspotTexture(int instanceID, int line)
         {
             var obj = EditorUtility.InstanceIDToObject(instanceID);
-            if (obj is HotspotTexture)
+            if (obj is ScopaMaterialConfig)
             {
-                UpdateTarget(obj as HotspotTexture);
+                UpdateTarget(obj as ScopaMaterialConfig);
                 ShowWindow();
                 return true;
             }
             return false;
         }
 
-        private static void UpdateTarget(HotspotTexture target)
+        private static void UpdateTarget(ScopaMaterialConfig target)
         {
             editingHotspotTexture = target;
-            size = editingHotspotTexture.target.width;
+            size = editingHotspotTexture.hotspotTexture.width;
             Init();
         }
 
@@ -89,7 +89,7 @@ namespace Scopa.Editor
             EditorZoomArea.Begin(zoomScale, _zoomArea);
             var drawRect = new Rect(-_zoomCoordsOrigin.x, -_zoomCoordsOrigin.y, size, size);
             if (editingHotspotTexture)
-                EditorGUI.DrawPreviewTexture(drawRect, editingHotspotTexture.target, null, ScaleMode.StretchToFill, 0);
+                EditorGUI.DrawPreviewTexture(drawRect, editingHotspotTexture.hotspotTexture, null, ScaleMode.StretchToFill, 0);
             DrawGrid(gridStep, drawRect);
             HandleRectCreate(drawRect);
             EditorZoomArea.End();

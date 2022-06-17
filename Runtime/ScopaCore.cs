@@ -489,7 +489,7 @@ namespace Scopa {
         }
 
         /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, float scalar = 1f, int textureWidth = 128, int textureHeight = 128, HotspotTexture hotspotAtlas = null) {
+        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, float scalar = 1f, int textureWidth = 128, int textureHeight = 128, ScopaMaterialConfig hotspotAtlas = null) {
             var lastVertIndexOfList = verts.Count;
 
             // add all verts and UVs

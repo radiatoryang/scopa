@@ -22,11 +22,12 @@ namespace Scopa.Editor {
 
             SerializedProperty prop = property.FindPropertyRelative("scalingFactor");
             do {
-                if ( prop.name == "layer" ) {
-                    prop.intValue = EditorGUILayout.LayerField(new GUIContent(prop.displayName, prop.tooltip), prop.intValue );
-                } else {
+                // moved to LayerAttribute
+                // if ( prop.name == "layer" ) {
+                //     prop.intValue = EditorGUILayout.LayerField(new GUIContent(prop.displayName, prop.tooltip), prop.intValue );
+                // } else {
                     EditorGUILayout.PropertyField(prop, true);
-                }
+                // }
             }
             while (prop.NextVisible(false));
 
