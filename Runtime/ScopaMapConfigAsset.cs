@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -218,8 +219,9 @@ namespace Scopa {
             public string textureName;
             public Material material;
 
-            [Tooltip("(optional) if defined, all faces textured with this override will be hotspot UV'd -- unwrapped to fit the nearest rectangle area ('hotspot')")]
-            public ScopaMaterialConfig hotspotAtlas;
+            [Tooltip("(optional) use this to add additional auto-UV / auto-detail treatments to brushes with this texture")]
+            [FormerlySerializedAs("hotspotAtlas")]
+            public ScopaMaterialConfig materialConfig;
 
             public MaterialOverride(string texName, Material mat) {
                 this.textureName = texName;

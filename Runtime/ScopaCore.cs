@@ -181,10 +181,10 @@ namespace Scopa {
                         var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
 
                         // this face is using a hotspot material, so...
-                        if ( materialOverride != null && materialOverride.hotspotAtlas != null && materialOverride.hotspotAtlas.fallbackMaterial != null) {
+                        if ( materialOverride != null && materialOverride.materialConfig != null && materialOverride.materialConfig.enableHotspotUv && materialOverride.materialConfig.fallbackMaterial != null) {
                             // detect if the face is too big to fit any hotspot! if it is, then use the fallback material (which is hopefully a regular tiling material?)
-                            if ( ScopaHotspot.TryGetHotspotUVs(face.Vertices, face.Plane.normal, materialOverride.hotspotAtlas, out var uvs, config.scalingFactor ) == false ) {
-                                newMaterial = materialOverride.hotspotAtlas.fallbackMaterial;
+                            if ( ScopaHotspot.TryGetHotspotUVs(face.Vertices, face.Plane.normal, materialOverride.materialConfig, out var uvs, config.scalingFactor ) == false ) {
+                                newMaterial = materialOverride.materialConfig.fallbackMaterial;
                                 face.TextureName = newMaterial.name;
                                 materialOverride = null;
                             }
@@ -203,7 +203,7 @@ namespace Scopa {
                         }
 
                         // temporarily merge entries with the same Material by renaming the face's texture name
-                        var matchingKey = materialLookup.Where( kvp => kvp.Value.material == materialOverride.material && kvp.Value.hotspotAtlas == materialOverride.hotspotAtlas).FirstOrDefault().Key;
+                        var matchingKey = materialLookup.Where( kvp => kvp.Value.material == materialOverride.material && kvp.Value.materialConfig == materialOverride.materialConfig).FirstOrDefault().Key;
                         if ( !string.IsNullOrEmpty(matchingKey) ) {
                             face.TextureName = matchingKey;
                         } else { // otherwise add to lookup
@@ -326,6 +326,13 @@ namespace Scopa {
                 meshFilter.sharedMesh = newMesh;
                 var meshRenderer = newMeshObj.GetComponent<MeshRenderer>() ? newMeshObj.GetComponent<MeshRenderer>() : newMeshObj.AddComponent<MeshRenderer>();
                 meshRenderer.sharedMaterial = textureKVP.Value.material;
+
+                // detail instancing detection
+                if ( textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.enableDetailInstancing ) {
+                    var detailDrawer = newMeshObj.GetComponent<ScopaDetailDrawer>() ? newMeshObj.GetComponent<ScopaDetailDrawer>() : newMeshObj.AddComponent<ScopaDetailDrawer>();
+                    detailDrawer.worldMesh = meshFilter.sharedMesh;
+                    detailDrawer.detailConfig = textureKVP.Value.materialConfig;
+                }
             }
 
             // collision pass, now treat it all as one object and ignore texture names
@@ -443,7 +450,7 @@ namespace Scopa {
                     config.globalTexelScale,
                     textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize, 
                     textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize,
-                    textureFilter != null ? textureFilter.hotspotAtlas : null
+                    textureFilter != null ? textureFilter.materialConfig : null
                 );
             }
         }
@@ -489,14 +496,14 @@ namespace Scopa {
         }
 
         /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, float scalar = 1f, int textureWidth = 128, int textureHeight = 128, ScopaMaterialConfig hotspotAtlas = null) {
+        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, float scalar = 1f, int textureWidth = 128, int textureHeight = 128, ScopaMaterialConfig materialConfig = null) {
             var lastVertIndexOfList = verts.Count;
 
             // add all verts and UVs
             for( int v=0; v<face.Vertices.Count; v++) {
                 verts.Add(face.Vertices[v] * scalingFactor);
 
-                if ( hotspotAtlas == null) {
+                if ( materialConfig == null || !materialConfig.enableHotspotUv) {
                     uvs.Add(new Vector2(
                         (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
                         (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
@@ -504,9 +511,9 @@ namespace Scopa {
                 }
             }
 
-            if ( hotspotAtlas != null ) {
+            if ( materialConfig != null && materialConfig.enableHotspotUv && materialConfig.rects.Count > 0) {
                 // uvs.AddRange( ScopaHotspot.GetHotspotUVs( verts.GetRange(lastVertIndexOfList, face.Vertices.Count), hotspotAtlas ) );
-                if ( !ScopaHotspot.TryGetHotspotUVs( face.Vertices, face.Plane.normal, hotspotAtlas, out var hotspotUVs, scalingFactor )) {
+                if ( !ScopaHotspot.TryGetHotspotUVs( face.Vertices, face.Plane.normal, materialConfig, out var hotspotUVs, scalingFactor )) {
                     // TODO: wow uhh I really fucked up with this design... no easy way to suddenly put this in a different material
                     // ... it will need a pre-pass
                 }

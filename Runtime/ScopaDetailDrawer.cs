@@ -4,10 +4,16 @@ using UnityEngine;
 
 namespace Scopa {
     /// <summary> attach this component to a game object with a mesh filter, and it'll DrawMeshInstanced() detail meshes all over it </summary>
+    [ExecuteInEditMode]
     public class ScopaDetailDrawer : MonoBehaviour {
+        [Tooltip("enable to force the detail drawer to run at edit time, even if editor preview isn't enabled in the MaterialConfig")]
+        public bool forcePreviewInEditor = false;
+
         [Tooltip("if the level uses static batching then this MUST be pre-assigned before runtime, or else static batching will make the world mesh unreadable")]
         public Mesh worldMesh;
         public ScopaMaterialConfig detailConfig;
+
+        bool triedBuildingData = false;
         Dictionary<MaterialDetailGroup, List<Matrix4x4[]>> detailData = new Dictionary<MaterialDetailGroup, List<Matrix4x4[]>>();
 
         MaterialPropertyBlock matBlock;
@@ -16,18 +22,40 @@ namespace Scopa {
 
         Camera mainCam;
 
-        void Start() {
-            mainCam = Camera.main;
-            if ( detailConfig != null )
-                BuildDetailDataAll();
+        #if UNITY_2022_2_OR_NEWER
+        // see bug: https://issuetracker.unity3d.com/issues/drawn-mesh-using-graphics-dot-drawmeshinstanced-flickers-when-setting-the-camera-parameter
+        [Tooltip("if your game uses multiple Cameras, you may want to enable this, to draw instanced details ONLY for Camera.main while in play mode? keep this disabled unless you're on Unity 2022.1+, since there's a bug where instances will flicker")]
+        public bool inPlayModeOnlyDrawForMainCamera = true;
+        #endif
+
+        void OnEnable() {
+            Reset();
+        }
+
+        void Reset() {
+            triedBuildingData = false;
+            detailData.Clear();
         }
 
         void Update() {
-            if ( detailConfig != null )
+            if ( detailConfig == null || !detailConfig.enableDetailInstancing || (!Application.isPlaying && !forcePreviewInEditor && !detailConfig.drawDetailsInEditor) ) {
+                if ( triedBuildingData ) {
+                    Reset();
+                }
+                return;
+            }
+
+            if ( detailConfig != null ) {
+                if ( !triedBuildingData )
+                    BuildDetailDataAll();
+   
                 DrawDetailGroupAll();
+            }
         }
 
         public void BuildDetailDataAll() {
+            triedBuildingData = true;
+
             if ( worldMesh == null && TryGetComponent<MeshFilter>(out var mf) ) {
                 worldMesh = mf.sharedMesh;
             }
@@ -38,6 +66,7 @@ namespace Scopa {
             }
 
             matBlock = new MaterialPropertyBlock();
+            mainCam = Camera.main;
             BuildDetailData();
         }
 
@@ -119,12 +148,12 @@ namespace Scopa {
                                 var sampleAttempts = 0;
                                 var detailPos = Vector3.zero;
                                 while ( detailPos.sqrMagnitude < 0.01f  
-                                    || (detailGroup.checkForCollider && Physics.OverlapSphere(
+                                    || (detailGroup.checkForCollider && Physics.CheckSphere(
                                         detailPos + polyNormal * detailMeshRadius * detailScale, 
                                         detailMeshRadius * detailScale - 0.1f,
                                         detailGroup.collisionMask,
                                         QueryTriggerInteraction.Ignore
-                                    ).Length > 0 ) )
+                                    )) )
                                 {
                                     detailPos = transform.TransformPoint( selectedPoly.GetRandomPointAsTriangle() ) + polyNormal * detailMeshHeight * detailScale;
 
@@ -184,7 +213,12 @@ namespace Scopa {
                 matBlock,
                 detailConfig.castShadows,
                 detailConfig.receiveShadows,
-                detailConfig.layer
+                detailConfig.layer,
+                #if UNITY_2022_2_OR_NEWER
+                Application.isPlaying && inPlayModeOnlyDrawForMainCamera ? mainCam : null
+                #else
+                    null
+                #endif
             );
         }
     }

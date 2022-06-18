@@ -45,6 +45,9 @@ namespace Scopa
         #region HOTSPOT
 
         [Header("HOTSPOT UVS")]
+        [Tooltip("if enabled, will try to re-UV brush faces to the 'best' fitting atlas segment")]
+        public bool enableHotspotUv = true;
+
         [Tooltip("the mainTexture used for hotspot UV calculations / visual preview in the HotspotEditor")]
         [FormerlySerializedAs("target")]
         public Texture hotspotTexture;
@@ -118,6 +121,12 @@ namespace Scopa
 
         [Header("SURFACE DETAIL INSTANCING")]
         [Tooltip("draw mesh instances (1023 per batch) via Graphics.DrawMeshInstanced() based on random points scattered on brush face surfaces... good for small non-solid details like grass, small rocks, etc.")]
+        public bool enableDetailInstancing = false;
+
+        [Tooltip("if enabled, will run the detail building and instance rendering outside of play mode")]
+        public bool drawDetailsInEditor = true;
+        
+        [Tooltip("you can define multiple detail prop types, and each group can have different placement rules")]
         public MaterialDetailGroup[] detailGroups;
 
     }
