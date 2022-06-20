@@ -23,8 +23,17 @@ namespace Scopa {
 		private static int StartIndex = 0;
 
 		#if UNITY_EDITOR
-		[MenuItem("Scopa/Export Selected GameObject(s) to .OBJ...")]
-		public static void MenuObjExport () {
+		[MenuItem("Scopa/Export Selected GameObject(s) to merged .OBJ + .MTL (preserve submeshes)...")]
+		public static void MenuObjExport() {
+			MenuObjExport(true);
+		}
+
+		[MenuItem("Scopa/Export Selected GameObject(s) to merged .OBJ (no submeshes)...")]
+		public static void MenuObjExportMerged() {
+			MenuObjExport(false);
+		}
+
+		public static void MenuObjExport (bool makeSubmeshes) {
 			if ( Selection.gameObjects.Length == 0) {
 				Debug.LogWarning("Select at least one game object in the scene to export an OBJ.");
 				return;
@@ -36,17 +45,20 @@ namespace Scopa {
 				Debug.LogWarning("ObjExport: no path specified");
 				return;
 			}
-			SaveObjFile( fileName, Selection.gameObjects, Vector3.one, false, true, false );
+			SaveObjFile( fileName, Selection.gameObjects, Vector3.one, makeSubmeshes, true, false );
 			if ( fileName.StartsWith(Application.dataPath) ) {
 				AssetDatabase.Refresh();
 				// AssetDatabase.ImportAsset(fileName);
 			}
-
 		}
 		#endif
+
+		static bool DoesGOHaveMesh(GameObject go) {
+			return go.TryGetComponent<MeshFilter>(out var mf) || (go.TryGetComponent<SkinnedMeshRenderer>(out var smr) && smr.enabled);
+		}
 		
         /// <summary> can handle MeshFilter or SkinnedMeshRenderers too </summary>
-		static string MeshToString(GameObject go, Transform t, List<Material> materialLibrary, bool addNormals = false ) 
+		static string MeshToString(GameObject go, Transform t, List<Material> materialLibrary, bool makeSubmeshes = false, bool addNormals = false ) 
 		{	
 			int numVertices = 0;
 			Mesh m = null;
@@ -83,7 +95,6 @@ namespace Scopa {
 			if ( addNormals ) {
 				for (int i = 0; i < m.normals.Length; i++) 
 				{
-					// also, SWIZZLE Y AND Z FOR QUAKE ENGINE
 					sb.AppendFormat( CultureInfo.InvariantCulture, "vn {0} {1} {2}\n", -m.normals[i].x, m.normals[i].y, m.normals[i].z );
 				}
 				sb.Append("\n");
@@ -98,7 +109,14 @@ namespace Scopa {
 			{
 				sb.Append("\n");
                 
+				//if ( !makeSubmeshes ) {
 				sb.AppendLine($"usemtl { GetMaterialFilename(mats[material]) }");
+				// } else {
+				// 	sb.AppendLine($"newmtl { GetMaterialFilename(mats[material]) }");
+                // 	sb.AppendLine("Ka 1.000 1.000 1.000");
+                // 	sb.AppendLine($"Kd 1.000 1.000 1.000");
+				// }
+
                 if ( !materialLibrary.Contains(mats[material]) ) {
                     materialLibrary.Add( mats[material]);
                 }
@@ -157,17 +175,25 @@ namespace Scopa {
 
 				if (!makeSubmeshes)
 					meshString.Append("g ").Append(t.name).Append("\n");
-				meshString.Append(ProcessTransform(t, materialLibrary, makeSubmeshes));
+				meshString.Append(ProcessTransform(t, materialLibrary, makeSubmeshes, writeNormals));
 
 				t.position = oldPos;
 				t.rotation = oldRot;
 				t.localScale = oldScale;
 			}
 			
-			WriteToFile(meshString.ToString(), fileName);
+
             if ( materialLibrary.Count > 0 && writeTextures)
                 WriteTextures( Directory.GetParent(Path.GetDirectoryName(fileName)).ToString() + "/textures/", materialLibrary );
             // TODO: create textures folder if it doesn't exist already
+
+			// Unity's OBJ importer *requires* a .MTL file (with no spaces!) to import submeshes, otherwise it all gets merged together as one
+			if ( makeSubmeshes && materialLibrary.Count > 0 ) {
+				WriteMaterial( fileName.Substring(0, fileName.Length-4) + ".mtl", materialLibrary);
+				meshString.Insert(0, $"mtllib {Path.GetFileNameWithoutExtension(fileName)}.mtl\n");
+			}
+
+			WriteToFile(meshString.ToString(), fileName);
 			
 			// end
 			StartIndex = 0;
@@ -175,7 +201,7 @@ namespace Scopa {
 			return fileName;
 		}
 		
-		static string ProcessTransform(Transform t, List<Material> materialLibrary, bool makeSubmeshes)
+		static string ProcessTransform(Transform t, List<Material> materialLibrary, bool makeSubmeshes, bool writeNormals = false)
 		{
 			StringBuilder meshString = new StringBuilder();
 			
@@ -183,16 +209,18 @@ namespace Scopa {
 							+ "\n#-------" 
 							+ "\n");
 			
-			if (makeSubmeshes)
-				meshString.Append("g ").Append(t.name).Append("\n");
-			
-			meshString.Append(ObjExport.MeshToString(t.gameObject, t, materialLibrary));
+			if ( DoesGOHaveMesh(t.gameObject) ) {
+				if (makeSubmeshes)
+					meshString.Append("g ").Append(t.name).Append("\n");
+				
+				meshString.Append(ObjExport.MeshToString(t.gameObject, t, materialLibrary, makeSubmeshes, writeNormals));
+			}
 			
 			for(int i = 0; i < t.childCount; i++)
 			{
                 var child = t.GetChild(i);
                 if ( child.gameObject.activeSelf )
-				    meshString.Append(ProcessTransform(child, materialLibrary, makeSubmeshes));
+				    meshString.Append(ProcessTransform(child, materialLibrary, makeSubmeshes, writeNormals));
 			}
 			
 			return meshString.ToString();
@@ -205,6 +233,17 @@ namespace Scopa {
 				sw.Write(s);
 			}
 		}
+
+		/// <summary> note: Unity imports OBJ submeshes *only* if there's an associated .mtl file</summary>
+        static void WriteMaterial(string filePath, List<Material> materials) {
+			var sb = new StringBuilder();
+            foreach(var mat in materials) {
+				sb.AppendLine($"newmtl {GetMaterialFilename(mat)}");
+				sb.AppendLine("Ka 1.000 1.000 1.000");
+				sb.AppendLine("Kd 1.000 1.000 1.000\n\n");
+            }
+			File.WriteAllText( filePath, sb.ToString() );
+        }
 
         /// <summary> resizeFactor must be a power of two number, larger factor = smaller texture (e.g. 8 = 1/8 size)</summary>
         static void WriteTextures(string folderPath, List<Material> materials, int resizeFactor = 16, int jpgQuality = 50) {
