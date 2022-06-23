@@ -16,13 +16,14 @@ namespace Scopa
         public string groupLabel = "New Detail Group";
         public Mesh detailMesh;
         public Material detailMeshMaterial;
-        public Vector3 detailMeshOffset;
+        public Vector3 detailMeshOffset, detailMeshRotationOffset;
 
         [Tooltip("statistically, how many details to place per square meter in world space? bigger number = more details placed (on average)")]
         public float detailDensity = 0.1f;
 
         [Tooltip("randomly scale the detail meshes with this scale range")]
-        public Vector2 detailScaleRange = new Vector2(1, 1);
+        // public Vector2 detailScaleRange = new Vector2(1, 1);
+        public Vector3 minScale = Vector3.one, maxScale = Vector3.one;
 
         public bool detailFloors = true, detailWalls = false, detailCeilings = false;
 

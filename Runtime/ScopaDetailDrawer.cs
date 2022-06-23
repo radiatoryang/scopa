@@ -136,26 +136,28 @@ namespace Scopa {
                             currentMatrixList = new List<Matrix4x4>(INSTANCE_LIMIT);
                         }
 
+                        var randomScale = Vector3.Lerp(detailGroup.minScale, detailGroup.maxScale, Random.value );
+
                         // get a random polygon, weighted by polygon size
                         var random = Random.value * totalArea;
                         for( int i=0; i<surfaceSet.Value.Count; i++ ) {
                             if ( random < surfaceSet.Value[i] ) {
                                 var selectedPoly = surfaceSet.Key[i];
                                 var polyNormal = transform.TransformDirection(selectedPoly.Plane.normal);
-                                var detailScale = Mathf.Lerp(detailGroup.detailScaleRange.x, detailGroup.detailScaleRange.y, Random.value);
+                                var detailScalarAverage = (randomScale.x + randomScale.y + randomScale.z) * 0.33f;
 
                                 // sample a random place on polygon... in world space though
                                 var sampleAttempts = 0;
                                 var detailPos = Vector3.zero;
                                 while ( detailPos.sqrMagnitude < 0.01f  
                                     || (detailGroup.checkForCollider && Physics.CheckSphere(
-                                        detailPos + polyNormal * detailMeshRadius * detailScale, 
-                                        detailMeshRadius * detailScale - 0.1f,
+                                        detailPos + polyNormal * detailMeshRadius * detailScalarAverage, 
+                                        detailMeshRadius * detailScalarAverage - 0.1f,
                                         detailGroup.collisionMask,
                                         QueryTriggerInteraction.Ignore
                                     )) )
                                 {
-                                    detailPos = transform.TransformPoint( selectedPoly.GetRandomPointAsTriangle() ) + polyNormal * detailMeshHeight * detailScale;
+                                    detailPos = transform.TransformPoint( selectedPoly.GetRandomPointAsTriangle() ) + polyNormal * detailMeshHeight * randomScale.z;
 
                                     if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS )
                                         break;
@@ -172,8 +174,37 @@ namespace Scopa {
                                     continue;
                                 }
 
-                                var detailRot = Quaternion.Euler(0f, Random.Range(0, 360), 0); // Quaternion.LookRotation( , worldMesh.transform.TransformDirection(selectedPoly.Plane.normal) );
-                                currentMatrixList.Add( Matrix4x4.TRS(detailPos + detailGroup.detailMeshOffset * detailScale, detailRot, Vector3.one * detailScale) );
+                                // generate rotation aligned to surface normal
+                                var detailRot = Quaternion.AngleAxis(Random.Range(0, 360), polyNormal) * Quaternion.LookRotation( polyNormal );
+                                detailRot = detailRot * Quaternion.Euler( detailGroup.detailMeshRotationOffset ); // we don't know if detail meshes are Y-up or Z-up so let user specify
+                                
+                                var matrix = Matrix4x4.TRS(detailPos + polyNormal * detailGroup.detailMeshOffset.z * randomScale.z, detailRot, randomScale);
+
+                                // TODO: if user wants to ensure mesh is on surface? test bounding box points against polygon
+                                
+                                // var localBounds = detailGroup.detailMesh.bounds;
+                                // // for ( sampleAttempts = 0; sampleAttempts < MAX_SAMPLE_ATTEMPTS; sampleAttempts++ ) {
+                                // //     testPointsInPolygonSpace.Clear();
+                                // var testPoints = new Vector3[] {
+                                //     matrix.MultiplyPoint3x4(localBounds.min),
+                                //     matrix.MultiplyPoint3x4(localBounds.max),
+                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.max.z)),
+                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.max.z)),
+                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.max.y, localBounds.min.z)),
+                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.min.z)),
+                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.min.z)),
+                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.min.y, localBounds.max.z)),
+                                // };
+
+                                // // convert plane to worldspace
+
+                                // foreach ( var testPoint in testPoints ) {
+                                //     // get plane intersect point of every testPoint-polyNormal
+                                //     // grab Face.cs point in polygon code, test the plane intersect point
+                                //     // if it's not in the polygon, then break and abort?
+                                // }
+
+                                currentMatrixList.Add( matrix );
 
                                 break;
                             }
