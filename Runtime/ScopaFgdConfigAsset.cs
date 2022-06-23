@@ -259,7 +259,13 @@ namespace Scopa {
             }
 
             public override string ToString() {
-                var text = $"    {key}({type.ToString().ToLowerInvariant()})";
+                var typeOverride = type.ToString().ToLowerInvariant();
+                if ( key == "targetname" )
+                    typeOverride = "target_source";
+                else if (key.Contains("target") )
+                    typeOverride = "target_destination";
+                    
+                var text = $"    {key}({typeOverride})";
 
                 switch(type) {
                     case FgdPropertyType.String:
