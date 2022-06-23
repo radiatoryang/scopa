@@ -9,7 +9,7 @@ namespace Scopa
     /// </summary>
     public class Polygon
     {
-        public IReadOnlyList<Vector3> Vertices { get; }
+        public List<Vector3> Vertices { get; }
 
         public Plane Plane;
         public Vector3 Origin => Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / Vertices.Count;

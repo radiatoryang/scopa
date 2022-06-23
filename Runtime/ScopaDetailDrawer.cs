@@ -1,6 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using Scopa.Formats.Map.Objects;
+using Camera = UnityEngine.Camera;
+using Mesh = UnityEngine.Mesh;
 
 namespace Scopa {
     /// <summary> attach this component to a game object with a mesh filter, and it'll DrawMeshInstanced() detail meshes all over it </summary>
@@ -180,23 +184,44 @@ namespace Scopa {
                                 
                                 var matrix = Matrix4x4.TRS(detailPos + polyNormal * detailGroup.detailMeshOffset.z * randomScale.z, detailRot, randomScale);
 
-                                // TODO: if user wants to ensure mesh is on surface? test bounding box points against polygon
+                                // TODO: compare mesh points within worldspace bounding box of polygon
                                 
-                                // var localBounds = detailGroup.detailMesh.bounds;
+                                
                                 // // for ( sampleAttempts = 0; sampleAttempts < MAX_SAMPLE_ATTEMPTS; sampleAttempts++ ) {
                                 // //     testPointsInPolygonSpace.Clear();
-                                // var testPoints = new Vector3[] {
-                                //     matrix.MultiplyPoint3x4(localBounds.min),
-                                //     matrix.MultiplyPoint3x4(localBounds.max),
-                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.max.z)),
-                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.max.z)),
-                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.max.y, localBounds.min.z)),
-                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.min.z)),
-                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.min.z)),
-                                //     matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.min.y, localBounds.max.z)),
-                                // };
+                                if ( detailGroup.mustBeWithinSurfaceExtents ) {
+                                    var localBounds = detailGroup.detailMesh.bounds;
+                                    var testPoints = new Vector3[] {
+                                        matrix.MultiplyPoint3x4(localBounds.min),
+                                        matrix.MultiplyPoint3x4(localBounds.max),
+                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.max.z)),
+                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.max.z)),
+                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.max.y, localBounds.min.z)),
+                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.min.z)),
+                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.min.z)),
+                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.min.y, localBounds.max.z)),
+                                    };
 
-                                // // convert plane to worldspace
+                                    var worldFace = new Face( selectedPoly.Vertices.Select( vert => transform.TransformPoint(vert) ) );
+                                    foreach( var testPoint in testPoints ) {
+                                        if ( !worldFace.IsCoplanarPointInPolygon( worldFace.Plane.GetClosestPointOnPlane(testPoint) ) ) {
+                                            sampleAttempts = MAX_SAMPLE_ATTEMPTS + 1;
+                                            break;
+                                        }
+                                    }
+
+                                    if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS )
+                                        continue;
+
+                                    // var polyWorldBounds = GeometryUtility.CalculateBounds( selectedPoly.Vertices.ToArray(), transform.localToWorldMatrix);
+                                    // foreach ( var point in testPoints ) {
+                                    //     if (polyWorldBounds.Contains(point) ) {
+                                    //         sampleAttempts = MAX_SAMPLE_ATTEMPTS+1;
+                                    //         break;
+                                    //     }
+                                    // }
+                                    
+                                }
 
                                 // foreach ( var testPoint in testPoints ) {
                                 //     // get plane intersect point of every testPoint-polyNormal

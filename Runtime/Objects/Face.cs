@@ -17,6 +17,12 @@ namespace Scopa.Formats.Map.Objects
             Vertices = new List<Vector3>();
         }
 
+        public Face(IEnumerable<Vector3> verts)
+        {
+            Vertices = new List<Vector3>( verts );
+            Plane = new Plane( Vertices[0], Vertices[1], Vertices[2] );
+        }
+
         const float EPSILON = 0.01f;
 
         public bool OccludesFace(Face maybeSmallerFace) {
@@ -48,6 +54,16 @@ namespace Scopa.Formats.Map.Objects
                 }
             }
 
+            return true;
+        }
+
+        public bool IsCoplanarPointInPolygon(Vector3 point) {
+             var ignoreAxis = Plane.GetMainAxisToNormal();
+             switch (ignoreAxis) {
+                case Axis.X: if (!IsInPolygonYZ3(point, Vertices)) return false; break;
+                case Axis.Y: if (!IsInPolygonXZ3(point, Vertices)) return false; break;
+                case Axis.Z: if (!IsInPolygonXY3(point, Vertices)) return false; break;
+            }
             return true;
         }
 

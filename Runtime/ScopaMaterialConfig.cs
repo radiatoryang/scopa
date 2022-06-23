@@ -27,7 +27,8 @@ namespace Scopa
 
         public bool detailFloors = true, detailWalls = false, detailCeilings = false;
 
-        public enum CollisionMode { DontCheckForColliders, NotInsideColliders, EdgeOfCollider }
+        public bool mustBeWithinSurfaceExtents = false;
+
         [Tooltip("before placing a detail, what if it's in a collider? adds additional processing cost to the detail generation process")]
         public bool checkForCollider = false;
         public LayerMask collisionMask = 1;

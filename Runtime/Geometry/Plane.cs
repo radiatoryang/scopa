@@ -89,6 +89,10 @@ namespace Scopa {
             }
         }
 
+        public Vector3 GetClosestPointOnPlane(Vector3 point) {
+            return _plane.ClosestPointOnPlane(point);
+        }
+
         public float EvalAtPoint(Vector3 point) {
             return _plane.GetDistanceToPoint(-point);
         }
