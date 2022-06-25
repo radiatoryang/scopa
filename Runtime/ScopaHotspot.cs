@@ -38,16 +38,14 @@ namespace Scopa {
             
         }
 
+        /// <summary> planar projection BUT ALSO rotates UV island to longest edge of a 90 degree angle </summary>
         static Vector2[] PlanarProject(List<Vector3> faceVerts, Vector3 normal) {
             if ( faceVerts.Count < 3) {
                 Debug.LogError("Cannot planar project for less than 3 vertices.");
                 return null;
             }
-            var uvs = new Vector2[faceVerts.Count];
-            // var plane = new Plane(faceVerts[faceVerts.Count-3], faceVerts[faceVerts.Count-2], faceVerts[faceVerts.Count-1]);
-            // var normal = plane.normal * Mathf.Sign(plane.distance);
 
-            // use longest edge as vAxis
+            // use longest edge as vAxis (for now)
             Vector3 longestEdge = Vector3.zero;
             for(int i=0; i<faceVerts.Count; i++) {
                 var newEdge = faceVerts[(i+1)%faceVerts.Count] - faceVerts[i];
@@ -56,30 +54,47 @@ namespace Scopa {
                 }
             }
             var vAxis = longestEdge;
-            
-            // var normalAbs = normal.Absolute();
-            // var vAxis = normalAbs.y > normalAbs.x && normalAbs.y > normalAbs.z ? Vector3.right : Vector3.up; 
-
             var uAxis = Vector3.Cross( normal, vAxis );
-            
+
+            var uvs = new Vector2[faceVerts.Count];
             for(int i=0; i<faceVerts.Count; i++) {
                 uvs[i].x = Vector3.Dot(uAxis, faceVerts[i]);
                 uvs[i].y = Vector3.Dot(vAxis, faceVerts[i]);
-            }
+            }        
 
-            // rotate planar projection to align with the longest edge
-            Vector2 longestEdge2 = Vector2.zero;
+            // try to find the longest edge with a 90 degree right angle; but in case we don't, also track the longest edge regardless of angle
+            Vector2 longestUVEdgeAnyAngle = Vector2.zero;
+            Vector2 longestUVEdgeRightAngled = Vector2.zero;
+            const float NINETY_DEGREE_ANGLE_TOLERANCE = 3f; // because of vertex snapping, floating point error, etc. it usually won't be perfectly 90.00000 degrees
+
+            // iterate through planar UVs...
             for(int i=0; i<uvs.Length; i++) {
+                // longest edge regardless of angle
                 var newEdge = uvs[(i+1)%uvs.Length] - uvs[i];
-                if ( newEdge.sqrMagnitude > longestEdge2.sqrMagnitude ) {
-                    longestEdge2 = newEdge;
+                if ( newEdge.sqrMagnitude > longestUVEdgeAnyAngle.sqrMagnitude ) {
+                    longestUVEdgeAnyAngle = newEdge;
+                }
+                // longest edge 90 degree angles only
+                var lastEdge = uvs[i] - uvs[ (i-1)%uvs.Length < 0 ? ((i-1)%uvs.Length)+uvs.Length : (i-1)%uvs.Length]; // special case to handle negative modulo in c# https://stackoverflow.com/questions/1082917/mod-of-negative-number-is-melting-my-brain
+                var angle = Vector2.Angle( newEdge, lastEdge );
+                if ( Mathf.Abs(90 - angle) < NINETY_DEGREE_ANGLE_TOLERANCE ) {
+                    // for any given angle, either edge could be longer, so we need to test both
+                    if ( newEdge.sqrMagnitude > longestUVEdgeRightAngled.sqrMagnitude )
+                        longestUVEdgeRightAngled = newEdge;
+                    if ( lastEdge.sqrMagnitude > longestUVEdgeRightAngled.sqrMagnitude )
+                        longestUVEdgeRightAngled = lastEdge;
                 }
             }
-            RotateUVs(uvs, Vector2.Angle( Vector2.right, longestEdge2.normalized) );
+
+            // prefer longest right angled edge, otherwise use any edge
+            RotateUVs(uvs, Vector2.Angle( Vector2.right, 
+                longestUVEdgeRightAngled.sqrMagnitude > 0.1f ? longestUVEdgeRightAngled.normalized : longestUVEdgeAnyAngle.normalized
+            ) );
 
             return uvs;
         }
 
+        /// <summary> simple utility function for rotating UVs </summary>
         static void RotateUVs(Vector2[] uvs, float angle = 90) {
             var center = (SmallestVector2(uvs) + LargestVector2(uvs)) / 2;
             for (int i=0; i<uvs.Length; i++) {
