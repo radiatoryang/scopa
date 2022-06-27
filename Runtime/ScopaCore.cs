@@ -327,6 +327,11 @@ namespace Scopa {
                 var meshRenderer = newMeshObj.GetComponent<MeshRenderer>() ? newMeshObj.GetComponent<MeshRenderer>() : newMeshObj.AddComponent<MeshRenderer>();
                 meshRenderer.sharedMaterial = textureKVP.Value.material;
 
+                // not using a mesh prefab, so let's override default values
+                if ( meshPrefab == null ) {
+                    meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
+                }
+
                 // detail instancing detection
                 if ( textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.enableDetailInstancing ) {
                     var detailDrawer = newMeshObj.GetComponent<ScopaDetailDrawer>() ? newMeshObj.GetComponent<ScopaDetailDrawer>() : newMeshObj.AddComponent<ScopaDetailDrawer>();
