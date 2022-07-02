@@ -43,4 +43,5 @@ Issues and pull requests are currently NOT accepted at this time. Development is
 
 - based on [Sledge Formats](https://github.com/LogicAndTrick/sledge-formats)
 - hotspot UV implementation based on [Unity Hotspot UV](https://github.com/BennyKok/unity-hotspot-uv)
+- vertex color AO baking based on [VTAO](https://github.com/Helix128/VTAO)
 - looking for a BSP plugin? try [Unity3D BSP Importer](https://github.com/wfowler1/Unity3D-BSP-Importer)

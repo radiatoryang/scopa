@@ -7,6 +7,7 @@ using Scopa.Formats.Map.Objects;
 using Scopa.Formats.Texture.Wad;
 using Scopa.Formats.Id;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Mesh = UnityEngine.Mesh;
 
 #if UNITY_EDITOR
@@ -47,12 +48,26 @@ namespace Scopa {
 
         /// <summary>The main function for converting parsed MapFile data into a Unity GameObject with 3D mesh and colliders.
         /// Outputs a lists of built meshes (e.g. so UnityEditor can serialize them)</summary>
-        public static GameObject BuildMapIntoGameObject( MapFile mapFile, Material defaultMaterial, ScopaMapConfig config, out List<Mesh> meshList ) {
+        public static GameObject BuildMapIntoGameObject( MapFile mapFile, Material defaultMaterial, ScopaMapConfig config, out Dictionary<Mesh, Transform> meshList ) {
             var rootGameObject = new GameObject( mapFile.name );
 
             BuildMapPrepass( mapFile, config );
             CacheMaterialSearch();
             meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial, config);
+
+            // create a separate physics scene for the object, or else we can't raycast against it?
+            // var csp = new CreateSceneParameters(LocalPhysicsMode.Physics3D);
+            // var prefabScene = SceneManager.CreateScene("Scopa_PrefabScene", csp);
+            // SceneManager.MoveGameObjectToScene( rootGameObject, prefabScene );
+            // var physicsScene = prefabScene.GetPhysicsScene();
+
+            // we have to wait until the whole map is built before we bake AO, because we need all the colliders in place
+            if ( config.bakeVertexColorAO ) {
+                foreach ( var meshKVP in meshList ) {
+                    if ( meshKVP.Value != null && meshKVP.Value.gameObject.isStatic ) // if the Transform is null, that means it's a collision mesh and we should ignore it for AO purposes
+                        ScopaVertexAO.BakeObject( meshKVP.Key, meshKVP.Value, config.occlusionLength );
+                }
+            }
 
             return rootGameObject;
         }
@@ -105,25 +120,31 @@ namespace Scopa {
         }
 
         /// <summary> The main core function for converting entities (worldspawn, func_, etc.) into 3D meshes. </summary>
-        public static List<Mesh> AddGameObjectFromEntityRecursive( GameObject rootGameObject, Entity ent, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
-            var allMeshes = new List<Mesh>();
+        public static Dictionary<Mesh, Transform> AddGameObjectFromEntityRecursive( GameObject rootGameObject, Entity ent, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+            var allMeshes = new Dictionary<Mesh, Transform>();
 
             var newMeshes = AddGameObjectFromEntity(rootGameObject, ent, namePrefix, defaultMaterial, config) ;
-            if ( newMeshes != null )
-                allMeshes.AddRange( newMeshes );
+            if ( newMeshes != null ) {
+                foreach ( var meshKVP in newMeshes ) {
+                    allMeshes.Add( meshKVP.Key, meshKVP.Value );
+                }
+            }
 
             foreach ( var child in ent.Children ) {
                 if ( child is Entity && ((Entity)child).discard == false ) {
                     var newMeshChildren = AddGameObjectFromEntityRecursive(rootGameObject, child as Entity, namePrefix, defaultMaterial, config);
-                    if ( newMeshChildren.Count > 0)
-                        allMeshes.AddRange( newMeshChildren );
+                    if ( newMeshChildren.Count > 0) {
+                        foreach ( var meshKVP in newMeshChildren ) {
+                            allMeshes.Add( meshKVP.Key, meshKVP.Value );
+                        }
+                    }
                 }
             }
 
             return allMeshes;
         }
 
-        public static List<Mesh> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+        public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
             allFaces.Clear(); // used later for testing unseen faces
             var lastSolidID = -1;
@@ -218,7 +239,7 @@ namespace Scopa {
             }
 
             // pass 2: now build one mesh + one game object per textureName
-            var meshList = new List<Mesh>();
+            var meshList = new Dictionary<Mesh, Transform>();
 
             // user can specify a template entityPrefab if desired
             var entityPrefab = config.GetEntityPrefabFor(entData.ClassName);
@@ -283,14 +304,6 @@ namespace Scopa {
                 if ( verts.Count == 0 || tris.Count == 0) 
                     continue;
                     
-                var newMesh = BuildMeshFromBuffers(
-                    namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
-                    config, 
-                    entityOrigin,
-                    entitySmoothNormalAngle
-                );
-                meshList.Add(newMesh);
-
                 // finally, add mesh as game object, while we still have all the entity information
                 GameObject newMeshObj = null;
                 if ( meshPrefab != null ) {
@@ -321,6 +334,14 @@ namespace Scopa {
                     SetGameObjectStatic(newMeshObj, entityNeedsCollider && !entityIsTrigger);
                 }
 
+                var newMesh = BuildMeshFromBuffers(
+                    namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
+                    config, 
+                    entityOrigin,
+                    entitySmoothNormalAngle
+                );
+                meshList.Add(newMesh, newMeshObj.transform);
+
                 // populate components... if the mesh components aren't there, then add them
                 var meshFilter = newMeshObj.GetComponent<MeshFilter>() ? newMeshObj.GetComponent<MeshFilter>() : newMeshObj.AddComponent<MeshFilter>();
                 meshFilter.sharedMesh = newMesh;
@@ -341,8 +362,12 @@ namespace Scopa {
             }
 
             // collision pass, now treat it all as one object and ignore texture names
-            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider )
-                meshList.AddRange( ScopaCore.AddColliders( entityObject, entData, config, namePrefix ) );
+            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider ) {
+                var collisionMeshes = ScopaCore.AddColliders( entityObject, entData, config, namePrefix );
+                foreach ( var cMesh in collisionMeshes ) {
+                    meshList.Add( cMesh, null ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
+                }
+            }
 
             // now that we've finished building the gameobject, notify any custom user components that import is complete
             var allEntityComponents = entityObject.GetComponentsInChildren<IScopaEntityImport>();
