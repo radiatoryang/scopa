@@ -95,7 +95,7 @@ namespace Scopa {
 			if ( addNormals ) {
 				for (int i = 0; i < m.normals.Length; i++) 
 				{
-					sb.AppendFormat( CultureInfo.InvariantCulture, "vn {0} {1} {2}\n", -m.normals[i].x, m.normals[i].y, m.normals[i].z );
+					sb.AppendFormat( CultureInfo.InvariantCulture, "vn {0} {1} {2}\n", m.normals[i].x, m.normals[i].y, m.normals[i].z );
 				}
 				sb.Append("\n");
 			}

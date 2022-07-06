@@ -154,7 +154,8 @@ namespace Scopa {
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
                 Debug.Log($"{mipTex.Name} is {mipTex.Width} x {mipTex.Height}");
 
-                mipTex.MipData = QuantizeToMipmap( (Texture2D)mat.mainTexture, mat.color, (int)wadConfig.resolution, out var palette );
+                var color = mat.HasColor("_Color") || mat.HasColor("_MainColor") ? mat.color : Color.white;
+                mipTex.MipData = QuantizeToMipmap( (Texture2D)mat.mainTexture, color, (int)wadConfig.resolution, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {

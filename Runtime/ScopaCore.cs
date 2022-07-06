@@ -350,7 +350,7 @@ namespace Scopa {
 
                 // not using a mesh prefab, so let's override default values
                 if ( meshPrefab == null ) {
-                    meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
+                    meshRenderer.shadowCastingMode = config.castShadows;
                 }
 
                 // detail instancing detection

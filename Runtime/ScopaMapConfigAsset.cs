@@ -85,6 +85,9 @@ namespace Scopa {
         [Tooltip("(default: Default) Set ALL objects to use this layer. For example, maybe you have a 'World' layer. To set per-entity layers, see prefab slots below / Entity Overrides.")]
         [Layer] public int layer = 0;
 
+        [Tooltip("(default: On) the shadow casting mode on all the mesh objects; but if a mesh prefab is defined, then use that prefab setting instead")]
+        public UnityEngine.Rendering.ShadowCastingMode castShadows = UnityEngine.Rendering.ShadowCastingMode.On;
+
         [Tooltip("(default: true) if enabled, automatically add ScopaEntity component to all game objects (if not already present in the entityPrefab)... disable this if you don't want to use the built-in ScopaEntity at all, and override it with your own")]
         public bool addScopaEntityComponent = true;
 
