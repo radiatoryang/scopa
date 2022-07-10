@@ -44,6 +44,9 @@ namespace Scopa
     [CreateAssetMenu(fileName = "New Scopa Material Config", menuName = "Scopa/Material Config", order = 300)]
     public class ScopaMaterialConfig : ScriptableObject
     {
+        [Tooltip("if defined, Scopa will use this mesh prefab when instantiating brush meshes\n (NOTE: if the map importer or entity config has a mesh prefab defined, that will override this")]
+        public GameObject meshPrefab;
+
         #region HOTSPOT
 
         [Header("HOTSPOT UVS")]

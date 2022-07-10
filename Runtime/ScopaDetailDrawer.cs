@@ -97,9 +97,9 @@ namespace Scopa {
             for (int i=0; i<tris.Length; i+=3) {
                 var poly = new Polygon(verts[tris[i]], verts[tris[i+1]], verts[tris[i+2]]);
                 var worldNormal = transform.TransformDirection(poly.Plane.normal);
-                if ( worldNormal.y > 0.5f) {
+                if ( worldNormal.y > 0.69f) {
                     AddToPolygons( poly, floors, floorSizes );
-                } else if ( worldNormal.y < -0.5f) {
+                } else if ( worldNormal.y < -0.69f) {
                     AddToPolygons( poly, ceilings, ceilingSizes );
                 } else {
                     AddToPolygons( poly, walls, wallSizes );
@@ -108,6 +108,10 @@ namespace Scopa {
 
             // step 2: for each detail group, sample random points across the polygon surface(s)
             foreach( var detailGroup in detailConfig.detailGroups) {
+                if ( !detailGroup.detailFloors && !detailGroup.detailWalls && !detailGroup.detailCeilings ) {
+                    continue;
+                }
+
                 if ( !detailData.ContainsKey(detailGroup) )
                     detailData.Add(detailGroup, new List<Matrix4x4[]>() );
 
@@ -145,94 +149,98 @@ namespace Scopa {
                         // get a random polygon, weighted by polygon size
                         var random = Random.value * totalArea;
                         for( int i=0; i<surfaceSet.Value.Count; i++ ) {
-                            if ( random < surfaceSet.Value[i] ) {
-                                var selectedPoly = surfaceSet.Key[i];
-                                var polyNormal = transform.TransformDirection(selectedPoly.Plane.normal);
-                                var detailScalarAverage = (randomScale.x + randomScale.y + randomScale.z) * 0.33f;
-
-                                // sample a random place on polygon... in world space though
-                                var sampleAttempts = 0;
-                                var detailPos = Vector3.zero;
-                                while ( detailPos.sqrMagnitude < 0.01f  
-                                    || (detailGroup.checkForCollider && Physics.CheckSphere(
-                                        detailPos + polyNormal * detailMeshRadius * detailScalarAverage, 
-                                        detailMeshRadius * detailScalarAverage - 0.1f,
-                                        detailGroup.collisionMask,
-                                        QueryTriggerInteraction.Ignore
-                                    )) )
-                                {
-                                    detailPos = transform.TransformPoint( selectedPoly.GetRandomPointAsTriangle() ) + polyNormal * detailMeshHeight * randomScale.z;
-
-                                    if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS )
-                                        break;
-                                    sampleAttempts++;
-                                }
-                                if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS ) 
-                                    continue;
-
-                                // increment currentDetailTotal so we know when to stop
-                                currentDetailTotal += 1f / Mathf.Clamp(detailGroup.detailDensity, 0.001f, 10f);
-
-                                // still give up if there wasn't sky here (for grass details)
-                                if ( detailGroup.needSky && Physics.Raycast( detailPos, Vector3.up, 999f, detailGroup.collisionMask, QueryTriggerInteraction.Ignore )) {
-                                    continue;
-                                }
-
-                                // generate rotation aligned to surface normal
-                                var detailRot = Quaternion.AngleAxis(Random.Range(0, 360), polyNormal) * Quaternion.LookRotation( polyNormal );
-                                detailRot = detailRot * Quaternion.Euler( detailGroup.detailMeshRotationOffset ); // we don't know if detail meshes are Y-up or Z-up so let user specify
-                                
-                                var matrix = Matrix4x4.TRS(detailPos + polyNormal * detailGroup.detailMeshOffset.z * randomScale.z, detailRot, randomScale);
-
-                                // TODO: compare mesh points within worldspace bounding box of polygon
-                                
-                                
-                                // // for ( sampleAttempts = 0; sampleAttempts < MAX_SAMPLE_ATTEMPTS; sampleAttempts++ ) {
-                                // //     testPointsInPolygonSpace.Clear();
-                                if ( detailGroup.mustBeWithinSurfaceExtents ) {
-                                    var localBounds = detailGroup.detailMesh.bounds;
-                                    var testPoints = new Vector3[] {
-                                        matrix.MultiplyPoint3x4(localBounds.min),
-                                        matrix.MultiplyPoint3x4(localBounds.max),
-                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.max.z)),
-                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.max.z)),
-                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.max.y, localBounds.min.z)),
-                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.min.z)),
-                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.min.z)),
-                                        matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.min.y, localBounds.max.z)),
-                                    };
-
-                                    var worldFace = new Face( selectedPoly.Vertices.Select( vert => transform.TransformPoint(vert) ) );
-                                    foreach( var testPoint in testPoints ) {
-                                        if ( !worldFace.IsCoplanarPointInPolygon( worldFace.Plane.GetClosestPointOnPlane(testPoint) ) ) {
-                                            sampleAttempts = MAX_SAMPLE_ATTEMPTS + 1;
-                                            break;
-                                        }
-                                    }
-
-                                    if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS )
-                                        continue;
-
-                                    // var polyWorldBounds = GeometryUtility.CalculateBounds( selectedPoly.Vertices.ToArray(), transform.localToWorldMatrix);
-                                    // foreach ( var point in testPoints ) {
-                                    //     if (polyWorldBounds.Contains(point) ) {
-                                    //         sampleAttempts = MAX_SAMPLE_ATTEMPTS+1;
-                                    //         break;
-                                    //     }
-                                    // }
-                                    
-                                }
-
-                                // foreach ( var testPoint in testPoints ) {
-                                //     // get plane intersect point of every testPoint-polyNormal
-                                //     // grab Face.cs point in polygon code, test the plane intersect point
-                                //     // if it's not in the polygon, then break and abort?
-                                // }
-
-                                currentMatrixList.Add( matrix );
-
-                                break;
+                            if ( random > surfaceSet.Value[i] ) {
+                                continue;
                             }
+
+                            var selectedPoly = surfaceSet.Key[i];
+                            var polyNormal = transform.TransformDirection(selectedPoly.Plane.normal);
+                            var detailScalarAverage = (randomScale.x + randomScale.y + randomScale.z) * 0.33f;
+
+                            // sample a random place on polygon... in world space though
+                            var sampleAttempts = 0;
+                            var detailPos = Vector3.zero;
+                            while ( detailPos.sqrMagnitude < 0.01f  
+                                || (detailGroup.checkForCollider && Physics.CheckSphere(
+                                    detailPos + polyNormal * detailMeshRadius * detailScalarAverage, 
+                                    detailMeshRadius * detailScalarAverage - 0.1f,
+                                    detailGroup.collisionMask,
+                                    QueryTriggerInteraction.Ignore
+                                )) )
+                            {
+                                detailPos = transform.TransformPoint( selectedPoly.GetRandomPointAsTriangle() ) + polyNormal * detailMeshHeight * randomScale.z;
+
+                                if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS )
+                                    break;
+                                sampleAttempts++;
+                            }
+                            if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS ) 
+                                continue;
+
+                            // increment currentDetailTotal so we know when to stop
+                            currentDetailTotal += 1f / Mathf.Clamp(detailGroup.detailDensity, 0.001f, 10f);
+
+                            // still give up if there wasn't sky here (for grass details)
+                            if ( detailGroup.needSky && Physics.Raycast( detailPos, Vector3.up, 999f, detailGroup.collisionMask, QueryTriggerInteraction.Ignore )) {
+                                continue;
+                            }
+
+                            // generate rotation aligned to surface normal
+                            var detailRot = Quaternion.AngleAxis(Random.Range(0, 360), polyNormal) * Quaternion.LookRotation( polyNormal );
+                            detailRot = detailRot * Quaternion.Euler( detailGroup.detailMeshRotationOffset ); // we don't know if detail meshes are Y-up or Z-up so let user specify
+                            
+                            var matrix = Matrix4x4.TRS(detailPos + polyNormal * detailGroup.detailMeshOffset.z * randomScale.z, detailRot, randomScale);
+
+                            // TODO: compare mesh points within worldspace bounding box of polygon
+                            
+                            
+                            // // for ( sampleAttempts = 0; sampleAttempts < MAX_SAMPLE_ATTEMPTS; sampleAttempts++ ) {
+                            // //     testPointsInPolygonSpace.Clear();
+                            if ( detailGroup.mustBeWithinSurfaceExtents ) {
+                                var boundsScalar = 0.55f;
+                                var localBounds = detailGroup.detailMesh.bounds;
+                                localBounds.extents *= boundsScalar;
+                                var testPoints = new Vector3[] {
+                                    matrix.MultiplyPoint3x4(localBounds.min),
+                                    matrix.MultiplyPoint3x4(localBounds.max),
+                                    matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.max.z)),
+                                    matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.max.z)),
+                                    matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.max.y, localBounds.min.z)),
+                                    matrix.MultiplyPoint3x4(new Vector3(localBounds.max.x, localBounds.min.y, localBounds.min.z)),
+                                    matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.max.y, localBounds.min.z)),
+                                    matrix.MultiplyPoint3x4(new Vector3(localBounds.min.x, localBounds.min.y, localBounds.max.z)),
+                                };
+
+                                var worldFace = new Face( selectedPoly.Vertices.Select( vert => transform.TransformPoint(vert) ) );
+                                for (int i1 = 0; i1 < testPoints.Length; i1++) {
+                                    if ( !worldFace.IsCoplanarPointInPolygon( worldFace.Plane.GetClosestPointOnPlane(testPoints[i1]) ) ) {
+                                        sampleAttempts = MAX_SAMPLE_ATTEMPTS + 1;
+                                        break;
+                                    }
+                                }
+
+                                if ( sampleAttempts > MAX_SAMPLE_ATTEMPTS )
+                                    continue;
+
+                                // var polyWorldBounds = GeometryUtility.CalculateBounds( selectedPoly.Vertices.ToArray(), transform.localToWorldMatrix);
+                                // foreach ( var point in testPoints ) {
+                                //     if (polyWorldBounds.Contains(point) ) {
+                                //         sampleAttempts = MAX_SAMPLE_ATTEMPTS+1;
+                                //         break;
+                                //     }
+                                // }
+                                
+                            }
+
+                            // foreach ( var testPoint in testPoints ) {
+                            //     // get plane intersect point of every testPoint-polyNormal
+                            //     // grab Face.cs point in polygon code, test the plane intersect point
+                            //     // if it's not in the polygon, then break and abort?
+                            // }
+
+                            currentMatrixList.Add( matrix );
+
+                            break;
                         }
                     }
                 }

@@ -306,11 +306,18 @@ namespace Scopa {
                     
                 // finally, add mesh as game object, while we still have all the entity information
                 GameObject newMeshObj = null;
-                if ( meshPrefab != null ) {
+                var thisMeshPrefab = meshPrefab;
+
+                // the material config might have a meshPrefab defined too; use that if there isn't already a meshPrefab set already
+                if ( meshPrefab == null && textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.meshPrefab != null ) {
+                    thisMeshPrefab = textureKVP.Value.materialConfig.meshPrefab;
+                }
+
+                if ( thisMeshPrefab != null ) {
                     #if UNITY_EDITOR
-                    newMeshObj = UnityEditor.PrefabUtility.InstantiatePrefab(meshPrefab) as GameObject; // maintain prefab linkage
+                    newMeshObj = UnityEditor.PrefabUtility.InstantiatePrefab(thisMeshPrefab) as GameObject; // maintain prefab linkage
                     #else
-                    newMeshObj = Instantiate(meshPrefab);
+                    newMeshObj = Instantiate(thisMeshPrefab);
                     #endif
                 } else {
                     newMeshObj = new GameObject();
@@ -326,11 +333,11 @@ namespace Scopa {
                 // ... but if it's a generic game object we made, then we set it ourselves
                 if ( !string.IsNullOrEmpty(layerName) ) { // or did they set a specifc override on this entity?
                     entityObject.layer = LayerMask.NameToLayer(layerName);
-                } else if ( meshPrefab == null ) { 
+                } else if ( thisMeshPrefab == null ) { 
                     newMeshObj.layer = config.layer;
                 }
 
-                if ( meshPrefab == null && config.IsEntityStatic(entData.ClassName)) {
+                if ( thisMeshPrefab == null && config.IsEntityStatic(entData.ClassName)) {
                     SetGameObjectStatic(newMeshObj, entityNeedsCollider && !entityIsTrigger);
                 }
 
@@ -343,13 +350,19 @@ namespace Scopa {
                 meshList.Add(newMesh, newMeshObj.transform);
 
                 // populate components... if the mesh components aren't there, then add them
-                var meshFilter = newMeshObj.GetComponent<MeshFilter>() ? newMeshObj.GetComponent<MeshFilter>() : newMeshObj.AddComponent<MeshFilter>();
+                if ( newMeshObj.TryGetComponent<MeshFilter>(out var meshFilter) == false ) {
+                    meshFilter = newMeshObj.AddComponent<MeshFilter>();
+                }
                 meshFilter.sharedMesh = newMesh;
-                var meshRenderer = newMeshObj.GetComponent<MeshRenderer>() ? newMeshObj.GetComponent<MeshRenderer>() : newMeshObj.AddComponent<MeshRenderer>();
+
+                bool addedMeshRenderer = false;
+                if ( newMeshObj.TryGetComponent<MeshRenderer>(out var meshRenderer) == false ) {
+                    meshRenderer = newMeshObj.AddComponent<MeshRenderer>();
+                    addedMeshRenderer = true;
+                }
                 meshRenderer.sharedMaterial = textureKVP.Value.material;
 
-                // not using a mesh prefab, so let's override default values
-                if ( meshPrefab == null ) {
+                if ( addedMeshRenderer ) { // if we added a generic mesh renderer, then set default shadow caster setting too
                     meshRenderer.shadowCastingMode = config.castShadows;
                 }
 
