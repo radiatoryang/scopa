@@ -27,7 +27,9 @@ namespace Scopa
 
         public bool detailFloors = true, detailWalls = false, detailCeilings = false;
 
-        public bool mustBeWithinSurfaceExtents = false;
+        [Tooltip("(recommended: 50-75%) what % of the detail's bounding box must be within the spawned surface? set to 0% or negative to disable; 100%+ = detail will never hang over any edge, but that means thin faces probably won't get any valid details")]
+        [Range(0f, 1.5f)]
+        public float surfaceExtentsPercentage = 1f;
 
         [Tooltip("before placing a detail, what if it's in a collider? adds additional processing cost to the detail generation process")]
         public bool checkForCollider = false;

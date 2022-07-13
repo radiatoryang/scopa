@@ -7,6 +7,8 @@ using Scopa.Formats.Map.Objects;
 using Scopa.Formats.Texture.Wad;
 using Scopa.Formats.Id;
 using UnityEngine;
+using Unity.Collections;
+using Unity.Jobs;
 using UnityEngine.SceneManagement;
 using Mesh = UnityEngine.Mesh;
 
@@ -52,7 +54,8 @@ namespace Scopa {
             var rootGameObject = new GameObject( mapFile.name );
 
             BuildMapPrepass( mapFile, config );
-            CacheMaterialSearch();
+            if ( config.findMaterials )
+                CacheMaterialSearch();
             meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial, config);
 
             // create a separate physics scene for the object, or else we can't raycast against it?
@@ -150,12 +153,14 @@ namespace Scopa {
             var lastSolidID = -1;
 
             // detect per-entity smoothing angle, if defined
-            var entitySmoothNormalAngle = 0;
-            if (entData.TryGetInt("_phong", out var phong) && phong >= 1) {
-                if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
-                    entitySmoothNormalAngle = Mathf.RoundToInt( phongAngle );
+            var entitySmoothNormalAngle = config.defaultSmoothingAngle;
+            if (entData.TryGetBool("_phong", out var phong)) {
+                if ( phong ) {
+                    if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
+                        entitySmoothNormalAngle = Mathf.RoundToInt( phongAngle );
+                    }
                 } else {
-                    entitySmoothNormalAngle = 89;
+                    entitySmoothNormalAngle = -1;
                 }
             }
 
@@ -184,7 +189,8 @@ namespace Scopa {
                         continue;
                     }
                     
-                    allFaces.Add(face); // TODO: we need this for per-entity optimization later
+                    if ( config.removeHiddenFaces )
+                        allFaces.Add(face);
 
                     // start calculating min bounds, if needed
                     if ( calculateOrigin ) {
@@ -233,6 +239,12 @@ namespace Scopa {
                     }
                 }
             }
+
+            // pass 1B: use jobs to build face occlusion data
+            if ( config.removeHiddenFaces ) {
+                // var jobData = new NativeArray<Vector3>(aMesh.vertices, Allocator.TempJob);
+            }
+
             entityOrigin *= config.scalingFactor;
             if ( entData.TryGetVector3Scaled("origin", out var pos, config.scalingFactor) ) {
                 entityOrigin = pos;
@@ -425,7 +437,9 @@ namespace Scopa {
                         }
                     }
                 }
-                entComp.OnEntityImport( entData );
+
+                if ( config.callOnEntityImport )
+                    entComp.OnEntityImport( entData );
             }
             
             return meshList;
@@ -469,20 +483,19 @@ namespace Scopa {
                     continue;
 
                 // test for unseen / hidden faces, and discard
-                if ( !includeDiscardedFaces ) {
-                    for(int i=0; i<allFaces.Count; i++) {
-                        if (allFaces[i].OccludesFace(face)) {
-                            // Debug.Log("discarding unseen face at " + face);
-                            // face.DebugDrawVerts(Color.yellow);
-                            face.discardWhenBuildingMesh = true;
-                            break;
-                        }
-                    }
-                    
+                // if ( !includeDiscardedFaces && config.removeHiddenFaces ) {
+                //     for(int i=0; i<allFaces.Count; i++) {
+                //         if (allFaces[i].OccludesFace(face)) {
+                //             // Debug.Log("discarding unseen face at " + face);
+                //             // face.DebugDrawVerts(Color.yellow);
+                //             face.discardWhenBuildingMesh = true;
+                //             break;
+                //         }
+                //     }
 
-                    if ( face.discardWhenBuildingMesh )
-                        continue;
-                }
+                //     if ( face.discardWhenBuildingMesh )
+                //         continue;
+                // }
 
                 BufferScaledMeshDataForFace(
                     face, 
@@ -514,10 +527,13 @@ namespace Scopa {
             mesh.SetUVs(0, uvs);
 
             mesh.RecalculateBounds();
-            if ( smoothNormalAngle > 0.1 )
-                mesh.RecalculateNormals(smoothNormalAngle);
-            else if ( smoothNormalAngle >= 0)
+            // if ( smoothNormalAngle > 0.1 )
+            //     mesh.RecalculateNormals(smoothNormalAngle);
+            // else if ( smoothNormalAngle >= 0)
                 mesh.RecalculateNormals(); // built-in Unity method
+
+            if ( smoothNormalAngle > 0.01f)
+                mesh.SmoothNormalsJobs(smoothNormalAngle);
 
             if ( config.addTangents && smoothNormalAngle >= 0 )
                 mesh.RecalculateTangents();

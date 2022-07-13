@@ -21,13 +21,16 @@ namespace Scopa {
         [Tooltip("(default: 4) vertex welding distance threshold in unscaled map units; set to 0 to disable vertex welding (not recommended). Pretty important for minimizing seams and cracks. Avoid building smaller than the welding threshold.")]
         public float weldingThreshold = 4f;
 
-        [Tooltip("(default: true) Try to detect whether a face is completely covered by another face within the same entity, and discard it. It's not perfect; it can't detect if a face is covered by 2+ faces. But it helps. Note the extra calculations increase map import times.")]
+        [Tooltip("(default: 80 degrees) smooth shading on edges, which adds extra import time; set to -1 to disable default global smoothing, and/or override with _phong / _phong_angle entity keyvalues")]
+        public float defaultSmoothingAngle = 80f;
+
+        [Tooltip("(default: true) Try to detect whether a face is completely covered by another face within the same entity, and discard it. It's far from perfect; it can't detect if a face is covered by 2+ faces. But it helps. Note the extra calculations increase map import times.")]
         public bool removeHiddenFaces = true;
 
         [Tooltip("(default: true) Generate tangent data needed for normal mapping. If you're not using normal maps, disable for small memory savings.")]
         public bool addTangents = true;
 
-        [Tooltip("(EDITOR-ONLY) (default: true) Generate lightmap UVs using Unity's built-in lightmap unwrapper.")]
+        [Tooltip("(EDITOR-ONLY) (default: true) Generate lightmap UVs using Unity's built-in lightmap unwrapper. If you're not using lightmaps, maybe disable for small memory savings.")]
         public bool addLightmapUV2 = true;
 
         [Tooltip("(EDITOR-ONLY) (default: Off) Use Unity's built-in mesh compressor. Reduces file size but may cause glitches and seams.")]
@@ -90,6 +93,9 @@ namespace Scopa {
 
         [Tooltip("(default: true) if enabled, automatically add ScopaEntity component to all game objects (if not already present in the entityPrefab)... disable this if you don't want to use the built-in ScopaEntity at all, and override it with your own")]
         public bool addScopaEntityComponent = true;
+
+        [Tooltip("(default: true) if enabled, will call OnEntityImport on any script that implements IScopaEntityImport")]
+        public bool callOnEntityImport = true;
 
         [Tooltip("(optional) Prefab template to use for the root of EVERY entity including worldspawn. Ignores the config-wide static / layer settings above.")]
         public GameObject entityPrefab;

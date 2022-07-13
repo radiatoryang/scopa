@@ -3,38 +3,29 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections;
+using Unity.Jobs;
 
 public static class MeshExtensions {
 
-        public static void WeldVertices(Mesh aMesh, float aMaxDelta = 0.001f) {
+        public static void WeldVertices(this Mesh aMesh, float weldingAngle = 80, float aMaxDelta = 0.01f) {
             var verts = aMesh.vertices;
             var normals = aMesh.normals;
             var uvs = aMesh.uv;
             List<int> newVerts = new List<int>();
             int[] map = new int[verts.Length];
             // create mapping and filter duplicates.
-            for(int i = 0; i < verts.Length; i++)
-            {
-                var p = verts[i];
-                var n = normals[i];
-                var uv = uvs[i];
+            for(int i = 0; i < verts.Length; i++) {
                 bool duplicate = false;
-                for(int i2 = 0; i2 < newVerts.Count; i2++)
-                {
-                    int a = newVerts[i2];
-                    if (
-                        (verts[a] - p).sqrMagnitude <= aMaxDelta && // compare position
-                        Vector3.Angle(normals[a], n) <= aMaxDelta && // compare normal
-                        (uvs[a] - uv).sqrMagnitude <= aMaxDelta // compare first uv coordinate
-                        )
-                    {
+                for(int i2 = 0; i2 < newVerts.Count; i2++) {
+                    if ( (verts[newVerts[i2]] - verts[i] ).sqrMagnitude <= aMaxDelta
+                        && Vector3.Angle(normals[newVerts[i2]], normals[i] ) <= weldingAngle ) {
                         map[i] = i2;
                         duplicate = true;
                         break;
                     }
                 }
-                if (!duplicate)
-                {
+                if (!duplicate) {
                     map[i] = newVerts.Count;
                     newVerts.Add(i);
                 }
@@ -62,6 +53,81 @@ public static class MeshExtensions {
             aMesh.normals = normals2;
             aMesh.uv = uvs2;
             aMesh.triangles = tris;
+        }
+
+        
+        
+        public static void SmoothNormals(this Mesh aMesh, float weldingAngle = 80, float aMaxDelta = 0.01f) {
+            var verts = aMesh.vertices;
+            var normals = aMesh.normals;
+            var cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
+
+            // average normals for verts with shared positions
+            for(int i = 0; i < verts.Length; i++) {
+                for(int i2 = i+1; i2 < verts.Length; i2++) {
+                    if ( (verts[i2] - verts[i] ).sqrMagnitude <= aMaxDelta
+                        && Vector3.Dot(normals[i2], normals[i] ) >= cos ) {
+                        normals[i] = ( (normals[i] + normals[i2]) * 0.5f).normalized;
+                        normals[i2] = normals[i];
+                    }
+                }
+            }
+
+            aMesh.normals = normals;
+        }
+
+
+        public static void SmoothNormalsJobs(this Mesh aMesh, float weldingAngle = 80, float maxDelta = 0.1f) {
+            var meshData = Mesh.AcquireReadOnlyMeshData(aMesh);
+            var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            meshData[0].GetVertices(verts);
+            var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            meshData[0].GetNormals(normals);
+            var smoothNormalsResults = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            
+            var jobData = new SmoothJob();
+            jobData.cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
+            jobData.maxDelta = maxDelta;
+            jobData.verts = verts;
+            jobData.normals = normals;
+            jobData.results = smoothNormalsResults;
+            var handle = jobData.Schedule(smoothNormalsResults.Length, 16);
+            handle.Complete();
+
+            meshData.Dispose(); // must dispose this early, before modifying mesh
+
+            aMesh.SetNormals(smoothNormalsResults);
+
+            verts.Dispose();
+            normals.Dispose();
+            smoothNormalsResults.Dispose();
+        }
+
+        public struct SmoothJob : IJobParallelFor
+        {
+            [ReadOnly]
+            public NativeArray<Vector3> verts, normals;
+            
+            public NativeArray<Vector3> results;
+
+            public float cos, maxDelta;
+
+            public void Execute(int i)
+            {
+                var tempResult = normals[i];
+                var resultCount = 1;
+                
+                for(int i2 = 0; i2 < verts.Length; i2++) {
+                    if ( (verts[i2] - verts[i] ).sqrMagnitude <= maxDelta
+                        && Vector3.Dot(normals[i2], normals[i] ) >= cos ) {
+                        tempResult += normals[i2];
+                        resultCount++;
+                    }
+                }
+
+                tempResult = (tempResult / resultCount).normalized;
+                results[i] = tempResult;
+            }
         }
 
         public static Mesh LaplacianFilter (Mesh mesh, int times = 1) {

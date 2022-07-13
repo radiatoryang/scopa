@@ -70,7 +70,7 @@ namespace Scopa.Formats.Map.Objects
                 // }
             }
 
-            // weld nearby vertices together within in each solid
+            // snap nearby vertices together within in each solid
             var origin = poly.Origin;
             foreach(var face1 in Faces) {
                 foreach (var face2 in Faces) {

@@ -42,6 +42,9 @@ namespace Scopa {
         }
 
         void Update() {
+            if ( !SystemInfo.supportsInstancing )
+                return;
+
             if ( detailConfig == null || !detailConfig.enableDetailInstancing || (!Application.isPlaying && !forcePreviewInEditor && !detailConfig.drawDetailsInEditor) ) {
                 if ( triedBuildingData ) {
                     Reset();
@@ -196,10 +199,9 @@ namespace Scopa {
                             
                             // // for ( sampleAttempts = 0; sampleAttempts < MAX_SAMPLE_ATTEMPTS; sampleAttempts++ ) {
                             // //     testPointsInPolygonSpace.Clear();
-                            if ( detailGroup.mustBeWithinSurfaceExtents ) {
-                                var boundsScalar = 0.55f;
+                            if ( detailGroup.surfaceExtentsPercentage > 0f ) {
                                 var localBounds = detailGroup.detailMesh.bounds;
-                                localBounds.extents *= boundsScalar;
+                                localBounds.extents *= detailGroup.surfaceExtentsPercentage;
                                 var testPoints = new Vector3[] {
                                     matrix.MultiplyPoint3x4(localBounds.min),
                                     matrix.MultiplyPoint3x4(localBounds.max),
@@ -250,7 +252,7 @@ namespace Scopa {
                 detailData[detailGroup].Add( currentMatrixList.ToArray() );
             }
             
-            Debug.Log($"BuildDetailData() {detailConfig.name}: {totalInstances} instances");
+            // Debug.Log($"BuildDetailData() {detailConfig.name}: {totalInstances} instances");
         }
 
         void AddToPolygons(Polygon poly, List<Polygon> polygons, List<float> sizes) {
