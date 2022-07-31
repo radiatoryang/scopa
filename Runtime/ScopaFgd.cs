@@ -39,7 +39,12 @@ namespace Scopa {
             IntScaled,
             Float,
             FloatScaled,
-            Vector3Scaled
+            /// <summary>applies axis correction and default MAP scaling factor</summary>
+            Vector3Scaled,
+            /// <summary>applies axis correction BUT no MAP scaling correction</summary>
+            Vector3Unscaled,
+            /// <summary>bind to Vector3 as axis-corrected euler angles</summary>
+            Angles3D, 
         }
     }
 

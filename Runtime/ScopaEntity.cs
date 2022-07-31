@@ -5,39 +5,13 @@ using UnityEngine.Events;
 using Scopa.Formats.Map.Objects;
 
 namespace Scopa {
-    /// <summary> interface for components to listen for inputs from the built-in ScopaEntity component; 
-    /// if you don't use built-in ScopaEntity, you need to make your own component to dispatch these OnEntity* functions </summary>
-    public interface IScopaEntityLogic {
-        /// <summary> implement this method for when something activates this entity. Like when a button targets a door, the door could open. Return true / false based on whether activation worked (e.g. entity not reset yet, or entity locked)</summary>
-        public virtual void OnEntityActivate( IScopaEntityLogic activator ) { }
-
-        /// <summary> implement this method for when something locks this entity. Locked entities cannot activate. </summary>
-        public virtual void OnEntityLocked() { }
-
-        /// <summary> implement this method for when something unlocks this entity. Only unlocked entities can activate. </summary>
-        public virtual void OnEntityUnlocked() { }
-
-        /// <summary> implement this method for when something kills / destroys this entity. The game object will be destroyed in the next frame, so do your cleanup fast!</summary>
-        public virtual void OnEntityKilled() { }
-
-        /// <summary> implement this method for when this entity resets itself (after wait, if any) and can be activated again. Like when a door opens, the door could close itself. </summary>
-        public virtual void OnEntityReset() { }
-    }
-
-    /// <summary> interface for components that can receive raw entity data during map import </summary>
-    public interface IScopaEntityData {
-        /// <summary> holds all the basic mostly-raw entity data </summary>
-        Entity entityData { get; set; }
-    }
-
-    /// <summary> interface for components that can do any special processing at import time and/or use BindFgd </summary>
-    public interface IScopaEntityImport {
-        /// <summary> implement this method to configure a component at import time, whether at runtime or editor time </summary>
-        public virtual void OnEntityImport( Entity entityData ) { }
-    }
-
-    /// <summary> general container to hold entity data, and coordinate targeting / input flow across multiple components; 
-    /// call GetComponent<ScopaEntity>().TryGet*() to poll for data, or implement IScopaEntity and use OnScopaImport() / [BindFgd] to pull in entity data at import time. </summary>
+    /// <summary> 
+    /// General container to hold entity data, and coordinate targeting / input flow across multiple components.
+    /// To configure your custom components with entity data, you have three options:
+    /// 1. call GetComponent<ScopaEntity>().TryGet*() to poll for data at runtime, 
+    /// 2. implement IScopaEntity and use OnScopaImport()
+    /// 3. use [BindFgd] to automatically bind FGD entry + entity data at import time. 
+    /// </summary>
     [SelectionBase]
     public class ScopaEntity : MonoBehaviour, IScopaEntityLogic, IScopaEntityData, IScopaEntityImport
     {
@@ -96,6 +70,11 @@ namespace Scopa {
         [BindFgd("locked", BindFgd.VarType.Bool, "Is Locked")]
         public bool isLocked = false;
 
+        /// <summary> When sending out events (OnActivate, OnReset, etc.) to IScopaEntityLogic components in children, cache the results of GetComponentsInChildren() for better perf. If this game object's children do not change, set this to true. </summary>
+        [Tooltip("When sending out events (OnActivate, OnReset, etc.) to IScopaEntityLogic components in children, cache the results of GetComponentsInChildren() for better perf. If this game object's children do not change, set this to true.")]
+        public bool cacheChildrenForDispatch = true;
+        IScopaEntityLogic[] allTargets;
+
         protected void Awake() {
             // if this entity has a targetName, it needs to register itself so other entities can target it
             if ( string.IsNullOrWhiteSpace(targetName) )
@@ -111,7 +90,7 @@ namespace Scopa {
             // target timer
             if ( targetDelayRemaining >= 0 && !isLocked ) {
                 targetDelayRemaining -= Time.deltaTime;
-                if ( targetDelayRemaining < 0) {
+                if ( canActivate ) {
                     Activate();
                     FireTarget();
                 }
@@ -155,8 +134,8 @@ namespace Scopa {
 
         public void Reset() {
             // notify everything about reset
-            var allComponents = GetComponents<IScopaEntityLogic>();
-            foreach( var target in allComponents ) {
+            CacheTargetsIfNeeded();
+            foreach( var target in allTargets ) {
                 target.OnEntityReset();
             }
             resetDelayRemaining = -1;
@@ -179,9 +158,21 @@ namespace Scopa {
             return true;
         }
 
+        public void TryActivate(bool force = false) {
+            TryActivate(null, force);
+        }
+        
+        protected void CacheTargetsIfNeeded() {
+            // ignore costly GetComponentsInChildren call
+            if ( cacheChildrenForDispatch && allTargets != null )
+                return;
+
+            allTargets = GetComponentsInChildren<IScopaEntityLogic>();
+        }
+
         public void Activate() {
             Debug.Log(gameObject.name + " is activating!");
-            var allTargets = GetComponents<IScopaEntityLogic>();
+            CacheTargetsIfNeeded();
             foreach( var target in allTargets ) {
                 target.OnEntityActivate(lastActivator);
             }
@@ -189,8 +180,7 @@ namespace Scopa {
 
         public void Lock() {
             isLocked = true;
-
-            var allTargets = GetComponents<IScopaEntityLogic>();
+            CacheTargetsIfNeeded();
             foreach( var target in allTargets ) {
                 target.OnEntityLocked();
             }
@@ -198,15 +188,14 @@ namespace Scopa {
 
         public void Unlock() {
             isLocked = false;
-
-            var allTargets = GetComponents<IScopaEntityLogic>();
+            CacheTargetsIfNeeded();
             foreach( var target in allTargets ) {
                 target.OnEntityUnlocked();
             }
         }
 
         public void Kill() {
-            var allTargets = GetComponents<IScopaEntityLogic>();
+            CacheTargetsIfNeeded();
             foreach( var target in allTargets ) {
                 target.OnEntityKilled();
             }

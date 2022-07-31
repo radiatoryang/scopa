@@ -398,7 +398,10 @@ namespace Scopa {
 
             // now that we've finished building the gameobject, notify any custom user components that import is complete
             var allEntityComponents = entityObject.GetComponentsInChildren<IScopaEntityImport>();
-            foreach( var entComp in allEntityComponents ) {
+            foreach( var entComp in allEntityComponents ) { 
+                if ( !entComp.IsImportEnabled() )
+                    continue;
+
                 // scan for any FGD attribute and update accordingly
                 FieldInfo[] objectFields = entComp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public);
                 for (int i = 0; i < objectFields.Length; i++) {
@@ -432,6 +435,14 @@ namespace Scopa {
                             case BindFgd.VarType.Vector3Scaled:
                                 if ( entData.TryGetVector3Scaled(attribute.propertyKey, out var vec3Scaled, config.scalingFactor) )
                                     objectFields[i].SetValue(entComp, vec3Scaled);
+                                break;
+                            case BindFgd.VarType.Vector3Unscaled:
+                                if ( entData.TryGetVector3Unscaled(attribute.propertyKey, out var vec3Unscaled) )
+                                    objectFields[i].SetValue(entComp, vec3Unscaled);
+                                break;
+                            case BindFgd.VarType.Angles3D:
+                                if ( entData.TryGetAngles3D(attribute.propertyKey, out var angle3D) )
+                                    objectFields[i].SetValue(entComp, angle3D.eulerAngles);
                                 break;
                             default:
                                 Debug.LogError( $"BindFgd named {objectFields[i].Name} / {attribute.propertyKey} has FGD var type {attribute.propertyType} ... but no case handler for it yet!");

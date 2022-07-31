@@ -169,6 +169,8 @@ namespace Scopa {
                 if ( entityPrefab != null) {
                     var allEntityComponents = entityPrefab.GetComponents<IScopaEntityImport>();
                     foreach( var entComp in allEntityComponents ) {
+                        if ( entComp.IsImportEnabled() == false)
+                            continue;
 
                         // scan for any FGD attribute and update accordingly
                         FieldInfo[] objectFields = entComp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public);
@@ -199,6 +201,8 @@ namespace Scopa {
                                         propType = FgdPropertyType.Float;
                                         break;
                                     case BindFgd.VarType.Vector3Scaled:
+                                    case BindFgd.VarType.Vector3Unscaled:
+                                    case BindFgd.VarType.Angles3D:
                                         propType = FgdPropertyType.String;
                                         propDefaultValue = propDefaultValue.Substring(1, propDefaultValue.Length-2).Replace(",", "");
                                         break;
