@@ -49,6 +49,9 @@ namespace Scopa
         [Tooltip("if defined, Scopa will use this mesh prefab when instantiating brush meshes\n (NOTE: if the map importer or entity config has a mesh prefab defined, that will override this")]
         public GameObject meshPrefab;
 
+        [Tooltip("(default: -1) if 0 or higher, this value will override the map config settings' smoothing angle for meshes with this material\n (note: entities can override *this* setting with _phong and _phong_angle)")]
+        public float smoothingAngle = -1;
+
         #region HOTSPOT
 
         [Header("HOTSPOT UVS")]

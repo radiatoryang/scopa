@@ -234,12 +234,6 @@ namespace Scopa {
                                 
                             }
 
-                            // foreach ( var testPoint in testPoints ) {
-                            //     // get plane intersect point of every testPoint-polyNormal
-                            //     // grab Face.cs point in polygon code, test the plane intersect point
-                            //     // if it's not in the polygon, then break and abort?
-                            // }
-
                             currentMatrixList.Add( matrix );
 
                             break;

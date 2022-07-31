@@ -152,18 +152,6 @@ namespace Scopa {
             allFaces.Clear(); // used later for testing unseen faces
             var lastSolidID = -1;
 
-            // detect per-entity smoothing angle, if defined
-            var entitySmoothNormalAngle = config.defaultSmoothingAngle;
-            if (entData.TryGetBool("_phong", out var phong)) {
-                if ( phong ) {
-                    if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
-                        entitySmoothNormalAngle = Mathf.RoundToInt( phongAngle );
-                    }
-                } else {
-                    entitySmoothNormalAngle = -1;
-                }
-            }
-
             // for worldspawn, pivot point should be 0, 0, 0... else, see if origin is defined... otherwise, calculate min of bounds
             var calculateOrigin = entData.ClassName.ToLowerInvariant() != "worldspawn";
             var entityOrigin = calculateOrigin ? Vector3.one * 999999 : Vector3.zero;
@@ -353,11 +341,25 @@ namespace Scopa {
                     SetGameObjectStatic(newMeshObj, entityNeedsCollider && !entityIsTrigger);
                 }
 
+                // detect smoothing angle, if defined via map config or material config or entity
+                var smoothNormalAngle = config.defaultSmoothingAngle;
+                if (entData.TryGetBool("_phong", out var phong)) {
+                    if ( phong ) {
+                        if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
+                            smoothNormalAngle = Mathf.RoundToInt( phongAngle );
+                        }
+                    } else {
+                        smoothNormalAngle = -1;
+                    }
+                } else if ( textureKVP.Value != null && textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.smoothingAngle >= 0 ) {
+                    smoothNormalAngle = textureKVP.Value.materialConfig.smoothingAngle;
+                }
+
                 var newMesh = BuildMeshFromBuffers(
                     namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
                     config, 
                     entityOrigin,
-                    entitySmoothNormalAngle
+                    smoothNormalAngle
                 );
                 meshList.Add(newMesh, newMeshObj.transform);
 
