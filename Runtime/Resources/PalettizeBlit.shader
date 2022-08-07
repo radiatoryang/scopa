@@ -20,28 +20,30 @@ Shader "Hidden/PalettizeBlit" {
 			#pragma fragmentoption ARB_precision_hint_fastest
 	  		#include "UnityCG.cginc"
 
-            uniform fixed4 _Color;
-			uniform fixed4 _Colors[256];
+            uniform float4 _Color;
+			uniform float4 _Colors[256];
 	  		uniform sampler2D _MainTex;
 
-	  		fixed4 frag (v2f_img i) : COLOR
+	  		float4 frag (v2f_img i) : COLOR
 	  		{
-	   			fixed4 original = tex2D(_MainTex, i.uv) * _Color;
+	   			float4 original = tex2D(_MainTex, i.uv) * 2 * _Color;
 
-	   			fixed4 col = fixed4 (1,1,1,1);
-	   			fixed dist = 10000000.0;
+	   			float4 col = float4 (1,1,1,1);
+	   			float dist = 10000000.0;
 
 	   			for (int i = 0; i < 255; i++) { // ignore index 255, which is reserved for transparency
-	   				fixed d = distance(original, _Colors[i]);
+	   				float d = distance(original, _Colors[i]);
 
 	   				if (d < dist) {
 	   					dist = d;
-	   					col = fixed4(i/255.0, i/255.0, i/255.0, 1);
+						col = _Colors[i];
+						col.a = i / 255.0;
 	   				}
 	   			}
 
 				return col;
 	  		}
+
 	  		ENDCG
 	 	}
 	}
