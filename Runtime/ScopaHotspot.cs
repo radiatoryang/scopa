@@ -15,21 +15,20 @@ namespace Scopa {
         public static bool TryGetHotspotUVs(List<Vector3> faceVerts, Vector3 normal, ScopaMaterialConfig atlas, out Vector2[] uvs, float scalar = 0.03125f) {
             uvs = PlanarProject(faceVerts, normal);
 
-            var approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
+            var approximateSize = (LargestVector2(uvs) - SmallestVector2(uvs)) * scalar;
 
             if ( atlas.hotspotRotate == HotspotRotateMode.Random ) {
                 RotateUVs(uvs, Random.Range(0, 4) * 90);
-                approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
             } else if ( (atlas.hotspotRotate == HotspotRotateMode.RotateHorizontalToVertical && approximateSize.x > approximateSize.y) ||
                 (atlas.hotspotRotate == HotspotRotateMode.RotateVerticalToHorizontal && approximateSize.y > approximateSize.x) ) {
                 RotateUVs(uvs, Random.value > 0.5f ? -90 : 90);
-                approximateSize = LargestVector2(uvs) * scalar - SmallestVector2(uvs) * scalar;
             }
+            approximateSize = (LargestVector2(uvs) - SmallestVector2(uvs)) * scalar;
 
             var bestHotspot = atlas.GetBestHotspotUVFromUVs(approximateSize.x * atlas.hotspotScalar, approximateSize.y * atlas.hotspotScalar);
             var bestHotspotSize = LargestVector2(bestHotspot) - SmallestVector2(bestHotspot);
 
-            FitUVs(uvs, bestHotspot);
+            FitUVs(uvs, bestHotspot, false);
             if ( approximateSize.x * atlas.hotspotScalar / bestHotspotSize.x > atlas.fallbackThreshold || approximateSize.y * atlas.hotspotScalar / bestHotspotSize.y > atlas.fallbackThreshold ) {
                 return false;
             } else {

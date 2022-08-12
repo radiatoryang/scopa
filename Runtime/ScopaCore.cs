@@ -380,11 +380,9 @@ namespace Scopa {
                     meshRenderer.shadowCastingMode = config.castShadows;
                 }
 
-                // detail instancing detection
-                if ( textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.enableDetailInstancing ) {
-                    var detailDrawer = newMeshObj.GetComponent<ScopaDetailDrawer>() ? newMeshObj.GetComponent<ScopaDetailDrawer>() : newMeshObj.AddComponent<ScopaDetailDrawer>();
-                    detailDrawer.worldMesh = meshFilter.sharedMesh;
-                    detailDrawer.detailConfig = textureKVP.Value.materialConfig;
+                // you can inherit ScopaMaterialConfig + override OnBuildMeshObject for extra per-material import logic
+                if ( textureKVP.Value.materialConfig != null ) {
+                    textureKVP.Value.materialConfig.OnBuildMeshObject( newMeshObj, newMesh );
                 }
             }
 

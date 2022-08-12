@@ -10,38 +10,6 @@ using UnityEngine.Serialization;
 
 namespace Scopa
 {
-    [System.Serializable]
-    public class MaterialDetailGroup {
-        [Tooltip("(optional) only used in editor, to help you write notes to yourself")]
-        public string groupLabel = "New Detail Group";
-        public Mesh detailMesh;
-        public Material detailMeshMaterial;
-        public Vector3 detailMeshOffset, detailMeshRotationOffset;
-
-        [Tooltip("statistically, how many details to place per square meter in world space? bigger number = more details placed (on average)")]
-        public float detailDensity = 0.1f;
-
-        [Tooltip("randomly scale the detail meshes with this scale range")]
-        // public Vector2 detailScaleRange = new Vector2(1, 1);
-        public Vector3 minScale = Vector3.one, maxScale = Vector3.one;
-
-        public bool detailFloors = true, detailWalls = false, detailCeilings = false;
-
-        [Tooltip("(recommended: 50-75%) what % of the detail's bounding box must be within the spawned surface? set to 0% or negative to disable; 100%+ = detail will never hang over any edge, but that means thin faces probably won't get any valid details")]
-        [Range(0f, 1.5f)]
-        public float surfaceExtentsPercentage = 1f;
-
-        [Tooltip("before placing a detail, what if it's in a collider? adds additional processing cost to the detail generation process")]
-        public bool checkForCollider = false;
-        public LayerMask collisionMask = 1;
-        [Tooltip("good for foliage; will raycast upwards from detail position, and if it hits something (via Collision Mask) then it won't spawn")]
-        public bool needSky = false;
-
-        [Layer] public int layer;
-        public ShadowCastingMode castShadows;
-        public bool receiveShadows = false;
-    }
-
     /// <summary> ScriptableObject asset used to configure hotspot UVs, surface detail instancing, and maybe more. </summary>
     [CreateAssetMenu(fileName = "New Scopa Material Config", menuName = "Scopa/Material Config", order = 300)]
     public class ScopaMaterialConfig : ScriptableObject
@@ -51,6 +19,11 @@ namespace Scopa
 
         [Tooltip("(default: -1) if 0 or higher, this value will override the map config settings' smoothing angle for meshes with this material\n (note: entities can override *this* setting with _phong and _phong_angle)")]
         public float smoothingAngle = -1;
+
+        /// <summary>make a new class that inherits from ScopaMaterialConfig + override OnBuildMeshObject() to add custom components / access mesh data at .MAP import time</summary>
+        public virtual void OnBuildMeshObject(GameObject meshObject, Mesh mesh) {
+
+        }
 
         #region HOTSPOT
 
@@ -83,15 +56,23 @@ namespace Scopa
 
         public Rect GetRandomHotspotRect()
         {
-            // return rects[0];
             return rects[Random.Range(0, rects.Count)];
         }
 
         public Rect GetBestHotspotRect(float pixelWidth, float pixelHeight) {
             // smaller sorting score = better match
+
+            // return rects.OrderBy( rect => 
+            //     (Mathf.Abs(rect.width - pixelWidth) + Mathf.Abs(rect.height - pixelHeight))    
+            //     * (resolutionBias + (1f - resolutionBias) * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight))) // weight toward the closest aspect ratio
+            // ).FirstOrDefault();
+
             return rects.OrderBy( rect => 
-                (Mathf.Abs(rect.width - pixelWidth) + Mathf.Abs(rect.height - pixelHeight))    
-                * (resolutionBias + (1f - resolutionBias) * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight))) // weight toward the closest aspect ratio
+                resolutionBias 
+                * (Mathf.Abs(rect.width - pixelWidth) + Mathf.Max(0, pixelWidth - rect.width) 
+                + Mathf.Abs(rect.height - pixelHeight) + Mathf.Max(0, pixelHeight - rect.height))    
+                + (1f - resolutionBias) 
+                * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight)) * Mathf.Max(pixelWidth, pixelHeight) 
             ).FirstOrDefault();
         }
 
@@ -128,17 +109,6 @@ namespace Scopa
         }
 
         #endregion
-
-        [Header("SURFACE DETAIL INSTANCING")]
-        [Tooltip("draw mesh instances (1023 per batch) via Graphics.DrawMeshInstanced() based on random points scattered on brush face surfaces... good for small non-solid details like grass, small rocks, etc.")]
-        public bool enableDetailInstancing = false;
-
-        [Tooltip("if enabled, will run the detail building and instance rendering outside of play mode")]
-        public bool drawDetailsInEditor = true;
-        
-        [Tooltip("you can define multiple detail prop types, and each group can have different placement rules")]
-        public MaterialDetailGroup[] detailGroups;
-
     }
 
     public enum HotspotRotateMode {
