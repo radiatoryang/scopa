@@ -14,7 +14,7 @@ namespace Scopa.Editor {
     /// custom Unity importer that detects .BSP files in /Assets/
     /// and automatically imports them like any other 3D mesh
     /// </summary>
-    [ScriptedImporter(1, "map")]
+    [ScriptedImporter(1, "map", 6900)]
     public class MapImporter : ScriptedImporter
     {
         public ScopaMapConfigAsset externalConfig;
