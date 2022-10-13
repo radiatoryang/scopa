@@ -102,14 +102,14 @@ namespace Scopa {
         }
 
         public static Material BuildMaterialForTexture( Texture2D texture, ScopaWadConfig config ) {
-            var material = texture.alphaIsTransparency ? GenerateDefaultMaterialAlpha(config) : GenerateDefaultMaterialOpaque(config);
+            var material = texture.alphaIsTransparency ? GenerateMaterialAlpha(config) : GenerateMaterialOpaque(config);
             material.name = texture.name;
             material.mainTexture = texture;
 
             return material;
         }
 
-        public static Material GenerateDefaultMaterialOpaque( ScopaWadConfig config ) {
+        public static Material GenerateMaterialOpaque( ScopaWadConfig config ) {
             // TODO: URP, HDRP
             Material material;
 
@@ -124,7 +124,7 @@ namespace Scopa {
             return material;
         }
 
-        public static Material GenerateDefaultMaterialAlpha( ScopaWadConfig config ) {
+        public static Material GenerateMaterialAlpha( ScopaWadConfig config ) {
 			// TODO: URP, HDRP
 			Material material;
 
