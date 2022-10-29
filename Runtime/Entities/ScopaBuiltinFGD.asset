@@ -1,0 +1,262 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a9c3285f9ebbf4c9457843b92d2da3, type: 3}
+  m_Name: ScopaBuiltinFGD
+  m_EditorClassIdentifier: 
+  config:
+    worldspawn:
+      className: worldspawn
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 16}
+      editorColor:
+        serializedVersion: 2
+        rgba: 4294967295
+      editorHelp: Default root entity for all MAP files. Don't remove or rename.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 1
+      baseIncludes: []
+      properties:
+      - key: message
+        type: 0
+        editorLabel: Map Title / Description
+        editorHelp: Traditionally in Quake, this string gets printed to the console
+          when you load the map. Half-Life ignores it. What will YOU do with it?
+        defaultValue: 
+        choices: []
+        flags: []
+      - key: spawnflags
+        type: 3
+        editorLabel: Spawnflags
+        editorHelp: By the way, all Flags types must have key = "spawnflags"
+        defaultValue: 
+        choices: []
+        flags: []
+    includeFgds: []
+    entityTypes:
+    - className: func_detail
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 65280
+      editorHelp: All purpose STATIC mesh brush group with collision.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaBrushBuiltin
+      properties: []
+    - className: func_detail_illusionary
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 65280
+      editorHelp: All purpose STATIC mesh brush group with NO collision.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaBrushBuiltin
+      properties: []
+    - className: func_wall
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 4293197568
+      editorHelp: All purpose DYNAMIC brush group with no collision.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaBrushBuiltin
+      properties: []
+    - className: func_illusionary
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 4293197568
+      editorHelp: All purpose DYNAMIC brush group with no collision.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaBrushBuiltin
+      properties: []
+    - className: trigger_once
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 4278230783
+      editorHelp: Fires OnTrigger UnityEvent when another collider enters its collider.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaEntity
+      properties: []
+    - className: trigger_multiple
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 4278230783
+      editorHelp: Fires OnTrigger UnityEvent when another collider enters its collider.
+      entityPrefab: {fileID: 0}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaEntity
+      properties: []
+    - className: func_mover
+      classType: 1
+      editorSize:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 16, y: 16, z: 32}
+      editorColor:
+        serializedVersion: 2
+        rgba: 4294181119
+      editorHelp: All-purpose entity for buttons, doors, two-state elevators, etc.
+      entityPrefab: {fileID: 279625310630176367, guid: 3e60b18141d8b814489287dffc49ec4a, type: 3}
+      meshPrefab: {fileID: 0}
+      objScale: 0
+      baseIncludes:
+      - ScopaEntity
+      properties: []
+    entityBases:
+    - baseName: ScopaEntity
+      baseIncludes: []
+      properties:
+      - key: _layer
+        type: 0
+        editorLabel: Layer
+        editorHelp: The name of the Unity layer to set this GameObject to, overriding
+          any other config. The name must match EXACTLY, case-sensitive.
+        defaultValue: 
+        choices:
+        - label: Off
+          value: 0
+        - label: On
+          value: 1
+        - label: Two Sided
+          value: 2
+        - label: Shadows Only
+          value: 3
+        flags: []
+      - key: targetname
+        type: 0
+        editorLabel: Trigger Name
+        editorHelp: The name of this game object, for level logic / triggering purposes.
+          (Does NOT affect the name of the game object in Unity.) When triggered,
+          it will fire an OnTrigger() UnityEvent.
+        defaultValue: 
+        choices:
+        - label: Off
+          value: 0
+        - label: On
+          value: 1
+        - label: Two Sided
+          value: 2
+        - label: Shadows Only
+          value: 3
+        flags: []
+      - key: target
+        type: 0
+        editorLabel: Trigger Target
+        editorHelp: The targetname / trigger name this object should activate, when
+          it is triggered whether on its own or by another thing triggering it.
+        defaultValue: 
+        choices:
+        - label: Off
+          value: 0
+        - label: On
+          value: 1
+        - label: Two Sided
+          value: 2
+        - label: Shadows Only
+          value: 3
+        flags: []
+    - baseName: ScopaBrushBuiltin
+      baseIncludes:
+      - ScopaEntity
+      properties:
+      - key: _phong
+        type: 2
+        editorLabel: Smooth Normals
+        editorHelp: If enabled, smooth face normals to avoid hard edges. Good for
+          rocks, pipes, and other round things. Does not actually add more polygons
+          or anything.
+        defaultValue: 0
+        choices:
+        - label: Disabled
+          value: 0
+        - label: Enabled
+          value: 1
+        flags: []
+      - key: _convex
+        type: 2
+        editorLabel: Force Merge and Convex-ify Colliders
+        editorHelp: If enabled, merge all of this entity's colliders (if any) into
+          a single convex collider. Simplifies collision and removes snagging points.
+          Good for making stairs function as ramps.
+        defaultValue: 0
+        choices:
+        - label: Disabled
+          value: 0
+        - label: Enabled
+          value: 1
+        flags: []
+      - key: _shadow
+        type: 2
+        editorLabel: Cast Shadows
+        editorHelp: Corresponds to Cast Shadows setting on the mesh renderer.
+        defaultValue: 1
+        choices:
+        - label: Off
+          value: 0
+        - label: On
+          value: 1
+        - label: Two Sided
+          value: 2
+        - label: Shadows Only
+          value: 3
+        flags: []
+    - baseName: ScopaPointBuiltin
+      baseIncludes:
+      - ScopaEntity
+      properties:
+      - key: angles
+        type: 0
+        editorLabel: Angles (X Y Z)
+        editorHelp: Three axis rotation
+        defaultValue: 0 0 0
+        choices: []
+        flags: []
+    lastSavePath: C:/Users/yangr/Desktop/unity_fps/LevelEditor/castle2.fgd
