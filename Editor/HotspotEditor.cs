@@ -20,7 +20,7 @@ namespace Scopa.Editor
         public static ScopaMaterialConfig editingHotspotTexture;
 
         [OnOpenAssetAttribute(1)]
-        public static bool OpenHostspotTexture(int instanceID, int line)
+        public static bool OpenHotspotTexture(int instanceID, int line)
         {
             var obj = EditorUtility.InstanceIDToObject(instanceID);
             if (obj is ScopaMaterialConfig)

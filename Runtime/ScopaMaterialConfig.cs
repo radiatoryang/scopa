@@ -69,43 +69,25 @@ namespace Scopa
 
             return rects.OrderBy( rect => 
                 resolutionBias 
-                * (Mathf.Abs(rect.width - pixelWidth) + Mathf.Max(0, pixelWidth - rect.width) 
-                + Mathf.Abs(rect.height - pixelHeight) + Mathf.Max(0, pixelHeight - rect.height))    
+                * (Mathf.Abs(rect.width - pixelWidth) / rect.width
+                + Mathf.Abs(rect.height - pixelHeight) / rect.height)    
                 + (1f - resolutionBias) 
-                * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight)) * Mathf.Max(pixelWidth, pixelHeight) 
+                * Mathf.Abs( (rect.width / rect.height) - (pixelWidth / pixelHeight)) * 2
             ).FirstOrDefault();
         }
 
-        public Vector2[] HotspotRectToUV(Rect rect) {
-            var list = new Vector2[4];
-            var size = new Vector2(hotspotTexture.width, hotspotTexture.height);
-
-            // Transforming from texture space to UV space
-            list[0] = rect.TopLeft() / size;
-            list[1] = rect.TopRight() / size;
-            list[2] = rect.BottomRight() / size;
-            list[3] = rect.BottomLeft() / size;
-
-            // Fliping along the y axis
-            for (int i = 0; i < list.Length; i++) {
-                list[i].y = 1 - list[i].y;
-            }
-
-            return list;
-        }
-
         public Vector2[] GetRandomHotspotUV() {
-            return HotspotRectToUV( GetRandomHotspotRect() );
+            return ScopaHotspot.HotspotRectToUV( GetRandomHotspotRect(), hotspotTexture.width, hotspotTexture.height );
         }
 
         public Vector2[] GetBestHotspotUVFromPixels(float pixelWidth, float pixelHeight)
         {
-            return HotspotRectToUV( GetBestHotspotRect(pixelWidth, pixelHeight) );
+            return ScopaHotspot.HotspotRectToUV( GetBestHotspotRect(pixelWidth, pixelHeight), hotspotTexture.width, hotspotTexture.height );
         }
 
         public Vector2[] GetBestHotspotUVFromUVs(float uvWidth, float uvHeight)
         {
-            return HotspotRectToUV( GetBestHotspotRect(uvWidth * hotspotTexture.width, uvHeight * hotspotTexture.height));
+            return ScopaHotspot.HotspotRectToUV( GetBestHotspotRect(uvWidth * hotspotTexture.width, uvHeight * hotspotTexture.height), hotspotTexture.width, hotspotTexture.height);
         }
 
         #endregion

@@ -28,7 +28,7 @@ namespace Scopa {
             var bestHotspot = atlas.GetBestHotspotUVFromUVs(approximateSize.x * atlas.hotspotScalar, approximateSize.y * atlas.hotspotScalar);
             var bestHotspotSize = LargestVector2(bestHotspot) - SmallestVector2(bestHotspot);
 
-            FitUVs(uvs, bestHotspot, false);
+            FitUVs(uvs, bestHotspot);
             if ( approximateSize.x * atlas.hotspotScalar / bestHotspotSize.x > atlas.fallbackThreshold || approximateSize.y * atlas.hotspotScalar / bestHotspotSize.y > atlas.fallbackThreshold ) {
                 return false;
             } else {
@@ -123,6 +123,24 @@ namespace Scopa {
                 if (v[i].y > l.y) l.y = v[i].y;
             }
             return l;
+        }
+
+        public static Vector2[] HotspotRectToUV(Rect rect, int textureWidth, int textureHeight) {
+            var list = new Vector2[4];
+            var size = new Vector2(textureWidth, textureHeight);
+
+            // Transforming from texture space to UV space
+            list[0] = rect.TopLeft() / size;
+            list[1] = rect.TopRight() / size;
+            list[2] = rect.BottomRight() / size;
+            list[3] = rect.BottomLeft() / size;
+
+            // Fliping along the y axis
+            for (int i = 0; i < list.Length; i++) {
+                list[i].y = 1 - list[i].y;
+            }
+
+            return list;
         }
 
         public static Vector2[] FitUVs(Vector2[] uvs, Vector2[] target, bool randomize = true)

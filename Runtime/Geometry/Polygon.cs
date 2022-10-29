@@ -12,7 +12,15 @@ namespace Scopa
         public List<Vector3> Vertices { get; }
 
         public Plane Plane;
-        public Vector3 Origin => Vertices.Aggregate(Vector3.zero, (x, y) => x + y) / Vertices.Count;
+        public Vector3 Origin {
+            get {
+                var average = Vector3.zero;
+                for(int i=0; i<Vertices.Count; i++) {
+                    average += Vertices[i];
+                }
+                return average / Mathf.Max(1, Vertices.Count);
+            }
+        }
 
         /// <summary>
         /// Creates a polygon from a list of points
