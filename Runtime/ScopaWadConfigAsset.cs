@@ -33,7 +33,7 @@ namespace Scopa {
         public Material opaqueTemplate, alphaTemplate;
 
         [Header("Misc")]
-        [Tooltip("(default: Small 1024x1024) maximum size of the preview atlas texture for the entire WAD")]
+        [Tooltip("(default: Tiny 512x512) maximum size of the preview atlas texture for the entire WAD, as seen in the inspector. ONLY FOR EDITOR USE! This atlas might get packed differently on the next import.")]
         public AtlasSize atlasSize = AtlasSize.Tiny_512;
 
         public int GetAtlasSize() {

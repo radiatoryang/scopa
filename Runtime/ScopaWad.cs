@@ -146,13 +146,24 @@ namespace Scopa {
         #endregion
         #region WAD Writing
 
+        const int MAX_WAD_NAME_LENGTH = 15;
+        const string ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+
+        public static string SanitizeWadTextureName(string input) {
+            input = input.Replace(" ", "").ToLowerInvariant();
+            return input.Substring(0, Mathf.Min(input.Length, MAX_WAD_NAME_LENGTH) );
+        }
+
         public static void SaveWad3File(string filepath, ScopaWadCreator wadConfig) {
             var wadData = GenerateWad3Data( Path.GetFileNameWithoutExtension(filepath), wadConfig);
+            if (wadData == null)
+                return;
+
             using (var fStream = System.IO.File.OpenWrite(filepath))
             {
                 wadData.Write(fStream);
             }
-            Debug.Log("saved WAD3 file to " + filepath);
+            Debug.Log("Scopa saved WAD3 file to " + filepath);
         }
 
         static WadFile GenerateWad3Data(string wadName, ScopaWadCreator wadConfig) {
@@ -161,11 +172,34 @@ namespace Scopa {
             wadTimer.Start();
             #endif
 
+            var duplicateNames = new List<string>();
+            var texNames = new List<string>();
             var newWad = new WadFile(Formats.Texture.Wad.Version.Wad3);
             newWad.Name = wadName;
-            foreach ( var mat in wadConfig.materials ) {
-                var texName = mat.name.ToLowerInvariant();
-                texName = texName.Substring(0, Mathf.Min(texName.Length, 16) ); // texture names are limited to 16 characters
+            for (int i1 = 0; i1 < wadConfig.materials.Length; i1++) {
+                Material mat = wadConfig.materials[i1];
+                if (mat == null)
+                    continue;
+
+                var hasDuplicateName = false;
+                var texName = SanitizeWadTextureName(mat.name);
+
+                // duplicate texture name handling
+                for( int c=0; texNames.Contains(texName); c++ ) {
+                    hasDuplicateName = true;
+                    texName = texName.Substring(0, texName.Length-1);
+                    if (c <= 9) {
+                        texName += c.ToString(); // increment by number
+                    } else if (c <= 9+ALPHABET.Length) { 
+                        texName += ALPHABET[c-10]; // try incrementing by letter
+                    } else {
+                        texName = "";
+                        for(int r=0; r<=MAX_WAD_NAME_LENGTH; r++) { // give up and generate random string of letters
+                            texName += ALPHABET[ UnityEngine.Random.Range(0, ALPHABET.Length) ];
+                        }
+                        break;
+                    }
+                }
                 // Debug.Log("started working on " + texName);
 
                 var mipTex = new MipTextureLump();
@@ -175,8 +209,7 @@ namespace Scopa {
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
                 // Debug.Log($"{mipTex.Name} is {mipTex.Width} x {mipTex.Height}");
 
-                var color = mat.HasColor("_Color") || mat.HasColor("_MainColor") ? mat.color : Color.white;
-                mipTex.MipData = QuantizeToMipmap( mat, color, (int)wadConfig.resolution, out var palette );
+                mipTex.MipData = QuantizeToMipmap( mat, mat.color, (int)wadConfig.resolution, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {
@@ -186,11 +219,21 @@ namespace Scopa {
                 }
 
                 newWad.AddLump( texName, mipTex );
+                texNames.Add(texName);
+                if (hasDuplicateName)
+                    duplicateNames.Add(texName);
+            }
+
+            if (texNames.Count == 0) {
+                Debug.LogError($"Scopa couldn't generate WAD file {wadName}: you must add at least one valid material to the config.");
+                return null;
             }
 
             #if UNITY_EDITOR
             wadTimer.Stop();
-            Debug.Log($"ScopaWad finished generating {wadName} in {wadTimer.ElapsedMilliseconds} ms");
+            Debug.Log($"ScopaWad finished generating {wadName} in {wadTimer.ElapsedMilliseconds} ms" 
+                + (duplicateNames.Count > 0 ? $"... however, some textures were renamed to avoid duplicates: {string.Join(", ", duplicateNames)}" : "")
+            );
             #endif
             return newWad;
         }
