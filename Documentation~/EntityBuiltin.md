@@ -1,7 +1,10 @@
 # Built-in default entities
 
-We provide a basic `ScopaBuiltinFGD` that defines some basic useful entity types that follow typical Quake level scripting traditions.
+We provide a basic **Scopa Builtin FGD** template that defines basic useful entity types like walls, buttons / doors, triggers, and lights.
 
+- We follow Quake / Half-Life naming and traditions.
+- This is intended as an example / sample to learn to implement your own entities.
+- It lives at `Packages/Scopa/Runtime/Entities/ScopaBuiltinFGD.asset`. Note that it is read-only, and may change in the future. You may want to make your own copy to modify.
 
 ## Mesh group entities
 
@@ -24,7 +27,7 @@ Each entity brush also uses a `ScopaBuiltinBrush` entity base, which adds the fo
 - `_tag`: set a Unity tag for this entity; the tag name must match an existing defined tag name exactly!
 
 
-#### Triggers, logic, buttons and doors
+## Triggers, logic, buttons and doors
 
 We implement a basic trigger / scripting system.
 
@@ -49,19 +52,14 @@ The core logic / triggering capabilities depend on `ScopaEntity`'s use of `BindF
 There are no plans for a Half-Life 2 / Source Engine-like entity I/O system, since it is not implemented in TrenchBroom.
 
 
-#### Lights
+## Lights
 
-We follow the Half-Life pattern here and provide three different light entities corresponding to basic light types in Unity:
+We follow the Half-Life pattern here, with 3 basic light types in Unity:
 
 - `light`: Point light, local
 - `light_spot`: Spotlight, local
 - `light_environment`: Directional light, global
 
-We also borrow some inspiration from Half-Life 2 / Source Engine:
+> Unity does not have runtime lightmapping GI baking. If you support modding for your game, then user-generated maps can only use realtime lights, unless you implement your own GI system.
 
-- `env_cubemap`: Reflection probe
-    - TODO: overrides `OnScopaLateImport()` to fire raycasts in all directions and configure its own box bounds
-
-Unity does not have runtime lightmapping GI baking. If you support modding for your game, then user-generated maps can only use realtime lights. 
-
-We don't support ambient lighting, since overriding the per-scene Light Settings asset is complicated. We leave this as an exercise for the reader.
+> No ambient light settings. Overriding the per-scene Light Settings asset is complicated.

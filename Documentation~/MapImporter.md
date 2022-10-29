@@ -1,4 +1,4 @@
-# Importing MAPs
+# Map Importer
 
 ## Level geometry
 
