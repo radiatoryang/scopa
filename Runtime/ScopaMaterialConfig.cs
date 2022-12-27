@@ -20,10 +20,11 @@ namespace Scopa
         [Tooltip("(default: -1) if 0 or higher, this value will override the map config settings' smoothing angle for meshes with this material\n (note: entities can override *this* setting with _phong and _phong_angle)")]
         public float smoothingAngle = -1;
 
-        /// <summary>make a new class that inherits from ScopaMaterialConfig + override OnBuildMeshObject() to add custom components / access mesh data at .MAP import time</summary>
-        public virtual void OnBuildMeshObject(GameObject meshObject, Mesh mesh) {
+        [Tooltip("(default: -1) if 0 or more, will subdivide each triangle into 9 triangles, perturb the center along surface normal by (power), and then smooth the shape while maintaining border edges... intended for terrain")]
+        public float subdivideBumpPower = -1f;
 
-        }
+        /// <summary>make a new class that inherits from ScopaMaterialConfig + override OnBuildMeshObject() to add custom components / access mesh data at .MAP import time</summary>
+        public virtual void OnBuildMeshObject(GameObject meshObject, Mesh mesh) { }
 
         #region HOTSPOT
 

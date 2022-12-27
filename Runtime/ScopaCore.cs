@@ -23,7 +23,9 @@ namespace Scopa {
         static List<Face> allFaces = new List<Face>();
         static List<Vector3> verts = new List<Vector3>(4096);
         static List<int> tris = new List<int>(8192);
+        static List<int> subdTris = new List<int>(8192*4);
         static List<Vector2> uvs = new List<Vector2>(4096);
+        static Dictionary<uint,int> subdLookup = new Dictionary<uint, int>();
         
 
         // (editor only) search for all materials in the project once per import, save results here
@@ -355,11 +357,17 @@ namespace Scopa {
                     smoothNormalAngle = textureKVP.Value.materialConfig.smoothingAngle;
                 }
 
+                // detect subdivide mesh
+                var subdivideBumpPower = -1f;
+                if ( textureKVP.Value != null && textureKVP.Value.materialConfig != null )
+                    subdivideBumpPower = textureKVP.Value.materialConfig.subdivideBumpPower;
+
                 var newMesh = BuildMeshFromBuffers(
                     namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
                     config, 
                     entityOrigin,
-                    smoothNormalAngle
+                    smoothNormalAngle,
+                    subdivideBumpPower
                 );
                 meshList.Add(newMesh, newMeshObj.transform);
 
@@ -523,9 +531,12 @@ namespace Scopa {
         }
 
         /// <summary> utility function that actually generates the Mesh object </summary>
-        static Mesh BuildMeshFromBuffers(string meshName, ScopaMapConfig config, Vector3 meshOrigin = default(Vector3), float smoothNormalAngle = 0) {
+        static Mesh BuildMeshFromBuffers(string meshName, ScopaMapConfig config, Vector3 meshOrigin = default(Vector3), float smoothNormalAngle = 0, float subdivideBumpPower = -1f) {
             var mesh = new Mesh();
             mesh.name = meshName;
+
+            if(verts.Count > 65535)
+                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
             if ( meshOrigin != default(Vector3) ) {
                 for(int i=0; i<verts.Count; i++) {
@@ -533,9 +544,17 @@ namespace Scopa {
                 }
             }
 
+            if ( subdivideBumpPower >= 0f ) 
+                Subdivide9MeshBuffer(subdivideBumpPower);
+
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
             mesh.SetUVs(0, uvs);
+
+            if ( subdivideBumpPower >= 0f ) {
+                mesh.WeldVertices(); // TODO: move to buffers, do it earlier
+                HCFilter(mesh);
+            }
 
             mesh.RecalculateBounds();
             // if ( smoothNormalAngle > 0.1 )
@@ -712,6 +731,142 @@ namespace Scopa {
             }
         }
 
+        #region Subdivide4 (2x2)
+        static int GetNewVertex4(int i1, int i2)
+        {
+            int newIndex = verts.Count;
+            uint t1 = ((uint)i1 << 16) | (uint)i2;
+            uint t2 = ((uint)i2 << 16) | (uint)i1;
+            if (subdLookup.ContainsKey(t2))
+                return subdLookup[t2];
+            if (subdLookup.ContainsKey(t1))
+                return subdLookup[t1];
+    
+            subdLookup.Add(t1,newIndex);
+    
+            verts.Add((verts[i1] + verts[i2]) * 0.5f);
+            // if (normals.Count>0)
+            //     normals.Add((normals[i1] + normals[i2]).normalized);
+            // if (colors.Count>0)
+            //     colors.Add((colors[i1] + colors[i2]) * 0.5f);
+            if (uvs.Count>0)
+                uvs.Add((uvs[i1] + uvs[i2])*0.5f);
+            // if (uv1.Count>0)
+            //     uv1.Add((uv1[i1] + uv1[i2])*0.5f);
+            // if (uv2.Count>0)
+            //     uv2.Add((uv2[i1] + uv2[i2])*0.5f);
+    
+            return newIndex;
+        }
+    
+        // from https://web.archive.org/web/20160604002839/http://wiki.unity3d.com/index.php?title=MeshHelper
+        /// <summary>
+        /// Divides each triangle into 4, e.g. a quad (2 tris) will be splitted into 2x2 quads (8 tris)
+        /// </summary>
+        public static void Subdivide4MeshBuffer()
+        {
+            subdLookup.Clear();
+            subdTris.Clear();
+            var oldTriCount = tris.Count;
+
+            for (int i = 0; i < oldTriCount; i += 3)
+            {
+                int i1 = tris[i + 0];
+                int i2 = tris[i + 1];
+                int i3 = tris[i + 2];
+    
+                int a = GetNewVertex4(i1, i2);
+                int b = GetNewVertex4(i2, i3);
+                int c = GetNewVertex4(i3, i1);
+                subdTris.Add(i1);   subdTris.Add(a);   subdTris.Add(c);
+                subdTris.Add(i2);   subdTris.Add(b);   subdTris.Add(a);
+                subdTris.Add(i3);   subdTris.Add(c);   subdTris.Add(b);
+                subdTris.Add(a);   subdTris.Add(b);   subdTris.Add(c); // center triangle
+            }
+
+            tris.Clear();
+            tris.AddRange(subdTris);
+        }
+        #endregion Subdivide4 (2x2)
+
+        #region Subdivide9 (3x3)
+        static int GetNewVertex9(int i1, int i2, int i3)
+        {
+            int newIndex = verts.Count;
+    
+            // center points don't go into the edge list
+            if (i3 == i1 || i3 == i2)
+            {
+                uint t1 = ((uint)i1 << 16) | (uint)i2;
+                if (subdLookup.ContainsKey(t1))
+                    return subdLookup[t1];
+                subdLookup.Add(t1,newIndex);
+            }
+    
+            // calculate new vertex
+            verts.Add((verts[i1] + verts[i2] + verts[i3]) / 3.0f);
+            // if (normals.Count>0)
+            //     normals.Add((normals[i1] + normals[i2] + normals [i3]).normalized);
+            // if (colors.Count>0)
+            //     colors.Add((colors[i1] + colors[i2] + colors[i3]) / 3.0f);
+            if (uvs.Count>0)
+                uvs.Add((uvs[i1] + uvs[i2] + uvs[i3]) / 3.0f);
+            // if (uv1.Count>0)
+            //     uv1.Add((uv1[i1] + uv1[i2] + uv1[i3]) / 3.0f);
+            // if (uv2.Count>0)
+            //     uv2.Add((uv2[i1] + uv2[i2] + uv2[i3]) / 3.0f);
+            return newIndex;
+        }
+    
+    
+        /// <summary>
+        /// Devides each triangles into 9. A quad(2 tris) will be splitted into 3x3 quads( 18 tris )
+        /// </summary>
+        /// <param name="mesh"></param>
+        public static void Subdivide9MeshBuffer(float bumpPower = 0.2f)
+        {
+            subdLookup.Clear();
+            subdTris.Clear();
+            var oldTriCount = tris.Count;
+    
+            for (int i = 0; i < oldTriCount; i += 3)
+            {
+                int i1 = tris[i + 0];
+                int i2 = tris[i + 1];
+                int i3 = tris[i + 2];
+    
+                int a1 = GetNewVertex9(i1, i2, i1);
+                int a2 = GetNewVertex9(i2, i1, i2);
+                int b1 = GetNewVertex9(i2, i3, i2);
+                int b2 = GetNewVertex9(i3, i2, i3);
+                int c1 = GetNewVertex9(i3, i1, i3);
+                int c2 = GetNewVertex9(i1, i3, i1);
+    
+                int d  = GetNewVertex9(i1, i2, i3);
+                var dPoly = new Polygon(verts[i1], verts[i2], verts[i3]);
+                if (dPoly.GetSizeAsTriangle() > 1f) {
+                    var extrude = Mathf.Sqrt(Mathf.Min((verts[i1]-verts[d]).sqrMagnitude,
+                        Mathf.Min((verts[i2]-verts[d]).sqrMagnitude, (verts[i3]-verts[d]).sqrMagnitude)
+                    ));
+                    verts[d] += dPoly.Plane.normal * extrude * bumpPower;
+                }
+    
+                subdTris.Add(i1);   subdTris.Add(a1);   subdTris.Add(c2);
+                subdTris.Add(i2);   subdTris.Add(b1);   subdTris.Add(a2);
+                subdTris.Add(i3);   subdTris.Add(c1);   subdTris.Add(b2);
+                subdTris.Add(d );   subdTris.Add(a1);   subdTris.Add(a2);
+                subdTris.Add(d );   subdTris.Add(b1);   subdTris.Add(b2);
+                subdTris.Add(d );   subdTris.Add(c1);   subdTris.Add(c2);
+                subdTris.Add(d );   subdTris.Add(c2);   subdTris.Add(a1);
+                subdTris.Add(d );   subdTris.Add(a2);   subdTris.Add(b1);
+                subdTris.Add(d );   subdTris.Add(b2);   subdTris.Add(c1);
+            }
+
+            tris.Clear();
+            tris.AddRange(subdTris);
+        }
+        #endregion Subdivide9 (3x3)
+
         static void ClearMeshBuffers() {
             verts.Clear();
             tris.Clear();
@@ -721,6 +876,232 @@ namespace Scopa {
         public static bool IsValidPath(string newPath) {
             return !string.IsNullOrWhiteSpace(newPath) && System.IO.Directory.Exists( System.IO.Path.GetDirectoryName(newPath) );
         }
+
+
+        #region MeshSmoothing
+        // from https://github.com/mattatz/unity-mesh-smoothing/ MIT License
+
+        // public static Mesh LaplacianFilter (Mesh mesh, int times = 1) {
+		// 	mesh.vertices = LaplacianFilter(mesh.vertices, mesh.triangles, times);
+		// 	mesh.RecalculateNormals();
+		// 	mesh.RecalculateBounds();
+		// 	return mesh;
+		// }
+
+		// public static Vector3[] LaplacianFilter(Vector3[] vertices, int[] triangles, int times) {
+		// 	var network = VertexConnection.BuildNetwork(triangles);
+		// 	for(int i = 0; i < times; i++) {
+		// 		vertices = LaplacianFilter(network, vertices, triangles);
+		// 	}
+		// 	return vertices;
+		// }
+
+		static Vector3[] LaplacianFilter(Dictionary<int, VertexConnection> network, Vector3[] origin, int[] triangles, HashSet<int> boundaryLookup) {
+			Vector3[] vertices = new Vector3[origin.Length];
+			for(int i = 0, n = origin.Length; i < n; i++) {
+                if( boundaryLookup.Contains(i) )
+                    continue;
+                var v = Vector3.zero;
+				var connection = network[i].Connection;
+				foreach(int adj in connection) {
+					v += origin[adj];
+				}
+				vertices[i] = v / connection.Count;
+			}
+			return vertices;
+		}
+
+		/*
+		 * HC (Humphrey’s Classes) Smooth Algorithm - Reduces Shrinkage of Laplacian Smoother
+		 * alpha 0.0 ~ 1.0
+		 * beta  0.0 ~ 1.0
+		*/
+		static Mesh HCFilter (Mesh mesh, int times = 3, float alpha = 0.5f, float beta = 0.75f) {
+			mesh.vertices = HCFilter(mesh.vertices, mesh.triangles, times, alpha, beta);
+			mesh.RecalculateNormals();
+			mesh.RecalculateBounds();
+			return mesh;
+		}
+
+		static Vector3[] HCFilter(Vector3[] vertices, int[] triangles, int times, float alpha, float beta) {
+			alpha = Mathf.Clamp01(alpha);
+			beta = Mathf.Clamp01(beta);
+
+			var network = VertexConnection.BuildNetwork(triangles);
+            var boundaryLookup = GetEdges(triangles).FindBoundaryVertIndices();
+
+			Vector3[] origin = new Vector3[vertices.Length];
+			Array.Copy(vertices, origin, vertices.Length);
+			for(int i = 0; i < times; i++) {
+				vertices = HCFilter(network, origin, vertices, triangles, alpha, beta, boundaryLookup);
+			}
+			return vertices;
+		}
+			
+		static Vector3[] HCFilter(Dictionary<int, VertexConnection> network, Vector3[] o, Vector3[] q, int[] triangles, float alpha, float beta, HashSet<int> boundaryLookup) {
+			Vector3[] p = LaplacianFilter(network, q, triangles, boundaryLookup);
+			Vector3[] b = new Vector3[o.Length];
+
+			for(int i = 0; i < p.Length; i++) {
+                if( boundaryLookup.Contains(i) ) {
+                    p[i] = q[i];
+                    continue;
+                }
+				b[i] = p[i] - (alpha * o[i] + (1f - alpha) * q[i]);
+			}
+
+			for(int i = 0; i < p.Length; i++) {
+                if( boundaryLookup.Contains(i) ) {
+                    p[i] = q[i];
+                    continue;
+                }
+				var adjacents = network[i].Connection;
+				var bs = Vector3.zero;
+				foreach(int adj in adjacents) {
+					bs += b[adj];
+				}
+				p[i] = p[i] - (beta * b[i] + (1 - beta) / adjacents.Count * bs);
+			}
+
+			return p;
+		}
+
+        class VertexConnection {
+            public HashSet<int> Connection { get { return connection; } }
+            HashSet<int> connection;
+
+            public VertexConnection() {
+                this.connection = new HashSet<int>();
+            }
+
+            public void Connect (int to) {
+                connection.Add(to);
+            }
+
+            public static Dictionary<int, VertexConnection> BuildNetwork (int[] triangles) {
+                var table = new Dictionary<int, VertexConnection>();
+
+                for(int i = 0, n = triangles.Length; i < n; i += 3) {
+                    int a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
+                    if(!table.ContainsKey(a)) {
+                        table.Add(a, new VertexConnection());
+                    }
+                    if(!table.ContainsKey(b)) {
+                        table.Add(b, new VertexConnection());
+                    }
+                    if(!table.ContainsKey(c)) {
+                        table.Add(c, new VertexConnection());
+                    }
+                    table[a].Connect(b); table[a].Connect(c);
+                    table[b].Connect(a); table[b].Connect(c);
+                    table[c].Connect(a); table[c].Connect(b);
+                }
+
+                return table;
+            }
+	    }
+
+    // from https://answers.unity.com/questions/1019436/get-outeredge-vertices-c.html
+    public struct Edge
+     {
+         public int v1;
+         public int v2;
+         public int triangleIndex;
+         public Edge(int aV1, int aV2, int aIndex)
+         {
+             v1 = aV1;
+             v2 = aV2;
+             triangleIndex = aIndex;
+         }
+     }
+ 
+     public static List<Edge> GetEdges(int[] aIndices)
+     {
+         List<Edge> result = new List<Edge>();
+         for (int i = 0; i < aIndices.Length; i += 3)
+         {
+             int v1 = aIndices[i];
+             int v2 = aIndices[i + 1];
+             int v3 = aIndices[i + 2];
+             result.Add(new Edge(v1, v2, i));
+             result.Add(new Edge(v2, v3, i));
+             result.Add(new Edge(v3, v1, i));
+         }
+         return result;
+     }
+ 
+     public static List<Edge> FindBoundary(this List<Edge> aEdges)
+     {
+         List<Edge> result = new List<Edge>(aEdges);
+         for (int i = result.Count-1; i > 0; i--)
+         {
+             for (int n = i - 1; n >= 0; n--)
+             {
+                 if (result[i].v1 == result[n].v2 && result[i].v2 == result[n].v1)
+                 {
+                     // shared edge so remove both
+                     result.RemoveAt(i);
+                     result.RemoveAt(n);
+                     i--;
+                     break;
+                 }
+             }
+         }
+         return result;
+     }
+
+    public static HashSet<int> FindBoundaryVertIndices(this List<Edge> aEdges)
+    {
+         List<Edge> result = new List<Edge>(aEdges);
+         for (int i = result.Count-1; i > 0; i--)
+         {
+             for (int n = i - 1; n >= 0; n--)
+             {
+                 if (result[i].v1 == result[n].v2 && result[i].v2 == result[n].v1)
+                 {
+                     // shared edge so remove both
+                     result.RemoveAt(i);
+                     result.RemoveAt(n);
+                     i--;
+                     break;
+                 }
+             }
+         }
+
+        var boundaryLookup = new HashSet<int>();
+         for(int i=0; i<result.Count; i++) {
+            boundaryLookup.Add(result[i].v1);
+            boundaryLookup.Add(result[i].v2);
+         }
+         return boundaryLookup;
+     }
+
+     public static List<Edge> SortEdges(this List<Edge> aEdges)
+     {
+         List<Edge> result = new List<Edge>(aEdges);
+         for (int i = 0; i < result.Count-2; i++)
+         {
+             Edge E = result[i];
+             for(int n = i+1; n < result.Count; n++)
+             {
+                 Edge a = result[n];
+                 if (E.v2 == a.v1)
+                 {
+                     // in this case they are already in order so just continoue with the next one
+                     if (n == i+1)
+                         break;
+                     // if we found a match, swap them with the next one after "i"
+                     result[n] = result[i + 1];
+                     result[i + 1] = a;
+                     break;
+                 }
+             }
+         }
+         return result;
+     }
+
+
+        #endregion
 
     }
 
