@@ -146,12 +146,15 @@ namespace Scopa {
         #endregion
         #region WAD Writing
 
-        const int MAX_WAD_NAME_LENGTH = 15;
+        const int MAX_WAD_NAME_LENGTH = 16;
         const string ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 
         public static string SanitizeWadTextureName(string input) {
-            input = input.Replace(" ", "").ToLowerInvariant();
-            return input.Substring(0, Mathf.Min(input.Length, MAX_WAD_NAME_LENGTH) );
+            var newInput = input.Replace(" ", "").ToLowerInvariant();
+            newInput = newInput.Substring(0, Mathf.Min(newInput.Length, MAX_WAD_NAME_LENGTH) );
+            if (newInput != input)
+                Debug.Log($"ScopaWad: texture was renamed from {input} >> {newInput}. WAD filenames have a limit of 16 characters + are all lowercase.");
+            return newInput;
         }
 
         public static void SaveWad3File(string filepath, ScopaWadCreator wadConfig) {
