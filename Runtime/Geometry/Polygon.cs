@@ -109,6 +109,14 @@ namespace Scopa
             return 0.5f * Vector3.Cross(Vector3.Scale(Vertices[1], scale) - Vector3.Scale(Vertices[0], scale), Vector3.Scale(Vertices[2], scale) - Vector3.Scale(Vertices[0], scale)).magnitude;
         }
 
+        /// <summary> based on the first 3 vertices (a triangle), calculate if any angle is less than X degrees</summary>
+        const float LONG_THIN_ANGLE = 10f;
+        public bool IsLongAndThin() {
+            float angleA = Vector3.Angle(Vertices[1] - Vertices[0], Vertices[2] - Vertices[0]);
+            float angleB = Vector3.Angle(Vertices[0] - Vertices[1], Vertices[2] - Vertices[1]);
+            return angleA < LONG_THIN_ANGLE || angleB < LONG_THIN_ANGLE || angleA + angleB > 180f - LONG_THIN_ANGLE;
+        }
+
         /// <summary>
         /// Determines if this polygon is behind, in front, or spanning a plane. Returns calculated data.
         /// </summary>
