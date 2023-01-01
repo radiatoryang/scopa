@@ -46,7 +46,7 @@ namespace Scopa.Formats.Map.Objects
             otherFaceCenter /= maybeSmallerFace.Vertices.Count;
 
             for( int i=0; i<maybeSmallerFace.Vertices.Count; i++ ) {
-                var smallFaceVert = maybeSmallerFace.Vertices[i] + (otherFaceCenter - maybeSmallerFace.Vertices[i]).normalized * 0.1f;
+                var smallFaceVert = maybeSmallerFace.Vertices[i] + (otherFaceCenter - maybeSmallerFace.Vertices[i]).normalized * 0.2f;
                 switch (ignoreAxis) {
                     case Axis.X: if (!IsInPolygonYZ3(smallFaceVert, Vertices)) return false; break;
                     case Axis.Y: if (!IsInPolygonXZ3(smallFaceVert, Vertices)) return false; break;

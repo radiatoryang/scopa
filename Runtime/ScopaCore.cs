@@ -19,11 +19,8 @@ using UnityEditor;
 namespace Scopa {
     /// <summary>main class for core Scopa MAP functions</summary>
     public static class ScopaCore {
-        // to avoid GC, we use big static lists so we just allocate once
-        static List<Face> allFaces = new List<Face>();
-        static List<Vector3> verts = new List<Vector3>(4096);
-        static List<int> tris = new List<int>(8192);
-        static List<Vector2> uvs = new List<Vector2>(4096);
+        // most mesh functions are in ScopaMesh, but we keep a small vert buffer here to generate Box Colliders
+        static List<Vector3> faceVerts = new List<Vector3>(128);
 
         // (editor only) search for all materials in the project once per import, save results here
         static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
@@ -148,7 +145,7 @@ namespace Scopa {
 
         public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
-            allFaces.Clear(); // used later for testing unseen faces
+            ScopaMesh.ClearFaceOcclusionList();
             var lastSolidID = -1;
 
             // for worldspawn, pivot point should be 0, 0, 0... else, see if origin is defined... otherwise, calculate min of bounds
@@ -177,7 +174,7 @@ namespace Scopa {
                     }
                     
                     if ( config.removeHiddenFaces )
-                        allFaces.Add(face);
+                        ScopaMesh.AddFaceForOcclusion(face);
 
                     // start calculating min bounds, if needed
                     if ( calculateOrigin ) {
@@ -289,18 +286,18 @@ namespace Scopa {
 
             // main loop: for each material, build a mesh and add a game object with mesh components
             foreach ( var textureKVP in materialLookup ) {
-                ClearMeshBuffers();
+                ScopaMesh.ClearMeshBuffers();
                 
                 foreach ( var solid in solids) {
                     // var matName = textureKVP.Value.textureName;
                     // if ( textureKVP.Value.material == defaultMaterial ) {
                     //     textureKVP.Value.textureName = textureKVP.Key;
                     // }
-                    BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
+                    ScopaMesh.BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
                     // textureKVP.Value.name = matName;
                 }
 
-                if ( verts.Count == 0 || tris.Count == 0) 
+                if ( ScopaMesh.IsMeshBufferEmpty() ) 
                     continue;
                     
                 // finally, add mesh as game object, while we still have all the entity information
@@ -354,7 +351,7 @@ namespace Scopa {
                     smoothNormalAngle = textureKVP.Value.materialConfig.smoothingAngle;
                 }
 
-                var newMesh = BuildMeshFromBuffers(
+                var newMesh = ScopaMesh.BuildMeshFromBuffers(
                     namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
                     config, 
                     entityOrigin,
@@ -478,125 +475,6 @@ namespace Scopa {
             }
         }
 
-        /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers
-        ///  but if returnMesh is true, then it will also CLEAR THOSE BUFFERS and GENERATE A MESH </summary>
-        public static void BufferMeshDataFromSolid(Solid solid, ScopaMapConfig config, ScopaMapConfig.MaterialOverride textureFilter = null, bool includeDiscardedFaces = false) {
-           
-            foreach (var face in solid.Faces) {
-                if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
-                    continue;
-
-                if ( !includeDiscardedFaces && face.discardWhenBuildingMesh )
-                    continue;
-
-                if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
-                    continue;
-
-                // test for unseen / hidden faces, and discard
-                // if ( !includeDiscardedFaces && config.removeHiddenFaces ) {
-                //     for(int i=0; i<allFaces.Count; i++) {
-                //         if (allFaces[i].OccludesFace(face)) {
-                //             // Debug.Log("discarding unseen face at " + face);
-                //             // face.DebugDrawVerts(Color.yellow);
-                //             face.discardWhenBuildingMesh = true;
-                //             break;
-                //         }
-                //     }
-
-                //     if ( face.discardWhenBuildingMesh )
-                //         continue;
-                // }
-
-                BufferScaledMeshDataForFace(
-                    face, 
-                    config.scalingFactor, 
-                    verts, 
-                    tris, 
-                    uvs, 
-                    config.globalTexelScale,
-                    textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize, 
-                    textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize,
-                    textureFilter != null ? textureFilter.materialConfig : null
-                );
-            }
-        }
-
-        /// <summary> utility function that actually generates the Mesh object </summary>
-        static Mesh BuildMeshFromBuffers(string meshName, ScopaMapConfig config, Vector3 meshOrigin = default(Vector3), float smoothNormalAngle = 0) {
-            var mesh = new Mesh();
-            mesh.name = meshName;
-
-            if(verts.Count > 65535)
-                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-
-            if ( meshOrigin != default(Vector3) ) {
-                for(int i=0; i<verts.Count; i++) {
-                    verts[i] -= meshOrigin;
-                }
-            }
-
-            mesh.SetVertices(verts);
-            mesh.SetTriangles(tris, 0);
-            mesh.SetUVs(0, uvs);
-
-            mesh.RecalculateBounds();
-
-            mesh.RecalculateNormals(UnityEngine.Rendering.MeshUpdateFlags.DontRecalculateBounds); // built-in Unity method provides a base for SmoothNormalsJobs
-            if ( smoothNormalAngle > 0.01f)
-                mesh.SmoothNormalsJobs(smoothNormalAngle);
-
-            if ( config.addTangents && smoothNormalAngle >= 0 )
-                mesh.RecalculateTangents();
-            
-            #if UNITY_EDITOR
-            if ( config.addLightmapUV2 ) {
-                UnwrapParam.SetDefaults( out var unwrap);
-                unwrap.packMargin *= 2;
-                Unwrapping.GenerateSecondaryUVSet( mesh, unwrap );
-            }
-
-            if ( config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
-                UnityEditor.MeshUtility.SetMeshCompression(mesh, (ModelImporterMeshCompression)config.meshCompression);
-            #endif
-
-            mesh.Optimize();
-
-            return mesh;
-        }
-
-        /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BufferScaledMeshDataForFace(Face face, float scalingFactor, List<Vector3> verts, List<int> tris, List<Vector2> uvs, float scalar = 1f, int textureWidth = 128, int textureHeight = 128, ScopaMaterialConfig materialConfig = null) {
-            var lastVertIndexOfList = verts.Count;
-
-            // add all verts and UVs
-            for( int v=0; v<face.Vertices.Count; v++) {
-                verts.Add(face.Vertices[v] * scalingFactor);
-
-                if ( materialConfig == null || !materialConfig.enableHotspotUv) {
-                    uvs.Add(new Vector2(
-                        (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
-                        (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
-                    ) * scalar);
-                }
-            }
-
-            if ( materialConfig != null && materialConfig.enableHotspotUv && materialConfig.rects.Count > 0) {
-                // uvs.AddRange( ScopaHotspot.GetHotspotUVs( verts.GetRange(lastVertIndexOfList, face.Vertices.Count), hotspotAtlas ) );
-                if ( !ScopaHotspot.TryGetHotspotUVs( face.Vertices, face.Plane.normal, materialConfig, out var hotspotUVs, scalingFactor )) {
-                    // TODO: wow uhh I really fucked up with this design... no easy way to suddenly put this in a different material
-                    // ... it will need a pre-pass
-                }
-                uvs.AddRange( hotspotUVs );
-            }
-
-            // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
-            for(int i=2; i<face.Vertices.Count; i++) {
-                tris.Add(lastVertIndexOfList);
-                tris.Add(lastVertIndexOfList + i - 1);
-                tris.Add(lastVertIndexOfList + i);
-            }
-        }
-
         /// <summary> for each solid in an Entity, add either a Box Collider or a Mesh Collider component... or make one big merged Mesh Collider </summary>
         public static List<Mesh> AddColliders(GameObject gameObject, Entity ent, ScopaMapConfig config, string namePrefix, bool forceBoxCollidersForAll = false) {
             var meshList = new List<Mesh>();
@@ -610,16 +488,16 @@ namespace Scopa {
 
             // just one big Mesh Collider... one collider to rule them all
             if ( forceConvex || (!isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) ) {
-                ClearMeshBuffers();
+                ScopaMesh.ClearMeshBuffers();
                 foreach ( var solid in solids ) {
                     // omit non-solids and triggers
                     if ( solid.entityDataOverride != null && (config.IsEntityNonsolid(solid.entityDataOverride.ClassName) || config.IsEntityTrigger(solid.entityDataOverride.ClassName)) )
                         continue;
 
-                    BufferMeshDataFromSolid(solid, config, null, true);
+                    ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
                 }
 
-                var newMesh = BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
+                var newMesh = ScopaMesh.BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
                 var newMeshCollider = gameObject.AddComponent<MeshCollider>();
                 newMeshCollider.convex = forceConvex;
                 // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
@@ -655,19 +533,22 @@ namespace Scopa {
 
         /// <summary> given a brush solid, calculate the AABB bounds for all its vertices, and add that Box Collider to the gameObject </summary>
         static bool TryAddBoxCollider(GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-            verts.Clear();
+            if(config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly)
+                return false;
+
+            faceVerts.Clear();
 
             for ( int x=0; x<solid.Faces.Count; x++ ) {
-                if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly && !solid.Faces[x].Plane.IsOrthogonal() ) {
+                if ( !solid.Faces[x].Plane.IsOrthogonal() ) {
                     return false;
                 } else {
                     for( int y=0; y<solid.Faces[x].Vertices.Count; y++) {
-                        verts.Add( solid.Faces[x].Vertices[y] * config.scalingFactor - gameObject.transform.position);
+                        faceVerts.Add( solid.Faces[x].Vertices[y] * config.scalingFactor - gameObject.transform.position);
                     }
                 }
             }
 
-            var bounds = GeometryUtility.CalculateBounds(verts.ToArray(), Matrix4x4.identity);
+            var bounds = GeometryUtility.CalculateBounds(faceVerts.ToArray(), Matrix4x4.identity);
             var newGO = new GameObject("BoxCollider#" + solid.id.ToString() );
             newGO.transform.SetParent( gameObject.transform );
             newGO.transform.localPosition = Vector3.zero;
@@ -682,9 +563,9 @@ namespace Scopa {
 
         /// <summary> given a brush solid, build a convex mesh from its vertices, and add that Mesh Collider to the gameObject </summary>
         static Mesh AddMeshCollider(GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-            ClearMeshBuffers();
-            BufferMeshDataFromSolid(solid, config, null, true);
-            var newMesh = BuildMeshFromBuffers( solid.id.ToString() + "-Collider", config, gameObject.transform.position, -1);
+            ScopaMesh.ClearMeshBuffers();
+            ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
+            var newMesh = ScopaMesh.BuildMeshFromBuffers( solid.id.ToString() + "-Collider", config, gameObject.transform.position, -1);
         
             var newGO = new GameObject("MeshColliderConvex#" + solid.id.ToString() );
             newGO.transform.SetParent( gameObject.transform );
@@ -709,13 +590,6 @@ namespace Scopa {
             } else {
                 return (decimalNumber - Mathf.Floor(decimalNumber));
             }
-        }
-
-        static void ClearMeshBuffers()
-        {
-            verts.Clear();
-            tris.Clear();
-            uvs.Clear();
         }
 
         public static bool IsValidPath(string newPath)
