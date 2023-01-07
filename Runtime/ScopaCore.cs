@@ -145,7 +145,7 @@ namespace Scopa {
 
         public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
-            ScopaMesh.ClearFaceOcclusionList();
+            ScopaMesh.ClearFaceCullingList();
             var lastSolidID = -1;
 
             // for worldspawn, pivot point should be 0, 0, 0... else, see if origin is defined... otherwise, calculate min of bounds
@@ -174,7 +174,7 @@ namespace Scopa {
                     }
                     
                     if ( config.removeHiddenFaces )
-                        ScopaMesh.AddFaceForOcclusion(face);
+                        ScopaMesh.AddFaceForCulling(face);
 
                     // start calculating min bounds, if needed
                     if ( calculateOrigin ) {
@@ -225,9 +225,9 @@ namespace Scopa {
                 }
             }
 
-            // pass 1B: use jobs to build face occlusion data
+            // pass 1B: use jobs to cull additional faces
             if ( config.removeHiddenFaces ) {
-                // var jobData = new NativeArray<Vector3>(aMesh.vertices, Allocator.TempJob);
+                ScopaMesh.FaceCullingJobs();
             }
 
             entityOrigin *= config.scalingFactor;

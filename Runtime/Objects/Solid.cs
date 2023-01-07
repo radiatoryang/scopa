@@ -11,6 +11,8 @@ namespace Scopa.Formats.Map.Objects
         public List<Mesh> Meshes { get; set; }
         public int id = -1;
 
+        static List<Polygon> polyList = new List<Polygon>(32);
+
         public static float weldingThreshold = 4f;
 
         public Solid()
@@ -24,30 +26,32 @@ namespace Scopa.Formats.Map.Objects
             if (Faces.Count < 4) return;
 
             var poly = new Polyhedron(Faces.Select(x => new Plane(x.Plane.Normal, x.Plane.D)));
-            var polyList = new List<Polygon>( poly.Polygons );
+            // var polyList = new List<Polygon>( poly.Polygons );
+            polyList.Clear();
+            polyList.AddRange(poly.Polygons);
 
             foreach (var face in Faces)
             {
                 face.Plane.ReverseNormal();
-                var pgList = polyList.OrderBy( poly => VectorExtensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
+                polyList = polyList.OrderBy( poly => VectorExtensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) ).ToList();
 
-                if ( pgList.FirstOrDefault() == null || !face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
+                if (polyList.Count == 0 || !face.Plane.Normal.EquivalentTo(polyList[0].Plane.Normal, 0.1f) ) {
                     face.Plane.ReverseNormal();
 
-                    pgList = polyList.OrderBy( poly => VectorExtensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) );
-                    if ( pgList.FirstOrDefault() != null && face.Plane.Normal.EquivalentTo(pgList.First().Plane.Normal, 0.1f) ) {
-                        face.Vertices.AddRange( pgList.First().Vertices ); // .Select(x => x.ToStandardVector3()) );
+                    polyList = polyList.OrderBy( poly => VectorExtensions.GetTotalDelta(poly.Plane.Normal, face.Plane.Normal) ).ToList();
+                    if ( polyList.Count > 0 && face.Plane.Normal.EquivalentTo(polyList[0].Plane.Normal, 0.1f) ) {
+                        face.Vertices.AddRange( polyList[0].Vertices ); // .Select(x => x.ToStandardVector3()) );
                         // foreach ( var vert in face.Vertices ) {
                         //     Debug.DrawRay( vert, face.Plane.Normal, Color.cyan, 60f, true );
                         // }
-                        polyList.Remove(pgList.First());
+                        polyList.RemoveAt(0);
                     }
                 } else {
-                    face.Vertices.AddRange( pgList.First().Vertices ); // .Select(x => x.ToStandardVector3()) );
+                    face.Vertices.AddRange( polyList[0].Vertices ); // .Select(x => x.ToStandardVector3()) );
                     // foreach ( var vert in face.Vertices ) {
                     //     Debug.DrawRay( vert, face.Plane.Normal, Color.yellow, 60f, true );
                     // }
-                    polyList.Remove(pgList.First());
+                    polyList.RemoveAt(0);
                 }
 
                 // var pg = poly.Polygons.FirstOrDefault(x => x.Plane.Normal.EquivalentTo(face.Plane.Normal.ToPrecisionVector3(), 0.1f));

@@ -7,6 +7,8 @@ using Scopa.Formats.Map.Objects;
 using Scopa.Formats.Texture.Wad;
 using Scopa.Formats.Id;
 using UnityEngine;
+using Unity.Collections;
+using Unity.Jobs;
 using Mesh = UnityEngine.Mesh;
 
 #if UNITY_EDITOR
@@ -19,6 +21,7 @@ namespace Scopa {
         // to avoid GC, we use big static lists so we just allocate once
         // TODO: will have to reorganize this for multithreading later on
         static List<Face> allFaces = new List<Face>(1024);
+
         static List<Vector3> verts = new List<Vector3>(4096);
         static List<Vector3> faceVerts = new List<Vector3>(64);
         static List<int> tris = new List<int>(8192);
@@ -26,13 +29,264 @@ namespace Scopa {
         static List<Vector2> uvs = new List<Vector2>(4096);
         static List<Vector2> faceUVs = new List<Vector2>(64);
 
-        public static void AddFaceForOcclusion(Face brushFace) {
+        const float EPSILON = 0.01f;
+
+
+        public static void AddFaceForCulling(Face brushFace) {
             allFaces.Add(brushFace);
         }
 
-        public static void ClearFaceOcclusionList() {
+        public static void ClearFaceCullingList() {
             allFaces.Clear();
         }
+        
+        public static void FaceCullingJobs() {
+            var vertCount = 0;
+            var cullingOffsets = new NativeArray<int>(allFaces.Count, Allocator.TempJob);
+            for(int i=0; i<allFaces.Count; i++) {
+                cullingOffsets[i] = vertCount;
+                vertCount += allFaces[i].Vertices.Count;
+            }
+
+            var cullingVerts = new NativeArray<Vector3>(vertCount, Allocator.TempJob);
+            for(int i=0; i<allFaces.Count; i++) {
+                for(int v=cullingOffsets[i]; v < (i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertCount); v++) {
+                    cullingVerts[v] = allFaces[i].Vertices[v-cullingOffsets[i]];
+                }
+            }
+            
+            var cullingResults = new NativeArray<bool>(allFaces.Count, Allocator.TempJob);
+            for(int i=0; i<allFaces.Count; i++) {
+                cullingResults[i] = allFaces[i].discardWhenBuildingMesh;
+            }
+            
+            var jobData = new FaceCullingJob();
+            jobData.vertices = cullingVerts;
+            jobData.cullingOffsets = cullingOffsets;
+            jobData.results = cullingResults;
+            var handle = jobData.Schedule(cullingResults.Length, 16);
+            handle.Complete();
+
+            // int culledFaces = 0;
+            for(int i=0; i<cullingResults.Length; i++) {
+                // if (!allFaces[i].discardWhenBuildingMesh && cullingResults[i])
+                //     culledFaces++;
+                allFaces[i].discardWhenBuildingMesh = cullingResults[i];
+            }
+            // Debug.Log($"Culled {culledFaces} faces!");
+
+            cullingOffsets.Dispose();
+            cullingVerts.Dispose();
+            cullingResults.Dispose();
+        }
+
+        public struct FaceCullingJob : IJobParallelFor
+        {
+            [ReadOnlyAttribute]
+            public NativeArray<Vector3> vertices;
+
+            [ReadOnlyAttribute]
+            public NativeArray<int> cullingOffsets;
+            
+            public NativeArray<bool> results;
+
+            public void Execute(int i)
+            {
+                if (results[i])
+                    return;
+
+                var offsetStart = cullingOffsets[i];
+                var offsetEnd = i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertices.Length;
+
+                var Plane = new UnityEngine.Plane( vertices[offsetStart], vertices[offsetStart+1], vertices[offsetStart+2] );
+
+                var Center = vertices[offsetStart];
+                for( int n=offsetStart; n<offsetEnd; n++) {
+                    Center += vertices[n];
+                }
+                Center /= vertices.Length;
+
+                var ignoreAxis = GetMainAxisToNormal(Plane); // 2D math is easier, so let's ignore the least important axis
+
+                // test against all other faces
+                for(int n=0; n<cullingOffsets.Length; n++) {
+                    var otherOffsetStart = cullingOffsets[n];
+                    var otherOffsetEnd = n<cullingOffsets.Length-1 ? cullingOffsets[n+1] : vertices.Length;
+                    var otherPlane = new UnityEngine.Plane( vertices[otherOffsetStart], vertices[otherOffsetStart+1], vertices[otherOffsetStart+2] );
+
+                    // first, test (1) share similar plane distance and (2) face opposite directions
+                    // we are testing the NEGATIVE case for early out
+                    if ( Mathf.Abs( Plane.distance + otherPlane.distance) > 1f || Vector3.Dot(Plane.normal, otherPlane.normal) > -0.99f ) {
+                        continue;
+                    }
+
+                    // then, test whether this face's vertices are completely inside the other
+                    var otherVertices = new Vector3[otherOffsetEnd-otherOffsetStart];
+                    NativeArray<Vector3>.Copy(vertices, otherOffsetStart, otherVertices, 0, otherVertices.Length);
+
+                    var vertNotInOtherFace = false;
+                    for( int x=offsetStart; x<offsetEnd; x++ ) {
+                        var smallFaceVert = vertices[x] + (Center - vertices[x]).normalized * 0.2f;
+                        switch (ignoreAxis) {
+                            case Axis.X: if (!IsInPolygonYZ3(smallFaceVert, otherVertices)) vertNotInOtherFace = true; break;
+                            case Axis.Y: if (!IsInPolygonXZ3(smallFaceVert, otherVertices)) vertNotInOtherFace = true; break;
+                            case Axis.Z: if (!IsInPolygonXY3(smallFaceVert, otherVertices)) vertNotInOtherFace = true; break;
+                        }
+
+                        if (vertNotInOtherFace)
+                            break;
+                    }
+
+                    if (vertNotInOtherFace)
+                        continue;
+
+                    // if we got this far, then this face should be culled
+                    var tempResult = true;
+                    results[i] = tempResult;
+                    return;
+                }
+               
+            }
+        }
+
+        static Axis GetMainAxisToNormal(UnityEngine.Plane Plane) {
+            // VHE prioritises the axes in order of X, Y, Z.
+            // so in Unity land, that's X, Z, and Y
+            var norm = Plane.normal.Absolute();
+
+            if (norm.x >= norm.y && norm.x >= norm.z) return Axis.X;
+            if (norm.z >= norm.y) return Axis.Z;
+            return Axis.Y;
+        }
+
+        static bool IsInPolygonYZ3(Vector3 testPoint, Vector3[] vertices){
+            // Get the angle between the point and the
+            // first and last vertices.
+            int max_point = vertices.Length - 1;
+            float total_angle = GetAngle(
+                vertices[max_point].y, vertices[max_point].z,
+                testPoint.y, testPoint.z,
+                vertices[0].y, vertices[0].z);
+
+            // Add the angles from the point
+            // to each other pair of vertices.
+            for (int i = 0; i < max_point; i++) {
+                total_angle += GetAngle(
+                    vertices[i].y, vertices[i].z,
+                    testPoint.y, testPoint.z,
+                    vertices[i + 1].y, vertices[i + 1].z);
+            }
+
+            // The total angle should be 2 * PI or -2 * PI if
+            // the point is in the polygon and close to zero
+            // if the point is outside the polygon.
+            // The following statement was changed. See the comments.
+            //return (Math.Abs(total_angle) > 0.000001);
+            return Mathf.Abs(total_angle) > EPSILON;
+        }
+
+        static bool IsInPolygonXY3( Vector3 testPoint, Vector3[] vertices){
+            // Get the angle between the point and the
+            // first and last vertices.
+            int max_point = vertices.Length - 1;
+            float total_angle = GetAngle(
+                vertices[max_point].x, vertices[max_point].y,
+                testPoint.x, testPoint.y,
+                vertices[0].x, vertices[0].y);
+
+            // Add the angles from the point
+            // to each other pair of vertices.
+            for (int i = 0; i < max_point; i++) {
+                total_angle += GetAngle(
+                    vertices[i].x, vertices[i].y,
+                    testPoint.x, testPoint.y,
+                    vertices[i + 1].x, vertices[i + 1].y);
+            }
+
+            // The total angle should be 2 * PI or -2 * PI if
+            // the point is in the polygon and close to zero
+            // if the point is outside the polygon.
+            // The following statement was changed. See the comments.
+            //return (Math.Abs(total_angle) > 0.000001);
+            return Mathf.Abs(total_angle) > EPSILON;
+        }
+
+        static bool IsInPolygonXZ3( Vector3 testPoint, Vector3[] vertices){
+            // Get the angle between the point and the
+            // first and last vertices.
+            int max_point = vertices.Length - 1;
+            float total_angle = GetAngle(
+                vertices[max_point].x, vertices[max_point].z,
+                testPoint.x, testPoint.z,
+                vertices[0].x, vertices[0].z);
+
+            // Add the angles from the point
+            // to each other pair of vertices.
+            for (int i = 0; i < max_point; i++) {
+                total_angle += GetAngle(
+                    vertices[i].x, vertices[i].z,
+                    testPoint.x, testPoint.z,
+                    vertices[i + 1].x, vertices[i + 1].z);
+            }
+
+            // The total angle should be 2 * PI or -2 * PI if
+            // the point is in the polygon and close to zero
+            // if the point is outside the polygon.
+            // The following statement was changed. See the comments.
+            //return (Math.Abs(total_angle) > 0.000001);
+            return Mathf.Abs(total_angle) > EPSILON;
+        }
+
+        // Return the angle ABC.
+        // Return a value between PI and -PI.
+        // Note that the value is the opposite of what you might
+        // expect because Y coordinates increase downward.
+        static float GetAngle(float Ax, float Ay,
+            float Bx, float By, float Cx, float Cy)
+        {
+            // Get the dot product.
+            float dot_product = DotProduct(Ax, Ay, Bx, By, Cx, Cy);
+
+            // Get the cross product.
+            float cross_product = CrossProductLength(Ax, Ay, Bx, By, Cx, Cy);
+
+            // Calculate the angle.
+            return (float)Mathf.Atan2(cross_product, dot_product);
+        }
+
+        static float DotProduct(float Ax, float Ay,
+            float Bx, float By, float Cx, float Cy)
+        {
+            // Get the vectors' coordinates.
+            float BAx = Ax - Bx;
+            float BAy = Ay - By;
+            float BCx = Cx - Bx;
+            float BCy = Cy - By;
+
+            // Calculate the dot product.
+            return (BAx * BCx + BAy * BCy);
+        }
+
+        // Return the cross product AB x BC.
+        // The cross product is a vector perpendicular to AB
+        // and BC having length |AB| * |BC| * Sin(theta) and
+        // with direction given by the right-hand rule.
+        // For two vectors in the X-Y plane, the result is a
+        // vector with X and Y components 0 so the Z component
+        // gives the vector's length and direction.
+        static float CrossProductLength(float Ax, float Ay,
+            float Bx, float By, float Cx, float Cy)
+        {
+            // Get the vectors' coordinates.
+            float BAx = Ax - Bx;
+            float BAy = Ay - By;
+            float BCx = Cx - Bx;
+            float BCy = Cy - By;
+
+            // Calculate the Z coordinate of the cross product.
+            return (BAx * BCy - BAy * BCx);
+        }
+
 
         /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers
         /// BUT it also occludes unseen faces at the same time too</summary>
@@ -48,19 +302,19 @@ namespace Scopa {
                     continue;
 
                 // test for unseen / hidden faces, and discard
-                if ( !includeDiscardedFaces && mapConfig.removeHiddenFaces ) {
-                    for(int i=0; i<allFaces.Count; i++) {
-                        if (allFaces[i].OccludesFace(face)) {
-                            // Debug.Log("discarding unseen face at " + face);
-                            // face.DebugDrawVerts(Color.yellow);
-                            face.discardWhenBuildingMesh = true;
-                            break;
-                        }
-                    }
+                // if ( !includeDiscardedFaces && mapConfig.removeHiddenFaces ) {
+                //     for(int i=0; i<allFaces.Count; i++) {
+                //         if (allFaces[i].OccludesFace(face)) {
+                //             Debug.Log("discarding unseen face at " + face);
+                //             // face.DebugDrawVerts(Color.yellow);
+                //             face.discardWhenBuildingMesh = true;
+                //             break;
+                //         }
+                //     }
 
-                    if ( face.discardWhenBuildingMesh )
-                        continue;
-                }
+                //     if ( face.discardWhenBuildingMesh )
+                //         continue;
+                // }
 
                 BufferScaledMeshFragmentForFace(
                     solid,
@@ -97,10 +351,11 @@ namespace Scopa {
             mesh.RecalculateBounds();
 
             mesh.RecalculateNormals(UnityEngine.Rendering.MeshUpdateFlags.DontRecalculateBounds); // built-in Unity method provides a base for SmoothNormalsJobs
-            if ( smoothNormalAngle > 0.01f)
+            if ( smoothNormalAngle > 0.01f) {
                 mesh.SmoothNormalsJobs(smoothNormalAngle);
+            }
 
-            if ( config.addTangents && smoothNormalAngle >= 0 )
+            if ( config.addTangents )
                 mesh.RecalculateTangents();
             
             #if UNITY_EDITOR
@@ -164,6 +419,118 @@ namespace Scopa {
             verts.Clear();
             tris.Clear();
             uvs.Clear();
+        }
+
+        public static void WeldVertices(this Mesh aMesh, float aMaxDelta = 0.1f, float maxAngle = 180f)
+        {
+            var verts = aMesh.vertices;
+            var normals = aMesh.normals;
+            var uvs = aMesh.uv;
+            List<int> newVerts = new List<int>();
+            int[] map = new int[verts.Length];
+            // create mapping and filter duplicates.
+            for (int i = 0; i < verts.Length; i++)
+            {
+                var p = verts[i];
+                var n = normals[i];
+                var uv = uvs[i];
+                bool duplicate = false;
+                for (int i2 = 0; i2 < newVerts.Count; i2++)
+                {
+                    int a = newVerts[i2];
+                    if (
+                        (verts[a] - p).sqrMagnitude <= aMaxDelta // compare position
+                        && Vector3.Angle(normals[a], n) <= maxAngle // compare normal
+                        // && (uvs[a] - uv).sqrMagnitude <= aMaxDelta // compare first uv coordinate
+                        )
+                    {
+                        map[i] = i2;
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate)
+                {
+                    map[i] = newVerts.Count;
+                    newVerts.Add(i);
+                }
+            }
+            // create new vertices
+            var verts2 = new Vector3[newVerts.Count];
+            var normals2 = new Vector3[newVerts.Count];
+            var uvs2 = new Vector2[newVerts.Count];
+            for (int i = 0; i < newVerts.Count; i++)
+            {
+                int a = newVerts[i];
+                verts2[i] = verts[a];
+                normals2[i] = normals[a];
+                uvs2[i] = uvs[a];
+            }
+            // map the triangle to the new vertices
+            var tris = aMesh.triangles;
+            for (int i = 0; i < tris.Length; i++)
+            {
+                tris[i] = map[tris[i]];
+            }
+            aMesh.Clear();
+            aMesh.vertices = verts2;
+            aMesh.normals = normals2;
+            aMesh.triangles = tris;
+            aMesh.uv = uvs2;
+        }
+
+        public static void SmoothNormalsJobs(this Mesh aMesh, float weldingAngle = 80, float maxDelta = 0.1f) {
+            var meshData = Mesh.AcquireReadOnlyMeshData(aMesh);
+            var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            meshData[0].GetVertices(verts);
+            var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            meshData[0].GetNormals(normals);
+            var smoothNormalsResults = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            
+            var jobData = new SmoothJob();
+            jobData.cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
+            jobData.maxDelta = maxDelta;
+            jobData.verts = verts;
+            jobData.normals = normals;
+            jobData.results = smoothNormalsResults;
+            var handle = jobData.Schedule(smoothNormalsResults.Length, 8);
+            handle.Complete();
+
+            meshData.Dispose(); // must dispose this early, before modifying mesh
+
+            aMesh.SetNormals(smoothNormalsResults);
+
+            verts.Dispose();
+            normals.Dispose();
+            smoothNormalsResults.Dispose();
+        }
+
+        public struct SmoothJob : IJobParallelFor
+        {
+            [ReadOnlyAttribute]
+            public NativeArray<Vector3> verts, normals;
+            
+            public NativeArray<Vector3> results;
+
+            public float cos, maxDelta;
+
+            public void Execute(int i)
+            {
+                var tempResult = normals[i];
+                var resultCount = 1;
+                
+                for(int i2 = 0; i2 < verts.Length; i2++) {
+                    if ( (verts[i2] - verts[i] ).sqrMagnitude <= maxDelta
+                        && Vector3.Dot(normals[i2], normals[i] ) >= cos ) {
+                        tempResult += normals[i2];
+                        resultCount++;
+                    }
+                }
+
+                if (resultCount > 1)
+                    tempResult = (tempResult / resultCount).normalized;
+                results[i] = tempResult;
+            }
         }
 
     }
