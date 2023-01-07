@@ -4,7 +4,7 @@
 
 # WARNING: in unstable early development, not ready for public use yet, might change a lot or break
 
-- [MAP import](Documentation~/MapImporter.md) (Quake 1 / Valve 220 format) generates a model prefab with meshes, colliders, and parsed entity data
+- [MAP import](Documentation~/MapImporter.md) (Quake 1 / Valve 220 format) generates model prefab with meshes, colliders, entities
 - [WAD import](Documentation~/WadImporter.md) / [WAD export](Documentation~/WadExporter.md) (Quake 1 WAD2 / Half-Life WAD3 format)
 - FGD creator can export entity definitions out to TrenchBroom
 - works at editor time or runtime (for modding support)
@@ -23,7 +23,7 @@ Put a .MAP or .WAD file in your `/Assets/` folder and it'll import automatically
 
 **Do your edits in the level editor, not in Unity!** Any in-editor changes may be erased when you re-import the .MAP again. Treat the .MAP file as the [single source of truth](https://en.wikipedia.org/wiki/Single_source_of_truth). 
 
-To learn about more features, see [Documentation](Documentation~/Index.md).
+To learn more, see [Documentation](Documentation~/Index.md).
 
 ## Limitations
 
@@ -36,7 +36,6 @@ Issues and pull requests are currently NOT accepted at this time. Development is
 ## Acknowledgments / Credits
 
 - lots of file format handling from [Sledge Formats](https://github.com/LogicAndTrick/sledge-formats)
-- hotspot UV implementation from [Unity Hotspot UV](https://github.com/BennyKok/unity-hotspot-uv)
 - vertex color AO baking from [VTAO](https://github.com/Helix128/VTAO)
 - GPU-based texture resizing from [Unity GPU Texture Resize](https://github.com/ababilinski/unity-gpu-texture-resize)
 - color palette generation from [cSharpColourQuantization](https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/MedianCut.cs)
