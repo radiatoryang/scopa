@@ -23,12 +23,12 @@ namespace Scopa {
 		private static int StartIndex = 0;
 
 		#if UNITY_EDITOR
-		[MenuItem("Scopa/Export Selected GameObject(s) to merged .OBJ + .MTL (preserve submeshes)...")]
+		[MenuItem("Assets/Scopa/Export Selected GameObject(s) to merged .OBJ + .MTL (preserve submeshes)...")]
 		public static void MenuObjExport() {
 			MenuObjExport(true);
 		}
 
-		[MenuItem("Scopa/Export Selected GameObject(s) to merged .OBJ (no submeshes)...")]
+		[MenuItem("Assets/Scopa/Export Selected GameObject(s) to merged .OBJ (no submeshes)...")]
 		public static void MenuObjExportMerged() {
 			MenuObjExport(false);
 		}

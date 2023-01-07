@@ -201,9 +201,11 @@ namespace Scopa {
                 foreach ( var mf in allMeshes ) {
                     verts.AddRange( mf.sharedMesh.vertices );
                 }
-                var bounds = GeometryUtility.CalculateBounds(verts.ToArray(), Matrix4x4.identity);
-                navMeshObstacle.center = bounds.center;
-                navMeshObstacle.size = bounds.size;
+                if (verts.Count > 0) {
+                    var bounds = GeometryUtility.CalculateBounds(verts.ToArray(), Matrix4x4.identity);
+                    navMeshObstacle.center = bounds.center;
+                    navMeshObstacle.size = bounds.size;
+                }
             }
         }
     }

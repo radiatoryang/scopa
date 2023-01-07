@@ -188,15 +188,16 @@ namespace Scopa {
                     // match this face's texture name to a material
                     if ( !materialLookup.ContainsKey(face.TextureName) ) {
                         var newMaterial = defaultMaterial;
-
                         var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
 
-                        // this face is using a hotspot material, so...
-                        if ( materialOverride != null && materialOverride.materialConfig != null && materialOverride.materialConfig.enableHotspotUv && materialOverride.materialConfig.fallbackMaterial != null) {
-                            // detect if the face is too big to fit any hotspot! if it is, then use the fallback material (which is hopefully a regular tiling material?)
-                            if ( ScopaHotspot.TryGetHotspotUVs(face.Vertices, face.Plane.normal, materialOverride.materialConfig, out var uvs, config.scalingFactor ) == false ) {
-                                newMaterial = materialOverride.materialConfig.fallbackMaterial;
-                                face.TextureName = newMaterial.name;
+                        // look for custom user logic for face prepass
+                        if (materialOverride != null && materialOverride.materialConfig != null) {
+                            var maybeNewMaterial = materialOverride.materialConfig.OnPrepassBrushFace(solid, face, config, newMaterial);
+                            if (maybeNewMaterial == null) {
+                                face.discardWhenBuildingMesh = true;
+                                continue;
+                            } else if (maybeNewMaterial != newMaterial) {
+                                newMaterial = maybeNewMaterial;
                                 materialOverride = null;
                             }
                         }
