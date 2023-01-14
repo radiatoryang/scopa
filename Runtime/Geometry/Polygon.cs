@@ -82,11 +82,24 @@ namespace Scopa
             Plane = plane.Clone();
         }
 
-        /// <summary> based on the first 3 vertices (a triangle), sample a random point barycentrically </summary>
-        public Vector3 GetRandomPointAsTriangle() {
+        /// <summary> based on the first 3 vertices (a triangle), sample a random point barycentrically / uniformly </summary>
+        public Vector3 GetRandomPointAsTriangle(int n, bool linear = false) {
             // from https://gist.github.com/danieldownes/b1c9bab09cce013cc30a4198bfeda0aa
-            float r = Random.value;
-            float s = Random.value;
+            // and from http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+            // const float g = 1.32471795724474602596f;
+            const float g = 1.324717957f;
+            float r = Random.Range(0.5f, 1f) + (1f/g) * n;
+            //r = r - Mathf.Floor(r);
+            r = r % 1;
+
+            if (linear) {
+                // return Vector3.Lerp(Vertices[0], Vertices[1], Random.value);
+                return Vector3.Lerp(Vertices[0], Vertices[1], r);
+            }
+
+            float s = Random.Range(0.5f, 1f) + (1f/(g*g)) * n;
+            //s = s - Mathf.Floor(s);
+            s = s % 1;
 
             if (r + s >= 1)
             {
@@ -110,7 +123,7 @@ namespace Scopa
         }
 
         /// <summary> based on the first 3 vertices (a triangle), calculate if any angle is less than X degrees</summary>
-        const float LONG_THIN_ANGLE = 10f;
+        const float LONG_THIN_ANGLE = 15f;
         public bool IsLongAndThin() {
             float angleA = Vector3.Angle(Vertices[1] - Vertices[0], Vertices[2] - Vertices[0]);
             float angleB = Vector3.Angle(Vertices[0] - Vertices[1], Vertices[2] - Vertices[1]);
