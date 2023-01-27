@@ -267,22 +267,22 @@ namespace Scopa.Formats
             bw.Write(c.z);
         }
 
-        public static Plane ReadPlane(this BinaryReader br)
-        {
-            var a = ReadVector3(br);
-            var b = ReadVector3(br);
-            var c = ReadVector3(br);
+        // public static Plane ReadPlane(this BinaryReader br)
+        // {
+        //     var a = ReadVector3(br);
+        //     var b = ReadVector3(br);
+        //     var c = ReadVector3(br);
 
-            // var ab = b - a;
-            // var ac = c - a;
+        //     // var ab = b - a;
+        //     // var ac = c - a;
 
-            // var normal = ac.Cross(ab).Normalise();
-            // var d = normal.Dot(a);
+        //     // var normal = ac.Cross(ab).Normalise();
+        //     // var d = normal.Dot(a);
 
-            // return new Plane(normal, d);
+        //     // return new Plane(normal, d);
 
-            return new Plane(a, b, c);
-        }
+        //     return new Plane(a, b, c);
+        // }
 
         public static void WritePlane(this BinaryWriter bw, Vector3[] coords)
         {

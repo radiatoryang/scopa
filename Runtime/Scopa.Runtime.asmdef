@@ -1,3 +1,16 @@
 {
-	"name": "Scopa.Runtime"
+    "name": "Scopa.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "GUID:8c99226570017ef478306d84c29f0597"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Authors>LogicAndTrick</Authors>
+    <Description>Parsers for map source files used by level editors. Currently supports MAP files in the idtech2 and valve formats, Worldcraft RMF v2.2, and partial support for Source Hammer VMF and Jackhammer/JACK JMF formats.</Description>
+    <Copyright>2022 LogicAndTrick</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/LogicAndTrick/sledge-formats</PackageProjectUrl>
+    <PackageIcon>sledge-logo.png</PackageIcon>
+    <RepositoryUrl>https://github.com/LogicAndTrick/sledge-formats</RepositoryUrl>
+    <RepositoryType>Git</RepositoryType>
+    <PackageTags>half-life quake valve hammer worldcraft jackhammer jack rmf vmf map jmf</PackageTags>
+    <PackageReleaseNotes>Basic support for reading extra face flags in valve-format maps</PackageReleaseNotes>
+    <Version>1.0.6</Version>
+	<DebugType>full</DebugType>
+	<DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DocumentationFile>bin/Sledge.Formats.Map.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sledge.Formats\Sledge.Formats.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\sledge-logo.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>

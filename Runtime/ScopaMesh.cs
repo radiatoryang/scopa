@@ -2,14 +2,16 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Reflection;
-using Scopa.Formats.Map.Formats;
-using Scopa.Formats.Map.Objects;
+using Sledge.Formats.Map.Formats;
+using Sledge.Formats.Map.Objects;
+using Sledge.Formats.Precision;
 using Scopa.Formats.Texture.Wad;
 using Scopa.Formats.Id;
 using UnityEngine;
 using Unity.Collections;
 using Unity.Jobs;
 using Mesh = UnityEngine.Mesh;
+using Vector3 = UnityEngine.Vector3;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -39,6 +41,15 @@ namespace Scopa {
 
         public static void ClearFaceCullingList() {
             allFaces.Clear();
+            discardedFaces.Clear();
+        }
+
+        public static void DiscardFace(Face brushFace) {
+            discardedFaces.Add(brushFace);
+        }
+
+        public static bool IsFaceCulledDiscard(Face brushFace) {
+            return discardedFaces.Contains(brushFace);
         }
         
         public static void FaceCullingJobs() {
@@ -52,13 +63,13 @@ namespace Scopa {
             var cullingVerts = new NativeArray<Vector3>(vertCount, Allocator.TempJob);
             for(int i=0; i<allFaces.Count; i++) {
                 for(int v=cullingOffsets[i]; v < (i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertCount); v++) {
-                    cullingVerts[v] = allFaces[i].Vertices[v-cullingOffsets[i]];
+                    cullingVerts[v] = allFaces[i].Vertices[v-cullingOffsets[i]].ToUnity();
                 }
             }
             
             var cullingResults = new NativeArray<bool>(allFaces.Count, Allocator.TempJob);
             for(int i=0; i<allFaces.Count; i++) {
-                cullingResults[i] = allFaces[i].discardWhenBuildingMesh;
+                cullingResults[i] = IsFaceCulledDiscard(allFaces[i]);
             }
             
             var jobData = new FaceCullingJob();
@@ -72,7 +83,8 @@ namespace Scopa {
             for(int i=0; i<cullingResults.Length; i++) {
                 // if (!allFaces[i].discardWhenBuildingMesh && cullingResults[i])
                 //     culledFaces++;
-                allFaces[i].discardWhenBuildingMesh = cullingResults[i];
+                if(cullingResults[i])
+                    discardedFaces.Add(allFaces[i]);
             }
             // Debug.Log($"Culled {culledFaces} faces!");
 
@@ -150,7 +162,9 @@ namespace Scopa {
             }
         }
 
-        static Axis GetMainAxisToNormal(UnityEngine.Plane Plane) {
+        public enum Axis { X, Y, Z}
+
+        public static Axis GetMainAxisToNormal(UnityEngine.Plane Plane) {
             // VHE prioritises the axes in order of X, Y, Z.
             // so in Unity land, that's X, Z, and Y
             var norm = Plane.normal.Absolute();
@@ -160,7 +174,17 @@ namespace Scopa {
             return Axis.Y;
         }
 
-        static bool IsInPolygonYZ3(Vector3 testPoint, Vector3[] vertices){
+        public static Axis GetMainAxisToNormal(Vector3 norm) {
+            // VHE prioritises the axes in order of X, Y, Z.
+            // so in Unity land, that's X, Z, and Y
+            norm = norm.Absolute();
+
+            if (norm.x >= norm.y && norm.x >= norm.z) return Axis.X;
+            if (norm.z >= norm.y) return Axis.Z;
+            return Axis.Y;
+        }
+
+        public static bool IsInPolygonYZ3(Vector3 testPoint, Vector3[] vertices){
             // Get the angle between the point and the
             // first and last vertices.
             int max_point = vertices.Length - 1;
@@ -186,7 +210,7 @@ namespace Scopa {
             return Mathf.Abs(total_angle) > EPSILON;
         }
 
-        static bool IsInPolygonXY3( Vector3 testPoint, Vector3[] vertices){
+        public static bool IsInPolygonXY3( Vector3 testPoint, Vector3[] vertices){
             // Get the angle between the point and the
             // first and last vertices.
             int max_point = vertices.Length - 1;
@@ -212,7 +236,7 @@ namespace Scopa {
             return Mathf.Abs(total_angle) > EPSILON;
         }
 
-        static bool IsInPolygonXZ3( Vector3 testPoint, Vector3[] vertices){
+        public static bool IsInPolygonXZ3( Vector3 testPoint, Vector3[] vertices){
             // Get the angle between the point and the
             // first and last vertices.
             int max_point = vertices.Length - 1;
@@ -296,7 +320,7 @@ namespace Scopa {
                 if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
                     continue;
 
-                if ( !includeDiscardedFaces && face.discardWhenBuildingMesh )
+                if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
                     continue;
 
                 if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
@@ -385,11 +409,11 @@ namespace Scopa {
 
             // add all verts and UVs
             for( int v=0; v<face.Vertices.Count; v++) {
-                faceVerts.Add(face.Vertices[v] * mapConfig.scalingFactor);
+                faceVerts.Add(face.Vertices[v].ToUnity() * mapConfig.scalingFactor);
                 
                 faceUVs.Add(new Vector2(
-                    (Vector3.Dot(face.Vertices[v], face.UAxis / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
-                    (Vector3.Dot(face.Vertices[v], face.VAxis / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
+                    (Vector3.Dot(face.Vertices[v].ToUnity(), face.UAxis.ToUnity() / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
+                    (Vector3.Dot(face.Vertices[v].ToUnity(), face.VAxis.ToUnity() / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
                 ) * mapConfig.globalTexelScale);
             }
 

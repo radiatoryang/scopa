@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Globalization;
 using UnityEngine;
-using Scopa.Formats.Map.Objects;
+using Sledge.Formats.Map.Objects;
+using Color = UnityEngine.Color;
 
 namespace Scopa {
 
@@ -226,7 +227,7 @@ namespace Scopa {
 
         /// <summary> parses an entity property as an RGB Color (and try to detect if it's 0.0-1.0 or 0-255); empty or whitespace will return false and Color.black</summary>
         public bool TryGetColorRGB(string propertyKey, out Color color, bool verbose = false) {
-            color = Color.black;
+            color = UnityEngine.Color.black;
 
             if ( TryGetVector3Unscaled(propertyKey, out var vec, verbose) ) {
                 // if we're parsing it as a vector, remember to unswizzle the Y and Z components
@@ -243,7 +244,7 @@ namespace Scopa {
 
         /// <summary> parses an entity property as an RGBA Color (and try to detect if it's 0.0-1.0 or 0-255); empty or whitespace will return false and Color.black</summary>
         public bool TryGetColorRGBA(string propertyKey, out Color color, bool verbose = false) {
-            color = Color.black;
+            color = UnityEngine.Color.black;
 
             if ( TryGetVector4Unscaled(propertyKey, out var vec, verbose) ) {
                 if ( vec.x > 1 || vec.y > 1 || vec.z > 1 || vec.w > 1 ) {
@@ -259,7 +260,7 @@ namespace Scopa {
 
         /// <summary> parses an entity property as an RGB Color (0-255) with a fourth number as light intensity scalar, common as the Half-Life 1 GoldSrc / Half-Life 2 Source light color format (e.g. "255 255 255 200"); empty or whitespace will return false and Color.black and intensity 0.0</summary>
         public bool TryGetColorLight(string propertyKey, out Color color, out float intensity, bool verbose = false) {
-            color = Color.black;
+            color = UnityEngine.Color.black;
             intensity = 0;
 
             if ( TryGetVector4Unscaled(propertyKey, out var vec, verbose) ) {

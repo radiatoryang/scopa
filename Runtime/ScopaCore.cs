@@ -2,8 +2,8 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Reflection;
-using Scopa.Formats.Map.Formats;
-using Scopa.Formats.Map.Objects;
+using Sledge.Formats.Map.Formats;
+using Sledge.Formats.Map.Objects;
 using Scopa.Formats.Texture.Wad;
 using Scopa.Formats.Id;
 using UnityEngine;
@@ -42,7 +42,7 @@ namespace Scopa {
                 return null;
             }
 
-            Solid.weldingThreshold = config.weldingThreshold;
+            // Solid.weldingThreshold = config.weldingThreshold;
 
             mapName = System.IO.Path.GetFileNameWithoutExtension( pathToMapFile );
             entityCount = 0;
@@ -170,14 +170,31 @@ namespace Scopa {
             // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
             var materialLookup = new Dictionary<string, ScopaMapConfig.MaterialOverride>();
             foreach (var solid in solids) {
-                lastSolidID = solid.id;
+                // lastSolidID = solid.id;
                 foreach (var face in solid.Faces) {
                     if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
                         continue;
 
+                    // correct the face data for Unity space...
+                    for(int i=0; i<face.Vertices.Count; i++) {
+                        face.Vertices[i] = new System.Numerics.Vector3(face.Vertices[i].X, face.Vertices[i].Z, face.Vertices[i].Y);
+                    }
+
+                    var plane = face.Plane;
+                    face.Plane = new System.Numerics.Plane(new System.Numerics.Vector3(plane.Normal.X, plane.Normal.Z, plane.Normal.Y), plane.D);
+                    
+                    var direction = ScopaMesh.GetMainAxisToNormal(face.Plane.Normal.ToUnity());
+                    face.UAxis = direction == ScopaMesh.Axis.X ? System.Numerics.Vector3.UnitZ : System.Numerics.Vector3.UnitX;
+                    face.VAxis = direction == ScopaMesh.Axis.Y ? -System.Numerics.Vector3.UnitZ : -System.Numerics.Vector3.UnitY;
+
+                    face.TextureName = face.TextureName.ToLowerInvariant();
+
+                    var center = face.Vertices.Aggregate(System.Numerics.Vector3.Zero, (x, y) => x + y) / face.Vertices.Count;
+                    Debug.DrawRay(center.ToUnity() * config.scalingFactor, face.Plane.Normal.ToUnity(), Color.yellow, 120f, false);
+                    
                     // skip tool textures and other objects?
                     if ( config.IsTextureNameCulled(face.TextureName) ) {
-                        face.discardWhenBuildingMesh = true;
+                        ScopaMesh.DiscardFace(face);
                         continue;
                     }
                     
@@ -187,9 +204,9 @@ namespace Scopa {
                     // start calculating min bounds, if needed
                     if ( calculateOrigin ) {
                         for(int i=0; i<face.Vertices.Count; i++) {
-                            entityOrigin.x = Mathf.Min(entityOrigin.x, face.Vertices[i].x);
-                            entityOrigin.y = Mathf.Min(entityOrigin.y, face.Vertices[i].y);
-                            entityOrigin.z = Mathf.Min(entityOrigin.z, face.Vertices[i].z);
+                            entityOrigin.x = Mathf.Min(entityOrigin.x, face.Vertices[i].X);
+                            entityOrigin.y = Mathf.Min(entityOrigin.y, face.Vertices[i].Y);
+                            entityOrigin.z = Mathf.Min(entityOrigin.z, face.Vertices[i].Z);
                         }
                     }
 
@@ -202,7 +219,7 @@ namespace Scopa {
                         if (materialOverride != null && materialOverride.materialConfig != null) {
                             var maybeNewMaterial = materialOverride.materialConfig.OnPrepassBrushFace(solid, face, config, newMaterial);
                             if (maybeNewMaterial == null) {
-                                face.discardWhenBuildingMesh = true;
+                                ScopaMesh.DiscardFace(face);
                                 continue;
                             } else if (maybeNewMaterial != newMaterial) {
                                 newMaterial = maybeNewMaterial;
@@ -521,18 +538,23 @@ namespace Scopa {
             } // otherwise, generate individual colliders for each brush solid
             else 
             { 
-                foreach ( var solid in solids ) {   
+                var solidCount = 0;
+                foreach ( var solid in solids ) {
+                    solidCount++;
+                    var colliderName = $"{namePrefix}#{ent.ID}-{solidCount}";
+
                     // does the brush have an entity data override that was non solid? then ignore this brush
                     if ( mergedEntityData.ContainsKey(solid) && config.IsEntityNonsolid(mergedEntityData[solid].ClassName) )
                         continue;
 
                     // box collider is the simplest, so we should always try it first       
-                    if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.ConvexMeshColliderOnly && TryAddBoxCollider(gameObject, solid, config, isTrigger) ) 
+                    if ( (config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly || config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxAndConvex) 
+                    && TryAddBoxCollider(colliderName, gameObject, solid, config, isTrigger) ) {
                         continue;
+                    }
 
                     // otherwise, use a convex mesh collider
-                    var newMeshCollider = AddMeshCollider(gameObject, solid, config, mergedEntityData.ContainsKey(solid) ? config.IsEntityTrigger(mergedEntityData[solid].ClassName) : isTrigger);
-                    newMeshCollider.name = namePrefix + "-" + ent.ClassName + "#" + solid.id + "-Collider";
+                    var newMeshCollider = AddMeshCollider(colliderName, gameObject, solid, config, mergedEntityData.ContainsKey(solid) ? config.IsEntityTrigger(mergedEntityData[solid].ClassName) : isTrigger);
                     meshList.Add( newMeshCollider ); 
                 }
             }
@@ -541,10 +563,7 @@ namespace Scopa {
         }
 
         /// <summary> given a brush solid, calculate the AABB bounds for all its vertices, and add that Box Collider to the gameObject </summary>
-        static bool TryAddBoxCollider(GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-            if(config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly)
-                return false;
-
+        static bool TryAddBoxCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
             faceVerts.Clear();
 
             for ( int x=0; x<solid.Faces.Count; x++ ) {
@@ -552,13 +571,13 @@ namespace Scopa {
                     return false;
                 } else {
                     for( int y=0; y<solid.Faces[x].Vertices.Count; y++) {
-                        faceVerts.Add( solid.Faces[x].Vertices[y] * config.scalingFactor - gameObject.transform.position);
+                        faceVerts.Add( solid.Faces[x].Vertices[y].ToUnity() * config.scalingFactor - gameObject.transform.position);
                     }
                 }
             }
 
             var bounds = GeometryUtility.CalculateBounds(faceVerts.ToArray(), Matrix4x4.identity);
-            var newGO = new GameObject("BoxCollider#" + solid.id.ToString() );
+            var newGO = new GameObject("BoxCollider " + colliderName );
             newGO.transform.SetParent( gameObject.transform );
             newGO.transform.localPosition = Vector3.zero;
             newGO.transform.localRotation = Quaternion.identity;
@@ -571,12 +590,12 @@ namespace Scopa {
         }
 
         /// <summary> given a brush solid, build a convex mesh from its vertices, and add that Mesh Collider to the gameObject </summary>
-        static Mesh AddMeshCollider(GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
+        static Mesh AddMeshCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
             ScopaMesh.ClearMeshBuffers();
             ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
-            var newMesh = ScopaMesh.BuildMeshFromBuffers( solid.id.ToString() + "-Collider", config, gameObject.transform.position, -1);
+            var newMesh = ScopaMesh.BuildMeshFromBuffers( colliderName + "Collider", config, gameObject.transform.position, -1);
         
-            var newGO = new GameObject("MeshColliderConvex#" + solid.id.ToString() );
+            var newGO = new GameObject("MeshColliderConvex " + colliderName );
             newGO.transform.SetParent( gameObject.transform );
             newGO.transform.localPosition = Vector3.zero;
             newGO.transform.localRotation = Quaternion.identity;
