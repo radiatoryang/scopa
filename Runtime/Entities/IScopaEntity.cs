@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using Scopa.Formats.Map.Objects;
 
 namespace Scopa {
     /// <summary> interface for components to listen for inputs from the built-in ScopaEntity component; 
@@ -25,13 +24,13 @@ namespace Scopa {
     /// <summary> interface for components that can receive raw entity data during map import </summary>
     public interface IScopaEntityData {
         /// <summary> holds all the basic mostly-raw entity data </summary>
-        Entity entityData { get; set; }
+        ScopaEntityData entityData { get; set; }
     }
 
     /// <summary> interface for components that can do any special processing at import time and/or use BindFgd </summary>
     public interface IScopaEntityImport {
         /// <summary> implement this method to configure a component at import time, whether at runtime or editor time </summary>
-        public virtual void OnEntityImport( Entity entityData ) { }
+        public virtual void OnEntityImport( ScopaEntityData entityData ) { }
 
         /// <summary> if false, ignore BindFGD attributes during FGD generation *and* don't run OnEntityImport() </summary>
         public virtual bool IsImportEnabled() { return true; }

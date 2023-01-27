@@ -25,6 +25,11 @@ namespace Scopa {
         // (editor only) search for all materials in the project once per import, save results here
         static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
 
+        static Dictionary<Solid, Entity> mergedEntityData = new Dictionary<Solid, Entity>(4096);
+
+        static string mapName = "NEW_MAPFILE";
+        static int entityCount = 0;
+
         /// <summary>Parses the .MAP text data into a usable data structure.</summary>
         public static MapFile ParseMap( string pathToMapFile, ScopaMapConfig config ) {
             IMapFormat importer = null;
@@ -39,7 +44,8 @@ namespace Scopa {
 
             Solid.weldingThreshold = config.weldingThreshold;
             var mapFile = importer.ReadFromFile( pathToMapFile );
-            mapFile.name = System.IO.Path.GetFileNameWithoutExtension( pathToMapFile );
+            mapName = System.IO.Path.GetFileNameWithoutExtension( pathToMapFile );
+            entityCount = 0;
 
             return mapFile;
         }
@@ -47,12 +53,12 @@ namespace Scopa {
         /// <summary>The main function for converting parsed MapFile data into a Unity GameObject with 3D mesh and colliders.
         /// Outputs a lists of built meshes (e.g. so UnityEditor can serialize them)</summary>
         public static GameObject BuildMapIntoGameObject( MapFile mapFile, Material defaultMaterial, ScopaMapConfig config, out Dictionary<Mesh, Transform> meshList ) {
-            var rootGameObject = new GameObject( mapFile.name );
+            var rootGameObject = new GameObject( mapName );
 
             BuildMapPrepass( mapFile, config );
             if ( config.findMaterials )
                 CacheMaterialSearch();
-            meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapFile.name, defaultMaterial, config);
+            meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapName, defaultMaterial, config);
 
             // create a separate physics scene for the object, or else we can't raycast against it?
             // var csp = new CreateSceneParameters(LocalPhysicsMode.Physics3D);
@@ -98,17 +104,12 @@ namespace Scopa {
 
         /// <summary>Core recursive function for traversing entity tree and pre-passing each entity</summary>
         static void PrepassEntityRecursive( Worldspawn worldspawn, Entity ent, ScopaMapConfig config) {
-            bool mergeToWorld = config.IsEntityMergeToWorld(ent.ClassName);
-            if ( mergeToWorld ) {
-                ent.discard = true;
-            }
-
             for (int i=0; i<ent.Children.Count; i++) {
                 if ( ent.Children[i] is Entity ) {
                     PrepassEntityRecursive( worldspawn, ent.Children[i] as Entity, config );
                 } // merge child brush to worldspawn
-                else if ( mergeToWorld && ent.Children[i] is Solid ) {
-                    ((Solid)ent.Children[i]).entityDataOverride = ent; // but preserve old entity data for mesh / collider generation
+                else if ( config.IsEntityMergeToWorld(ent.ClassName) && ent.Children[i] is Solid ) {
+                    mergedEntityData.Add(((Solid)ent.Children[i]), ent); // but preserve old entity data for mesh / collider generation
                     worldspawn.Children.Add(ent.Children[i]);
                     ent.Children.RemoveAt(i);
                     i--;
@@ -119,18 +120,19 @@ namespace Scopa {
         }
 
         /// <summary> The main core function for converting entities (worldspawn, func_, etc.) into 3D meshes. </summary>
-        public static Dictionary<Mesh, Transform> AddGameObjectFromEntityRecursive( GameObject rootGameObject, Entity ent, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+        static Dictionary<Mesh, Transform> AddGameObjectFromEntityRecursive( GameObject rootGameObject, Entity rawEntityData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var allMeshes = new Dictionary<Mesh, Transform>();
 
-            var newMeshes = AddGameObjectFromEntity(rootGameObject, ent, namePrefix, defaultMaterial, config) ;
+            var newMeshes = AddGameObjectFromEntity(rootGameObject, new ScopaEntityData(rawEntityData, entityCount), namePrefix, defaultMaterial, config) ;
             if ( newMeshes != null ) {
                 foreach ( var meshKVP in newMeshes ) {
                     allMeshes.Add( meshKVP.Key, meshKVP.Value );
                 }
             }
+            entityCount++;
 
-            foreach ( var child in ent.Children ) {
-                if ( child is Entity && ((Entity)child).discard == false ) {
+            foreach ( var child in rawEntityData.Children ) {
+                if ( child is Entity && config.IsEntityMergeToWorld(((Entity)child).ClassName) == false ) {
                     var newMeshChildren = AddGameObjectFromEntityRecursive(rootGameObject, child as Entity, namePrefix, defaultMaterial, config);
                     if ( newMeshChildren.Count > 0) {
                         foreach ( var meshKVP in newMeshChildren ) {
@@ -143,7 +145,7 @@ namespace Scopa {
             return allMeshes;
         }
 
-        public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, Entity entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+        public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, ScopaEntityData entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
             ScopaMesh.ClearFaceCullingList();
             var lastSolidID = -1;
@@ -477,7 +479,7 @@ namespace Scopa {
         }
 
         /// <summary> for each solid in an Entity, add either a Box Collider or a Mesh Collider component... or make one big merged Mesh Collider </summary>
-        public static List<Mesh> AddColliders(GameObject gameObject, Entity ent, ScopaMapConfig config, string namePrefix, bool forceBoxCollidersForAll = false) {
+        public static List<Mesh> AddColliders(GameObject gameObject, ScopaEntityData ent, ScopaMapConfig config, string namePrefix, bool forceBoxCollidersForAll = false) {
             var meshList = new List<Mesh>();
 
             var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
@@ -492,7 +494,7 @@ namespace Scopa {
                 ScopaMesh.ClearMeshBuffers();
                 foreach ( var solid in solids ) {
                     // omit non-solids and triggers
-                    if ( solid.entityDataOverride != null && (config.IsEntityNonsolid(solid.entityDataOverride.ClassName) || config.IsEntityTrigger(solid.entityDataOverride.ClassName)) )
+                    if ( mergedEntityData.ContainsKey(solid) && (config.IsEntityNonsolid(mergedEntityData[solid].ClassName) || config.IsEntityTrigger(mergedEntityData[solid].ClassName)) )
                         continue;
 
                     ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
@@ -515,7 +517,7 @@ namespace Scopa {
             { 
                 foreach ( var solid in solids ) {   
                     // does the brush have an entity data override that was non solid? then ignore this brush
-                    if ( solid.entityDataOverride != null && config.IsEntityNonsolid(solid.entityDataOverride.ClassName) )
+                    if ( mergedEntityData.ContainsKey(solid) && config.IsEntityNonsolid(mergedEntityData[solid].ClassName) )
                         continue;
 
                     // box collider is the simplest, so we should always try it first       
@@ -523,7 +525,7 @@ namespace Scopa {
                         continue;
 
                     // otherwise, use a convex mesh collider
-                    var newMeshCollider = AddMeshCollider(gameObject, solid, config, solid.entityDataOverride != null ? config.IsEntityTrigger(solid.entityDataOverride.ClassName) : isTrigger);
+                    var newMeshCollider = AddMeshCollider(gameObject, solid, config, mergedEntityData.ContainsKey(solid) ? config.IsEntityTrigger(mergedEntityData[solid].ClassName) : isTrigger);
                     newMeshCollider.name = namePrefix + "-" + ent.ClassName + "#" + solid.id + "-Collider";
                     meshList.Add( newMeshCollider ); 
                 }

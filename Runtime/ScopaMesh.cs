@@ -20,7 +20,8 @@ namespace Scopa {
     public static class ScopaMesh {
         // to avoid GC, we use big static lists so we just allocate once
         // TODO: will have to reorganize this for multithreading later on
-        static List<Face> allFaces = new List<Face>(1024);
+        static List<Face> allFaces = new List<Face>(8192);
+        static HashSet<Face> discardedFaces = new HashSet<Face>(8192);
 
         static List<Vector3> verts = new List<Vector3>(4096);
         static List<Vector3> faceVerts = new List<Vector3>(64);

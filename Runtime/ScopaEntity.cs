@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
-using Scopa.Formats.Map.Objects;
 
 namespace Scopa {
     /// <summary> 
@@ -207,8 +206,8 @@ namespace Scopa {
 
         #region EntityData
 
-        [SerializeField] Entity _entityData;
-        public Entity entityData {
+        [SerializeField] ScopaEntityData _entityData;
+        public ScopaEntityData entityData {
             get => _entityData;
             set {
                 _entityData = value;

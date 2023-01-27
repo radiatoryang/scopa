@@ -115,7 +115,6 @@ namespace Scopa.Formats.Map.Formats
         private static void ReadEntity(StreamReader rdr, MapFile map)
         {
             var e = new Entity();
-            e.ID = entityCount;
             entityCount++;
 
             string line;

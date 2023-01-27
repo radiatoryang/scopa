@@ -4,7 +4,6 @@ namespace Scopa.Formats.Map.Objects
 {
     public class MapFile
     {
-        public string name = "NEW MAP";
         public Worldspawn Worldspawn { get; }
         public List<Visgroup> Visgroups { get; set; }
         // public List<Path> Paths { get; set; }

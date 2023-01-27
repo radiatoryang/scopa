@@ -183,6 +183,13 @@ namespace Scopa {
         // IEnumerable
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => dict.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => dict.GetEnumerator();
+
+        public void CopyFrom(Dictionary<TKey, TValue> dictionary)
+        {
+            foreach(var kvp in dictionary) {
+                Add(kvp.Key, kvp.Value);
+            }
+        }
     }
 
 }

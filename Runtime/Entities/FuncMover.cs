@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using Scopa.Formats.Map.Objects;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Events;
@@ -190,7 +189,7 @@ namespace Scopa {
             }
         }
 
-        public void OnEntityImport( Entity entityData ) { 
+        public void OnEntityImport( ScopaEntityData entityData ) { 
             // if using navmesh, then might need doors to carve navmesh obstacles, etc.
             navMeshObstacle = GetComponent<NavMeshObstacle>();
             if ( navMeshObstacle != null ) {
