@@ -96,7 +96,7 @@ namespace Sledge.Formats.Precision
         /// <returns>True if the split was successful</returns>
         public bool Split(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
-            const double epsilon = NumericsExtensions.Epsilon;
+            const double epsilon = 4;
             
             var distances = Vertices.Select(clip.EvalAtPoint).ToList();
             

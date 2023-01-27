@@ -189,8 +189,8 @@ namespace Scopa {
 
                     face.TextureName = face.TextureName.ToLowerInvariant();
 
-                    var center = face.Vertices.Aggregate(System.Numerics.Vector3.Zero, (x, y) => x + y) / face.Vertices.Count;
-                    Debug.DrawRay(center.ToUnity() * config.scalingFactor, face.Plane.Normal.ToUnity(), Color.yellow, 120f, false);
+                    // var center = face.Vertices.Aggregate(System.Numerics.Vector3.Zero, (x, y) => x + y) / face.Vertices.Count;
+                    // Debug.DrawRay(center.ToUnity() * config.scalingFactor, face.Plane.Normal.ToUnity(), Color.yellow, 120f, false);
                     
                     // skip tool textures and other objects?
                     if ( config.IsTextureNameCulled(face.TextureName) ) {
