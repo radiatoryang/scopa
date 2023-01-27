@@ -43,9 +43,15 @@ namespace Scopa {
             }
 
             Solid.weldingThreshold = config.weldingThreshold;
-            var mapFile = importer.ReadFromFile( pathToMapFile );
+
             mapName = System.IO.Path.GetFileNameWithoutExtension( pathToMapFile );
             entityCount = 0;
+
+            MapFile mapFile = null;
+            using (var fo = System.IO.File.OpenRead(pathToMapFile))
+            {
+                mapFile = importer.Read(fo);
+            }
 
             return mapFile;
         }
