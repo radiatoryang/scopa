@@ -96,7 +96,7 @@ namespace Sledge.Formats.Precision
         /// <returns>True if the split was successful</returns>
         public bool Split(Plane clip, out Polygon back, out Polygon front, out Polygon coplanarBack, out Polygon coplanarFront)
         {
-            const double epsilon = 4;
+            const double epsilon = 0.1d;
             
             var distances = Vertices.Select(clip.EvalAtPoint).ToList();
             
@@ -157,7 +157,8 @@ namespace Sledge.Formats.Precision
             }
             
             back = new Polygon(backVerts.Select(x => new Vector3(x.X, x.Y, x.Z)));
-            front = new Polygon(frontVerts.Select(x => new Vector3(x.X, x.Y, x.Z)));
+            // front = new Polygon(frontVerts.Select(x => new Vector3(x.X, x.Y, x.Z)));
+            front = null; // we throw away the front, why bother
             coplanarBack = coplanarFront = null;
 
             return true;
