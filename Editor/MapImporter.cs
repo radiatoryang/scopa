@@ -11,10 +11,10 @@ using UnityEditor.Experimental.AssetImporters;
 namespace Scopa.Editor {
 
     /// <summary>
-    /// custom Unity importer that detects .BSP files in /Assets/
+    /// custom Unity importer that detects MAP, RMF, VMF, or JMF files in /Assets/
     /// and automatically imports them like any other 3D mesh
     /// </summary>
-    [ScriptedImporter(1, "map", 6900)]
+    [ScriptedImporter(1, new string[] {"map", "rmf", "vmf", "jmf"}, 6900)]
     public class MapImporter : ScriptedImporter
     {
         public ScopaMapConfigAsset externalConfig;
@@ -22,34 +22,15 @@ namespace Scopa.Editor {
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
-            var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
-
             var currentConfig = externalConfig != null ? externalConfig.config : config;
 
             if ( currentConfig == null ) {
                 currentConfig = new ScopaMapConfig();
             }
 
-            var parseTimer = new Stopwatch();
-            parseTimer.Start();
-            var mapFile = ScopaCore.ParseMap(filepath, currentConfig);
-            parseTimer.Stop();
- 
-            // try to find the default gridded blockout material... but if we can't find it, fallback to plain Unity gray material
-            var defaultMaterial = currentConfig.defaultMaterial != null ? currentConfig.defaultMaterial : AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
-            if ( defaultMaterial == null ) {
-                defaultMaterial = AssetDatabase.LoadAssetAtPath<Material>( AssetDatabase.FindAssets("BlockoutDark.mat")[0] );
-                if ( defaultMaterial == null ) {
-                    defaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
-                }
-            }
+            var filepath = Application.dataPath + ctx.assetPath.Substring("Assets".Length);
 
-            // this is where the magic happens
-            var buildTimer = new Stopwatch();
-            buildTimer.Start();
-            var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, defaultMaterial, currentConfig, out var meshList);
-            buildTimer.Stop();
-
+            var gameObject = ScopaCore.ImportMap(filepath, currentConfig, out var meshList);
             ctx.AddObjectToAsset(gameObject.name, gameObject);
 
             // we have to serialize every mesh as a subasset, or else it won't get saved
@@ -61,9 +42,6 @@ namespace Scopa.Editor {
             ctx.SetMainObject(gameObject);
 
             EditorUtility.SetDirty(gameObject);
-
-            UnityEngine.Debug.Log($"imported {filepath}\n Parsed in {parseTimer.ElapsedMilliseconds} ms, Built in {buildTimer.ElapsedMilliseconds} ms");
-            //PrefabUtility.RecordPrefabInstancePropertyModifications(gameObject);
         }
     }
 

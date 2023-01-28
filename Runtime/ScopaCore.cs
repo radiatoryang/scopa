@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Diagnostics;
 using Sledge.Formats.Map.Formats;
 using Sledge.Formats.Map.Objects;
 using Scopa.Formats.Texture.Wad;
@@ -11,6 +12,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine.SceneManagement;
 using Mesh = UnityEngine.Mesh;
+using Debug = UnityEngine.Debug;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -29,15 +31,39 @@ namespace Scopa {
 
         static string mapName = "NEW_MAPFILE";
         static int entityCount = 0;
+        
+        /// <summary>The main high-level map file import function. Use this to support mods. For editor-time import with asset handling, see ImportMapInEditor().</summary>
+        public static GameObject ImportMap(string mapFilepath, ScopaMapConfig currentConfig, out Dictionary<Mesh, Transform> meshList)
+        {
+            var parseTimer = new Stopwatch();
+            parseTimer.Start();
+            var mapFile = ScopaCore.ParseMap(mapFilepath, currentConfig);
+            parseTimer.Stop();
 
-        /// <summary>Parses the .MAP text data into a usable data structure.</summary>
+            // this is where the magic happens
+            var buildTimer = new Stopwatch();
+            buildTimer.Start();
+            var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, currentConfig, out meshList);
+            buildTimer.Stop();
+
+            UnityEngine.Debug.Log($"imported {mapFilepath}\n Parsed in {parseTimer.ElapsedMilliseconds} ms, Built in {buildTimer.ElapsedMilliseconds} ms");
+            return gameObject;
+        }
+
+        /// <summary>Parses the map file text data into a usable data structure. Also detects the file extension and selects the appropriate file format handler.</summary>
         public static MapFile ParseMap( string pathToMapFile, ScopaMapConfig config ) {
             IMapFormat importer = null;
-            if ( pathToMapFile.EndsWith(".map")) {
-                importer = new QuakeMapFormat();
-            } 
-
-            if ( importer == null) {
+            var fileExtension = System.IO.Path.GetExtension(pathToMapFile).ToLowerInvariant();
+            switch(fileExtension) {
+                case ".map":
+                importer = new QuakeMapFormat(); break;
+                case ".rmf":
+                importer = new WorldcraftRmfFormat(); break;
+                case ".vmf":
+                importer = new HammerVmfFormat(); break;
+                case ".jmf":
+                importer = new JackhammerJmfFormat(); break;
+                default:
                 Debug.LogError($"No file importer found for {pathToMapFile}");
                 return null;
             }
@@ -56,8 +82,9 @@ namespace Scopa {
 
         /// <summary>The main function for converting parsed MapFile data into a Unity GameObject with 3D mesh and colliders.
         /// Outputs a lists of built meshes (e.g. so UnityEditor can serialize them)</summary>
-        public static GameObject BuildMapIntoGameObject( MapFile mapFile, Material defaultMaterial, ScopaMapConfig config, out Dictionary<Mesh, Transform> meshList ) {
+        public static GameObject BuildMapIntoGameObject( MapFile mapFile, ScopaMapConfig config, out Dictionary<Mesh, Transform> meshList ) {
             var rootGameObject = new GameObject( mapName );
+            var defaultMaterial = config.GetDefaultMaterial();
 
             BuildMapPrepass( mapFile, config );
             if ( config.findMaterials )

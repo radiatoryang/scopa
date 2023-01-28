@@ -89,7 +89,7 @@ namespace Scopa {
         [Layer] public int layer = 0;
 
         [Tooltip("(default: On) the shadow casting mode on all the mesh objects; but if a mesh prefab is defined, then use that prefab setting instead")]
-        public UnityEngine.Rendering.ShadowCastingMode castShadows = UnityEngine.Rendering.ShadowCastingMode.On;
+        public UnityEngine.Rendering.ShadowCastingMode castShadows = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
 
         [Tooltip("(default: true) if enabled, automatically add ScopaEntity component to all game objects (if not already present in the entityPrefab)... disable this if you don't want to use the built-in ScopaEntity at all, and override it with your own")]
         public bool addScopaEntityComponent = true;
@@ -108,6 +108,8 @@ namespace Scopa {
 
         [Tooltip("(optional) If there isn't an entity override defined above, then the next place we look for entity prefabs is in this FGD asset.")]
         public ScopaFgdConfigAsset fgdAsset;
+
+        static Material builtinDefaultMaterial = null;
 
         /// <summary> note: textureName must already be ToLowerInvariant() </summary>
         public bool IsTextureNameCulled(string textureName) {
@@ -175,6 +177,35 @@ namespace Scopa {
 
             var search = materialOverrides.Where( ov => textureName.Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
             return search;
+        }
+
+        public Material GetDefaultMaterial() {
+            if (defaultMaterial != null)
+                return defaultMaterial;
+            
+            #if UNITY_EDITOR
+
+            if (builtinDefaultMaterial == null)
+                builtinDefaultMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>( "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" );
+            if (builtinDefaultMaterial == null )
+                builtinDefaultMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>( UnityEditor.AssetDatabase.FindAssets("BlockoutDark.mat")[0] );
+            if (builtinDefaultMaterial == null )
+                builtinDefaultMaterial = UnityEditor.AssetDatabase.GetBuiltinExtraResource<Material>("Default-Diffuse.mat");
+            return builtinDefaultMaterial;
+
+            #else
+
+            // terrible hacky way to get default material at runtime https://answers.unity.com/questions/390513/how-do-i-apply-default-diffuse-material-to-a-meshr.html
+            if (builtinDefaultMaterial == null) {
+                GameObject primitive = GameObject.CreatePrimitive(PrimitiveType.Plane);
+                primitive.active = false;
+                builtinDefaultMaterial = primitive.GetComponent<MeshRenderer>().sharedMaterial;
+                DestroyImmediate(primitive);
+            }
+            return builtinDefaultMaterial;
+
+            #endif
+
         }
 
         /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>

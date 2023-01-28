@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEditor;
 #if UNITY_2020_2_OR_NEWER
@@ -7,23 +6,11 @@ using UnityEditor.AssetImporters;
 using UnityEditor.Experimental.AssetImporters;
 #endif
 
-using System.Linq;
-
 namespace Scopa.Editor {
 
     [CustomEditor(typeof(MapImporter))]
     public class MapImporterEditor: ScriptedImporterEditor
     {
-        // UnityEditor.Editor wadConfigEditor;
-        // SerializedProperty editedCopy;
-
-        // public override void OnDisable()
-        // {
-        //     if ( wadConfigEditor != null)
-        //         DestroyImmediate( wadConfigEditor );
-        //     base.OnDisable();
-        // }
-
         const int EXTERNAL_CONFIG_FIELD_OFFSET = 320;
         const int SAVE_BUTTON_WIDTH = 96;
         bool wasModified = false;
