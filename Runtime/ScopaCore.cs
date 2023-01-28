@@ -42,8 +42,6 @@ namespace Scopa {
                 return null;
             }
 
-            // Solid.weldingThreshold = config.weldingThreshold;
-
             mapName = System.IO.Path.GetFileNameWithoutExtension( pathToMapFile );
             entityCount = 0;
 
@@ -154,7 +152,6 @@ namespace Scopa {
         public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, ScopaEntityData entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
             ScopaMesh.ClearFaceCullingList();
-            var lastSolidID = -1;
 
             // for worldspawn, pivot point should be 0, 0, 0... else, see if origin is defined... otherwise, calculate min of bounds
             var calculateOrigin = entData.ClassName.ToLowerInvariant() != "worldspawn";
@@ -170,7 +167,10 @@ namespace Scopa {
             // pass 1: gather all faces for occlusion checks later + build material list + cull any faces we're obviously not going to use
             var materialLookup = new Dictionary<string, ScopaMapConfig.MaterialOverride>();
             foreach (var solid in solids) {
-                // lastSolidID = solid.id;
+                if( config.snappingThreshold > 0 ) {
+                    ScopaMesh.SnapBrushVertices(solid, config.snappingThreshold);
+                }
+
                 foreach (var face in solid.Faces) {
                     if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
                         continue;
@@ -278,7 +278,7 @@ namespace Scopa {
                 entityObject = new GameObject();
             }
 
-            entityObject.name = entData.ClassName + "#" + entData.ID.ToString();
+            entityObject.name = $"{entData.ClassName}#{entData.ID}";
             if ( entData.TryGetString("targetname", out var targetName) )
                 entityObject.name += " " + targetName;
             entityObject.transform.position = entityOrigin;
@@ -378,7 +378,7 @@ namespace Scopa {
                 }
 
                 var newMesh = ScopaMesh.BuildMeshFromBuffers(
-                    namePrefix + "-" + entData.ClassName + "#" + entData.ID.ToString() + "-" + textureKVP.Key, 
+                    $"{namePrefix}-{entityObject.name}-{textureKVP.Key}", 
                     config, 
                     entityOrigin,
                     smoothNormalAngle

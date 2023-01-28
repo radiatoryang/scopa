@@ -558,5 +558,36 @@ namespace Scopa {
             }
         }
 
+        public static void SnapBrushVertices(Solid sledgeSolid, float snappingDistance = 4f) {
+            // snap nearby vertices together within in each solid -- but always snap to the FURTHEST vertex from the center
+            var origin = new System.Numerics.Vector3();
+            var vertexCount = 0;
+            foreach(var face in sledgeSolid.Faces) {
+                for(int i=0; i<face.Vertices.Count; i++) {
+                    origin += face.Vertices[i];
+                }
+                vertexCount += face.Vertices.Count;
+            }
+            origin /= vertexCount;
+
+            foreach(var face1 in sledgeSolid.Faces) {
+                foreach (var face2 in sledgeSolid.Faces) {
+                    if ( face1 == face2 )
+                        continue;
+
+                    for(int a=0; a<face1.Vertices.Count; a++) {
+                        for(int b=0; b<face2.Vertices.Count; b++ ) {
+                            if ( (face1.Vertices[a] - face2.Vertices[b]).LengthSquared() < snappingDistance * snappingDistance ) {
+                                if ( (face1.Vertices[a] - origin).LengthSquared() > (face2.Vertices[b] - origin).LengthSquared() )
+                                    face2.Vertices[b] = face1.Vertices[a];
+                                else
+                                    face1.Vertices[a] = face2.Vertices[b];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }
