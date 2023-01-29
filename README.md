@@ -1,11 +1,12 @@
 # Scopa
 
-*Scopa* ("broom" in Latin) is a Unity level design plugin that adds supports for various Quake / Half-Life / Source file formats. Like [Qodot](https://github.com/QodotPlugin/qodot-plugin) but for Unity. To build levels, we strongly recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom) and the MAP file format.
+*Scopa* ("broom" in Latin) is a Unity level design plugin that adds supports for various Quake / Half-Life / Source file formats. Like [Qodot](https://github.com/QodotPlugin/qodot-plugin) but for Unity. To build levels, we strongly recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom) and the Quake 1 .MAP file format.
 
 # WARNING: in unstable early development, not ready for public use yet, might change a lot or break
 
-- [MAP, RMF, VMF, JMF import](Documentation~/MapImporter.md) generates model prefab with meshes, colliders, entities
-- [WAD import](Documentation~/WadImporter.md) / [WAD export](Documentation~/WadExporter.md) (Quake 1 WAD2 / Half-Life WAD3 format, not Doom)
+- [MAP, RMF*, VMF*, JMF* import](Documentation~/MapImporter.md) generates model prefab with meshes, colliders, entities.
+    - for any file format that isn't Quake 1 .MAP, see [Limitations](#limitations)
+- [WAD import](Documentation~/WadImporter.md) / [WAD export](Documentation~/WadExporter.md) (Quake 1 WAD2 / Half-Life WAD3 textures format, not Doom)
 - FGD creator can export entity definitions out to TrenchBroom
 - works at editor time or runtime (for modding support)
 
