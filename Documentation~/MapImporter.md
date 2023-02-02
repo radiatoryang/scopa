@@ -36,20 +36,21 @@ Then in your game code, pass the config into `ScopaCore.ImportMap()`, which retu
 ## MAP Importer settings
 
 **Save as Asset...** lets you externalize the map import settings into a separate asset file, which lets you share the same config for multiple MAP files.
-    - While useful, this can desynchronize your workflow. Editing the Map Config Asset does *not* automatically trigger reimport for all associated MAP files. The config asset does not track which MAP importers use it. You will have to manually reimport / refresh the MAP files to reflect a changed config.
+- While useful, this can desynchronize your workflow. Editing the Map Config Asset does *not* automatically trigger reimport for all associated MAP files. The config asset does not track which MAP importers use it. You will have to manually reimport / refresh the MAP files to reflect a changed config.
 
 ### MESHES
 
 (image: geometry inspector)
 
 **Scaling Factor**: _(default: 0.03125, 1 Unity meter = 32 Quake map units)_ The global scaling factor for all brush geometry and certain entity data.
-    - note: Scopa automatically converts Quake's Z-up axis to Unity's Y-up axis.
+- We automatically convert Quake / Half-Life / Source Z-up axis to Unity's Y-up axis.
+- Entity origins will be converted as well, but you have to manually configure custom entity properties for scaling. See the [Entity Import workflow](EntityImport.md).
 
 **Snapping Threshold**: _(default: 4)_ vertex snap distance threshold in unscaled map units. Pretty important for minimizing seams and cracks on complex non-rectilinear brushes. In the map editor, avoid building smaller than the welding threshold. Set to 0 to disable for slightly faster import times, but you may get more seams and hairline cracks.
-    - We don't weld vertices because each brush face needs separate normals and UVs.
+- We don't weld vertices because each brush face needs separate normals and UVs.
 
 **Default Smoothing Angle**: _(default: 80 degrees)_ smooth shading on edges, which adds extra import time; set to -1 to disable default global smoothing, and/or override with `_phong` / `_phong_angle` entity keyvalues, or in a Scopa Material Config.
-    - Again, we don't weld vertices because each face needs separate normals and UVs. This will attempt to smooth a hard edge, but won't remove it entirely.
+- Again, we don't weld vertices because each face needs separate normals and UVs. This will attempt to smooth a hard edge, but won't remove it entirely.
 
 **Remove Hidden Faces**: _(default: true)_ Try to detect whether a face is completely covered by another face within the same entity, and discard it. It's far from perfect; it can't detect if a face is covered by 2+ faces. But it helps. Note the extra calculations increase map import times.
 
@@ -64,7 +65,7 @@ Then in your game code, pass the config into `ScopaCore.ImportMap()`, which retu
 - **Occlusion Length**: _(default: 25)_ The length (in Unity meters) of the vertex color AO raycasts. Shorter raycasts limit AO to small details, while longer raycasts may feel more like local room shadowing obscurance effects.
 
 **Cull Textures**: _(default: sky, trigger, skip, hint, nodraw, null, clip, origin)_ When a face's texture name contains any word in this list, discard that face from the mesh. But this does not affect mesh colliders.
-    - Because you're not compiling these maps into BSPs, you don't have to seal them from leaks, and likely won't need sky brushes.
+- Because you're not compiling these maps into BSPs, you don't have to seal them from leaks, and likely won't need sky brushes.
 
 ### COLLIDERS
 
