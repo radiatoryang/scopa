@@ -46,7 +46,7 @@ Then in your game code, pass the config into `ScopaCore.ImportMap()`, which retu
 - We automatically convert Quake / Half-Life / Source Z-up axis to Unity's Y-up axis.
 - Entity origins will be converted as well, but you have to manually configure custom entity properties for scaling. See the [Entity Import workflow](EntityImport.md).
 
-**Snapping Threshold**: _(default: 4)_ vertex snap distance threshold in unscaled map units. Pretty important for minimizing seams and cracks on complex non-rectilinear brushes. In the map editor, avoid building smaller than the welding threshold. Set to 0 to disable for slightly faster import times, but you may get more seams and hairline cracks.
+**Snapping Threshold**: _(default: 1)_ vertex snap distance threshold in unscaled map units. Pretty important for minimizing seams and cracks on complex non-rectilinear brushes. In the map editor, avoid building smaller than this threshold. Set to 0 to disable for slightly faster import times, but you may get more seams and hairline cracks.
 - We don't weld vertices because each brush face needs separate normals and UVs.
 
 **Default Smoothing Angle**: _(default: 80 degrees)_ smooth shading on edges, which adds extra import time; set to -1 to disable default global smoothing, and/or override with `_phong` / `_phong_angle` entity keyvalues, or in a Scopa Material Config.

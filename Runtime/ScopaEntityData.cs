@@ -183,7 +183,7 @@ namespace Scopa {
                 return false;
             }
             
-            vec = VectorExtensions.Parse3(vecParts[0], vecParts[2], vecParts[1], System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture);
+            VectorExtensions.TryParse3(vecParts[0], vecParts[2], vecParts[1], out vec);
             return true;
         }
 

@@ -33,6 +33,17 @@ namespace Scopa {
             );
         }
 
+        public static bool TryParse3(string x, string y, string z, out Vector3 result) {
+            result = Vector3.zero;
+            if (!float.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out result.x))
+                return false;
+            if (!float.TryParse(y, NumberStyles.Float, CultureInfo.InvariantCulture, out result.y))
+                return false;
+            if (!float.TryParse(z, NumberStyles.Float, CultureInfo.InvariantCulture, out result.z))
+                return false;
+            return true;
+        }
+
         public static Vector4 Parse4(string x, string y, string z, string w, NumberStyles ns, IFormatProvider provider) {
             return new Vector4(
                 float.Parse(x, ns, provider), 

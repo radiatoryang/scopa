@@ -18,8 +18,8 @@ namespace Scopa {
         [Tooltip("(default: 0.03125, 1 m = 32 units) The global scaling factor for all brush geometry and entity origins.")]
         public float scalingFactor = 0.03125f;
 
-        [Tooltip("(default: 4) vertex snap distance threshold in unscaled map units. Pretty important for minimizing seams and cracks on complex non-rectilinear brushes. In the map editor, avoid building smaller than the welding threshold. Set to 0 to disable for slightly faster import times, but you may get more seams and hairline cracks.")]
-        public float snappingThreshold = 4f;
+        [Tooltip("(default: 1) vertex snap distance threshold in unscaled map units. Pretty important for minimizing seams and cracks on complex non-rectilinear brushes. In the map editor, avoid building smaller than this threshold. Set to 0 to disable for slightly faster import times, but you may get more seams and hairline cracks.")]
+        public float snappingThreshold = 1f;
 
         [Tooltip("(default: 80 degrees) smooth shading on edges, which adds extra import time; set to -1 to disable default global smoothing, and/or override with _phong / _phong_angle entity keyvalues")]
         public float defaultSmoothingAngle = 80f;
