@@ -52,51 +52,74 @@ namespace Scopa {
             return discardedFaces.Contains(brushFace);
         }
         
-        public static void FaceCullingJobs() {
-            var vertCount = 0;
-            var cullingOffsets = new NativeArray<int>(allFaces.Count, Allocator.TempJob);
-            for(int i=0; i<allFaces.Count; i++) {
-                cullingOffsets[i] = vertCount;
-                vertCount += allFaces[i].Vertices.Count;
-            }
+        public static FaceCullingJobGroup StartFaceCullingJobs() {
+            return new FaceCullingJobGroup();
+        }
 
-            var cullingVerts = new NativeArray<Vector3>(vertCount, Allocator.TempJob);
-            for(int i=0; i<allFaces.Count; i++) {
-                for(int v=cullingOffsets[i]; v < (i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertCount); v++) {
-                    cullingVerts[v] = allFaces[i].Vertices[v-cullingOffsets[i]].ToUnity();
+        public class FaceCullingJobGroup {
+            NativeArray<int> cullingOffsets;
+            NativeArray<Vector4> cullingPlanes;
+            NativeArray<Vector3> cullingVerts;
+            NativeArray<bool> cullingResults;
+            JobHandle jobHandle;
+
+            public FaceCullingJobGroup() {
+                var vertCount = 0;
+                cullingOffsets = new NativeArray<int>(allFaces.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                cullingPlanes = new NativeArray<Vector4>(allFaces.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<allFaces.Count; i++) {
+                    cullingOffsets[i] = vertCount;
+                    vertCount += allFaces[i].Vertices.Count;
+                    cullingPlanes[i] = new Vector4(allFaces[i].Plane.Normal.X, allFaces[i].Plane.Normal.Y, allFaces[i].Plane.Normal.Z, allFaces[i].Plane.D);
                 }
-            }
-            
-            var cullingResults = new NativeArray<bool>(allFaces.Count, Allocator.TempJob);
-            for(int i=0; i<allFaces.Count; i++) {
-                cullingResults[i] = IsFaceCulledDiscard(allFaces[i]);
-            }
-            
-            var jobData = new FaceCullingJob();
-            jobData.vertices = cullingVerts;
-            jobData.cullingOffsets = cullingOffsets;
-            jobData.results = cullingResults;
-            var handle = jobData.Schedule(cullingResults.Length, 16);
-            handle.Complete();
 
-            // int culledFaces = 0;
-            for(int i=0; i<cullingResults.Length; i++) {
-                // if (!allFaces[i].discardWhenBuildingMesh && cullingResults[i])
-                //     culledFaces++;
-                if(cullingResults[i])
-                    discardedFaces.Add(allFaces[i]);
+                cullingVerts = new NativeArray<Vector3>(vertCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<allFaces.Count; i++) {
+                    for(int v=cullingOffsets[i]; v < (i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertCount); v++) {
+                        cullingVerts[v] = allFaces[i].Vertices[v-cullingOffsets[i]].ToUnity();
+                    }
+                }
+                
+                cullingResults = new NativeArray<bool>(allFaces.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<allFaces.Count; i++) {
+                    cullingResults[i] = IsFaceCulledDiscard(allFaces[i]);
+                }
+                
+                var jobData = new FaceCullingJob();
+                jobData.vertices = cullingVerts;
+                jobData.planes = cullingPlanes;
+                jobData.cullingOffsets = cullingOffsets;
+                jobData.results = cullingResults;
+                jobHandle = jobData.Schedule(cullingResults.Length, 8);
             }
-            // Debug.Log($"Culled {culledFaces} faces!");
 
-            cullingOffsets.Dispose();
-            cullingVerts.Dispose();
-            cullingResults.Dispose();
+            public void Complete() {
+                jobHandle.Complete();
+
+                // int culledFaces = 0;
+                for(int i=0; i<cullingResults.Length; i++) {
+                    // if (!allFaces[i].discardWhenBuildingMesh && cullingResults[i])
+                    //     culledFaces++;
+                    if(cullingResults[i])
+                        discardedFaces.Add(allFaces[i]);
+                }
+                // Debug.Log($"Culled {culledFaces} faces!");
+
+                cullingOffsets.Dispose();
+                cullingVerts.Dispose();
+                cullingPlanes.Dispose();
+                cullingResults.Dispose();
+            }
+
         }
 
         public struct FaceCullingJob : IJobParallelFor
         {
             [ReadOnlyAttribute]
             public NativeArray<Vector3> vertices;
+
+            [ReadOnlyAttribute]
+            public NativeArray<Vector4> planes;
 
             [ReadOnlyAttribute]
             public NativeArray<int> cullingOffsets;
@@ -108,42 +131,38 @@ namespace Scopa {
                 if (results[i])
                     return;
 
-                var offsetStart = cullingOffsets[i];
-                var offsetEnd = i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertices.Length;
-
-                var Plane = new UnityEngine.Plane( vertices[offsetStart], vertices[offsetStart+1], vertices[offsetStart+2] );
-
-                var Center = vertices[offsetStart];
-                for( int n=offsetStart; n<offsetEnd; n++) {
-                    Center += vertices[n];
-                }
-                Center /= vertices.Length;
-
-                var ignoreAxis = GetMainAxisToNormal(Plane); // 2D math is easier, so let's ignore the least important axis
-
                 // test against all other faces
                 for(int n=0; n<cullingOffsets.Length; n++) {
-                    var otherOffsetStart = cullingOffsets[n];
-                    var otherOffsetEnd = n<cullingOffsets.Length-1 ? cullingOffsets[n+1] : vertices.Length;
-                    var otherPlane = new UnityEngine.Plane( vertices[otherOffsetStart], vertices[otherOffsetStart+1], vertices[otherOffsetStart+2] );
-
                     // first, test (1) share similar plane distance and (2) face opposite directions
                     // we are testing the NEGATIVE case for early out
-                    if ( Mathf.Abs( Plane.distance + otherPlane.distance) > 1f || Vector3.Dot(Plane.normal, otherPlane.normal) > -0.99f ) {
+                    if ( Mathf.Abs(planes[i].w + planes[n].w) > 0.5f || Vector3.Dot(planes[i], planes[n]) > -0.999f ) {
                         continue;
                     }
 
                     // then, test whether this face's vertices are completely inside the other
-                    var otherVertices = new Vector3[otherOffsetEnd-otherOffsetStart];
-                    NativeArray<Vector3>.Copy(vertices, otherOffsetStart, otherVertices, 0, otherVertices.Length);
+                    var offsetStart = cullingOffsets[i];
+                    var offsetEnd = i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertices.Length;
+
+                    var Center = vertices[offsetStart];
+                    for( int b=offsetStart+1; b<offsetEnd; b++) {
+                        Center += vertices[b];
+                    }
+                    Center /= offsetEnd-offsetStart;
+
+                    var ignoreAxis = GetMainAxisToNormal(planes[i]); // 2D math is easier, so let's ignore the least important axis
+
+                    var otherOffsetStart = cullingOffsets[n];
+                    var otherOffsetEnd = n<cullingOffsets.Length-1 ? cullingOffsets[n+1] : vertices.Length;
+                    var polygon = new Vector3[otherOffsetEnd-otherOffsetStart];
+                    NativeArray<Vector3>.Copy(vertices, otherOffsetStart, polygon, 0, polygon.Length);
 
                     var vertNotInOtherFace = false;
                     for( int x=offsetStart; x<offsetEnd; x++ ) {
-                        var smallFaceVert = vertices[x] + (Center - vertices[x]).normalized * 0.2f;
+                        var p = vertices[x] + (Center - vertices[x]).normalized * 0.2f;
                         switch (ignoreAxis) {
-                            case Axis.X: if (!IsInPolygonYZ3(smallFaceVert, otherVertices)) vertNotInOtherFace = true; break;
-                            case Axis.Y: if (!IsInPolygonXZ3(smallFaceVert, otherVertices)) vertNotInOtherFace = true; break;
-                            case Axis.Z: if (!IsInPolygonXY3(smallFaceVert, otherVertices)) vertNotInOtherFace = true; break;
+                            case Axis.X: if (!IsInPolygonYZ(p, polygon)) vertNotInOtherFace = true; break;
+                            case Axis.Y: if (!IsInPolygonXZ(p, polygon)) vertNotInOtherFace = true; break;
+                            case Axis.Z: if (!IsInPolygonXY(p, polygon)) vertNotInOtherFace = true; break;
                         }
 
                         if (vertNotInOtherFace)
@@ -164,16 +183,6 @@ namespace Scopa {
 
         public enum Axis { X, Y, Z}
 
-        public static Axis GetMainAxisToNormal(UnityEngine.Plane Plane) {
-            // VHE prioritises the axes in order of X, Y, Z.
-            // so in Unity land, that's X, Z, and Y
-            var norm = Plane.normal.Absolute();
-
-            if (norm.x >= norm.y && norm.x >= norm.z) return Axis.X;
-            if (norm.z >= norm.y) return Axis.Z;
-            return Axis.Y;
-        }
-
         public static Axis GetMainAxisToNormal(Vector3 norm) {
             // VHE prioritises the axes in order of X, Y, Z.
             // so in Unity land, that's X, Z, and Y
@@ -184,137 +193,52 @@ namespace Scopa {
             return Axis.Y;
         }
 
-        public static bool IsInPolygonYZ3(Vector3 testPoint, Vector3[] vertices){
-            // Get the angle between the point and the
-            // first and last vertices.
-            int max_point = vertices.Length - 1;
-            float total_angle = GetAngle(
-                vertices[max_point].y, vertices[max_point].z,
-                testPoint.y, testPoint.z,
-                vertices[0].y, vertices[0].z);
-
-            // Add the angles from the point
-            // to each other pair of vertices.
-            for (int i = 0; i < max_point; i++) {
-                total_angle += GetAngle(
-                    vertices[i].y, vertices[i].z,
-                    testPoint.y, testPoint.z,
-                    vertices[i + 1].y, vertices[i + 1].z);
+        public static bool IsInPolygonXY( Vector3 p, Vector3[] polygon )
+        {
+            // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            bool inside = false;
+            for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
+                if ( ( polygon[i].y > p.y ) != ( polygon[j].y > p.y ) &&
+                    p.x < ( polygon[j].x - polygon[i].x ) * ( p.y - polygon[i].y ) / ( polygon[j].y - polygon[i].y ) + polygon[i].x )
+                {
+                    inside = !inside;
+                }
             }
 
-            // The total angle should be 2 * PI or -2 * PI if
-            // the point is in the polygon and close to zero
-            // if the point is outside the polygon.
-            // The following statement was changed. See the comments.
-            //return (Math.Abs(total_angle) > 0.000001);
-            return Mathf.Abs(total_angle) > EPSILON;
+            return inside;
         }
 
-        public static bool IsInPolygonXY3( Vector3 testPoint, Vector3[] vertices){
-            // Get the angle between the point and the
-            // first and last vertices.
-            int max_point = vertices.Length - 1;
-            float total_angle = GetAngle(
-                vertices[max_point].x, vertices[max_point].y,
-                testPoint.x, testPoint.y,
-                vertices[0].x, vertices[0].y);
-
-            // Add the angles from the point
-            // to each other pair of vertices.
-            for (int i = 0; i < max_point; i++) {
-                total_angle += GetAngle(
-                    vertices[i].x, vertices[i].y,
-                    testPoint.x, testPoint.y,
-                    vertices[i + 1].x, vertices[i + 1].y);
+        public static bool IsInPolygonYZ( Vector3 p, Vector3[] polygon )
+        {
+            // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            bool inside = false;
+            for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
+                if ( ( polygon[i].y > p.y ) != ( polygon[j].y > p.y ) &&
+                    p.z < ( polygon[j].z - polygon[i].z ) * ( p.y - polygon[i].y ) / ( polygon[j].y - polygon[i].y ) + polygon[i].z )
+                {
+                    inside = !inside;
+                }
             }
 
-            // The total angle should be 2 * PI or -2 * PI if
-            // the point is in the polygon and close to zero
-            // if the point is outside the polygon.
-            // The following statement was changed. See the comments.
-            //return (Math.Abs(total_angle) > 0.000001);
-            return Mathf.Abs(total_angle) > EPSILON;
+            return inside;
         }
 
-        public static bool IsInPolygonXZ3( Vector3 testPoint, Vector3[] vertices){
-            // Get the angle between the point and the
-            // first and last vertices.
-            int max_point = vertices.Length - 1;
-            float total_angle = GetAngle(
-                vertices[max_point].x, vertices[max_point].z,
-                testPoint.x, testPoint.z,
-                vertices[0].x, vertices[0].z);
-
-            // Add the angles from the point
-            // to each other pair of vertices.
-            for (int i = 0; i < max_point; i++) {
-                total_angle += GetAngle(
-                    vertices[i].x, vertices[i].z,
-                    testPoint.x, testPoint.z,
-                    vertices[i + 1].x, vertices[i + 1].z);
+        public static bool IsInPolygonXZ( Vector3 p, Vector3[] polygon )
+        {
+            // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            bool inside = false;
+            for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
+                if ( ( polygon[i].x > p.x ) != ( polygon[j].x > p.x ) &&
+                    p.z < ( polygon[j].z - polygon[i].z ) * ( p.x - polygon[i].x ) / ( polygon[j].x - polygon[i].x ) + polygon[i].z )
+                {
+                    inside = !inside;
+                }
             }
 
-            // The total angle should be 2 * PI or -2 * PI if
-            // the point is in the polygon and close to zero
-            // if the point is outside the polygon.
-            // The following statement was changed. See the comments.
-            //return (Math.Abs(total_angle) > 0.000001);
-            return Mathf.Abs(total_angle) > EPSILON;
+            return inside;
         }
 
-        // Return the angle ABC.
-        // Return a value between PI and -PI.
-        // Note that the value is the opposite of what you might
-        // expect because Y coordinates increase downward.
-        static float GetAngle(float Ax, float Ay,
-            float Bx, float By, float Cx, float Cy)
-        {
-            // Get the dot product.
-            float dot_product = DotProduct(Ax, Ay, Bx, By, Cx, Cy);
-
-            // Get the cross product.
-            float cross_product = CrossProductLength(Ax, Ay, Bx, By, Cx, Cy);
-
-            // Calculate the angle.
-            return (float)Mathf.Atan2(cross_product, dot_product);
-        }
-
-        static float DotProduct(float Ax, float Ay,
-            float Bx, float By, float Cx, float Cy)
-        {
-            // Get the vectors' coordinates.
-            float BAx = Ax - Bx;
-            float BAy = Ay - By;
-            float BCx = Cx - Bx;
-            float BCy = Cy - By;
-
-            // Calculate the dot product.
-            return (BAx * BCx + BAy * BCy);
-        }
-
-        // Return the cross product AB x BC.
-        // The cross product is a vector perpendicular to AB
-        // and BC having length |AB| * |BC| * Sin(theta) and
-        // with direction given by the right-hand rule.
-        // For two vectors in the X-Y plane, the result is a
-        // vector with X and Y components 0 so the Z component
-        // gives the vector's length and direction.
-        static float CrossProductLength(float Ax, float Ay,
-            float Bx, float By, float Cx, float Cy)
-        {
-            // Get the vectors' coordinates.
-            float BAx = Ax - Bx;
-            float BAy = Ay - By;
-            float BCx = Cx - Bx;
-            float BCy = Cy - By;
-
-            // Calculate the Z coordinate of the cross product.
-            return (BAx * BCy - BAy * BCx);
-        }
-
-
-        /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers
-        /// BUT it also occludes unseen faces at the same time too</summary>
+        /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers</summary>
         public static void BufferMeshDataFromSolid(Solid solid, ScopaMapConfig mapConfig, ScopaMapConfig.MaterialOverride textureFilter = null, bool includeDiscardedFaces = false) {
             foreach (var face in solid.Faces) {
                 if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
@@ -325,21 +249,6 @@ namespace Scopa {
 
                 if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
                     continue;
-
-                // test for unseen / hidden faces, and discard
-                // if ( !includeDiscardedFaces && mapConfig.removeHiddenFaces ) {
-                //     for(int i=0; i<allFaces.Count; i++) {
-                //         if (allFaces[i].OccludesFace(face)) {
-                //             Debug.Log("discarding unseen face at " + face);
-                //             // face.DebugDrawVerts(Color.yellow);
-                //             face.discardWhenBuildingMesh = true;
-                //             break;
-                //         }
-                //     }
-
-                //     if ( face.discardWhenBuildingMesh )
-                //         continue;
-                // }
 
                 BufferScaledMeshFragmentForFace(
                     solid,
@@ -506,9 +415,9 @@ namespace Scopa {
 
         public static void SmoothNormalsJobs(this Mesh aMesh, float weldingAngle = 80, float maxDelta = 0.1f) {
             var meshData = Mesh.AcquireReadOnlyMeshData(aMesh);
-            var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             meshData[0].GetVertices(verts);
-            var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+            var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             meshData[0].GetNormals(normals);
             var smoothNormalsResults = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
             

@@ -278,8 +278,9 @@ namespace Scopa {
             }
 
             // pass 1B: use jobs to cull additional faces
+            ScopaMesh.FaceCullingJobGroup faceCullingJob = null;
             if ( config.removeHiddenFaces ) {
-                ScopaMesh.FaceCullingJobs();
+                faceCullingJob = ScopaMesh.StartFaceCullingJobs();
             }
 
             entityOrigin *= config.scalingFactor;
@@ -337,17 +338,24 @@ namespace Scopa {
                 entityObject.layer = config.layer;
             }
 
+            // collision pass, treat it all as one object and ignore texture names
+            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider ) {
+                var collisionMeshes = ScopaCore.AddColliders( entityObject, entData, config, namePrefix );
+                foreach ( var cMesh in collisionMeshes ) {
+                    meshList.Add( cMesh, null ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
+                }
+            }
+
+            // wait as long as possible before we call in the face culling job
+            if (faceCullingJob != null)
+                faceCullingJob.Complete();
+
             // main loop: for each material, build a mesh and add a game object with mesh components
             foreach ( var textureKVP in materialLookup ) {
                 ScopaMesh.ClearMeshBuffers();
                 
                 foreach ( var solid in solids) {
-                    // var matName = textureKVP.Value.textureName;
-                    // if ( textureKVP.Value.material == defaultMaterial ) {
-                    //     textureKVP.Value.textureName = textureKVP.Key;
-                    // }
                     ScopaMesh.BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
-                    // textureKVP.Value.name = matName;
                 }
 
                 if ( ScopaMesh.IsMeshBufferEmpty() ) 
@@ -432,14 +440,6 @@ namespace Scopa {
 
                 if ( addedMeshRenderer ) { // if we added a generic mesh renderer, then set default shadow caster setting too
                     meshRenderer.shadowCastingMode = config.castShadows;
-                }
-            }
-
-            // collision pass, now treat it all as one object and ignore texture names
-            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider ) {
-                var collisionMeshes = ScopaCore.AddColliders( entityObject, entData, config, namePrefix );
-                foreach ( var cMesh in collisionMeshes ) {
-                    meshList.Add( cMesh, null ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
                 }
             }
 
