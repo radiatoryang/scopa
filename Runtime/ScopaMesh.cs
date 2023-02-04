@@ -10,8 +10,14 @@ using Scopa.Formats.Id;
 using UnityEngine;
 using Unity.Collections;
 using Unity.Jobs;
+using UnityEngine.Rendering;
 using Mesh = UnityEngine.Mesh;
 using Vector3 = UnityEngine.Vector3;
+
+#if SCOPA_USE_BURST
+using Unity.Burst;
+using Unity.Mathematics;
+#endif
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -86,11 +92,18 @@ namespace Scopa {
                 }
                 
                 var jobData = new FaceCullingJob();
-                jobData.vertices = cullingVerts;
-                jobData.planes = cullingPlanes;
-                jobData.cullingOffsets = cullingOffsets;
-                jobData.results = cullingResults;
-                jobHandle = jobData.Schedule(cullingResults.Length, 8);
+
+                #if SCOPA_USE_BURST
+                jobData.faceVertices = cullingVerts.Reinterpret<float3>();
+                jobData.facePlanes = cullingPlanes.Reinterpret<float4>();
+                #else
+                jobData.faceVertices = cullingVerts;
+                jobData.facePlanes = cullingPlanes;
+                #endif
+
+                jobData.faceVertexOffsets = cullingOffsets;
+                jobData.cullFaceResults = cullingResults;
+                jobHandle = jobData.Schedule(cullingResults.Length, 32);
             }
 
             public void Complete() {
@@ -113,52 +126,78 @@ namespace Scopa {
 
         }
 
+        #if SCOPA_USE_BURST
+        [BurstCompile]
+        #endif
         public struct FaceCullingJob : IJobParallelFor
         {
             [ReadOnlyAttribute]
-            public NativeArray<Vector3> vertices;
+            #if SCOPA_USE_BURST
+            public NativeArray<float3> faceVertices;
+            #else
+            public NativeArray<Vector3> faceVertices;
+            #endif   
 
             [ReadOnlyAttribute]
-            public NativeArray<Vector4> planes;
+            #if SCOPA_USE_BURST
+            public NativeArray<float4> facePlanes;
+            #else
+            public NativeArray<Vector4> facePlanes;
+            #endif
 
             [ReadOnlyAttribute]
-            public NativeArray<int> cullingOffsets;
+            public NativeArray<int> faceVertexOffsets;
             
-            public NativeArray<bool> results;
+            public NativeArray<bool> cullFaceResults;
 
             public void Execute(int i)
             {
-                if (results[i])
+                if (cullFaceResults[i])
                     return;
 
                 // test against all other faces
-                for(int n=0; n<cullingOffsets.Length; n++) {
+                for(int n=0; n<faceVertexOffsets.Length; n++) {
                     // first, test (1) share similar plane distance and (2) face opposite directions
                     // we are testing the NEGATIVE case for early out
-                    if ( Mathf.Abs(planes[i].w + planes[n].w) > 0.5f || Vector3.Dot(planes[i], planes[n]) > -0.999f ) {
+                    #if SCOPA_USE_BURST
+                    if ( math.abs(facePlanes[i].w + facePlanes[n].w) > 0.5f || math.dot(facePlanes[i].xyz, facePlanes[n].xyz) > -0.999f )
                         continue;
-                    }
-
+                    #else
+                    if ( Mathf.Abs(facePlanes[i].w + facePlanes[n].w) > 0.5f || Vector3.Dot(facePlanes[i], facePlanes[n]) > -0.999f )
+                        continue;
+                    #endif
+                    
                     // then, test whether this face's vertices are completely inside the other
-                    var offsetStart = cullingOffsets[i];
-                    var offsetEnd = i<cullingOffsets.Length-1 ? cullingOffsets[i+1] : vertices.Length;
+                    var offsetStart = faceVertexOffsets[i];
+                    var offsetEnd = i<faceVertexOffsets.Length-1 ? faceVertexOffsets[i+1] : faceVertices.Length;
 
-                    var Center = vertices[offsetStart];
+                    var Center = faceVertices[offsetStart];
                     for( int b=offsetStart+1; b<offsetEnd; b++) {
-                        Center += vertices[b];
+                        Center += faceVertices[b];
                     }
                     Center /= offsetEnd-offsetStart;
 
-                    var ignoreAxis = GetMainAxisToNormal(planes[i]); // 2D math is easier, so let's ignore the least important axis
+                    // 2D math is easier, so let's ignore the least important axis
+                    var ignoreAxis = GetMainAxisToNormal(facePlanes[i]);
 
-                    var otherOffsetStart = cullingOffsets[n];
-                    var otherOffsetEnd = n<cullingOffsets.Length-1 ? cullingOffsets[n+1] : vertices.Length;
+                    var otherOffsetStart = faceVertexOffsets[n];
+                    var otherOffsetEnd = n<faceVertexOffsets.Length-1 ? faceVertexOffsets[n+1] : faceVertices.Length;
+
+                    #if SCOPA_USE_BURST
+                    var polygon = new NativeArray<float3>(otherOffsetEnd-otherOffsetStart, Allocator.Temp);
+                    NativeArray<float3>.Copy(faceVertices, otherOffsetStart, polygon, 0, polygon.Length);
+                    #else
                     var polygon = new Vector3[otherOffsetEnd-otherOffsetStart];
-                    NativeArray<Vector3>.Copy(vertices, otherOffsetStart, polygon, 0, polygon.Length);
+                    NativeArray<Vector3>.Copy(faceVertices, otherOffsetStart, polygon, 0, polygon.Length);
+                    #endif
 
                     var vertNotInOtherFace = false;
                     for( int x=offsetStart; x<offsetEnd; x++ ) {
-                        var p = vertices[x] + (Center - vertices[x]).normalized * 0.2f;
+                        #if SCOPA_USE_BURST
+                        var p = faceVertices[x] + math.normalize(Center - faceVertices[x]) * 0.2f;
+                        #else
+                        var p = faceVertices[x] + Vector3.Normalize(Center - faceVertices[x]) * 0.2f;
+                        #endif                  
                         switch (ignoreAxis) {
                             case Axis.X: if (!IsInPolygonYZ(p, polygon)) vertNotInOtherFace = true; break;
                             case Axis.Y: if (!IsInPolygonXZ(p, polygon)) vertNotInOtherFace = true; break;
@@ -169,12 +208,16 @@ namespace Scopa {
                             break;
                     }
 
+                    #if SCOPA_USE_BURST
+                    polygon.Dispose();
+                    #endif
+
                     if (vertNotInOtherFace)
                         continue;
 
                     // if we got this far, then this face should be culled
                     var tempResult = true;
-                    results[i] = tempResult;
+                    cullFaceResults[i] = tempResult;
                     return;
                 }
                
@@ -183,18 +226,22 @@ namespace Scopa {
 
         public enum Axis { X, Y, Z}
 
-        public static Axis GetMainAxisToNormal(Vector3 norm) {
+        #if SCOPA_USE_BURST
+        public static Axis GetMainAxisToNormal(float4 vec) {
             // VHE prioritises the axes in order of X, Y, Z.
             // so in Unity land, that's X, Z, and Y
-            norm = norm.Absolute();
+            var norm = new float3(
+                math.abs(vec.x), 
+                math.abs(vec.y),
+                math.abs(vec.z)
+            );
 
             if (norm.x >= norm.y && norm.x >= norm.z) return Axis.X;
             if (norm.z >= norm.y) return Axis.Z;
             return Axis.Y;
         }
 
-        public static bool IsInPolygonXY( Vector3 p, Vector3[] polygon )
-        {
+        public static bool IsInPolygonXY(float3 p, NativeArray<float3> polygon ) {
             // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
             bool inside = false;
             for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
@@ -208,8 +255,7 @@ namespace Scopa {
             return inside;
         }
 
-        public static bool IsInPolygonYZ( Vector3 p, Vector3[] polygon )
-        {
+        public static bool IsInPolygonYZ(float3 p, NativeArray<float3> polygon ) {
             // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
             bool inside = false;
             for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
@@ -223,8 +269,7 @@ namespace Scopa {
             return inside;
         }
 
-        public static bool IsInPolygonXZ( Vector3 p, Vector3[] polygon )
-        {
+        public static bool IsInPolygonXZ(float3 p, NativeArray<float3> polygon ) {
             // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
             bool inside = false;
             for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
@@ -236,6 +281,237 @@ namespace Scopa {
             }
 
             return inside;
+        }
+        #endif
+
+        public static Axis GetMainAxisToNormal(Vector3 norm) {
+            // VHE prioritises the axes in order of X, Y, Z.
+            // so in Unity land, that's X, Z, and Y
+            norm = norm.Absolute();
+
+            if (norm.x >= norm.y && norm.x >= norm.z) return Axis.X;
+            if (norm.z >= norm.y) return Axis.Z;
+            return Axis.Y;
+        }
+
+        public static bool IsInPolygonXY( Vector3 p, Vector3[] polygon ) {
+            // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            bool inside = false;
+            for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
+                if ( ( polygon[i].y > p.y ) != ( polygon[j].y > p.y ) &&
+                    p.x < ( polygon[j].x - polygon[i].x ) * ( p.y - polygon[i].y ) / ( polygon[j].y - polygon[i].y ) + polygon[i].x )
+                {
+                    inside = !inside;
+                }
+            }
+
+            return inside;
+        }
+
+        public static bool IsInPolygonYZ( Vector3 p, Vector3[] polygon ) {
+            // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            bool inside = false;
+            for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
+                if ( ( polygon[i].y > p.y ) != ( polygon[j].y > p.y ) &&
+                    p.z < ( polygon[j].z - polygon[i].z ) * ( p.y - polygon[i].y ) / ( polygon[j].y - polygon[i].y ) + polygon[i].z )
+                {
+                    inside = !inside;
+                }
+            }
+
+            return inside;
+        }
+
+        public static bool IsInPolygonXZ( Vector3 p, Vector3[] polygon ) {
+            // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            bool inside = false;
+            for ( int i = 0, j = polygon.Length - 1 ; i < polygon.Length ; j = i++ ) {
+                if ( ( polygon[i].x > p.x ) != ( polygon[j].x > p.x ) &&
+                    p.z < ( polygon[j].z - polygon[i].z ) * ( p.x - polygon[i].x ) / ( polygon[j].x - polygon[i].x ) + polygon[i].z )
+                {
+                    inside = !inside;
+                }
+            }
+
+            return inside;
+        }
+
+        public class MeshBuildingJobGroup {
+
+            NativeArray<int> faceVertexOffsets, faceTriIndexCounts; // index = i
+            NativeArray<Vector3> faceVertices;
+            NativeArray<Vector4> faceU, faceV; // index = i, .w = scale
+            NativeArray<Vector2> faceShift; // index = i
+            int vertCount, triIndexCount;
+
+            public Mesh.MeshDataArray outputMesh;
+            Mesh newMesh;
+            JobHandle jobHandle;
+
+            public MeshBuildingJobGroup(string meshName, Vector3 meshOrigin, IEnumerable<Solid> solids, ScopaMapConfig config, ScopaMapConfig.MaterialOverride textureFilter = null, bool includeDiscardedFaces = false) {
+                var faceList = new List<Face>();
+                foreach( var solid in solids) {
+                    foreach(var face in solid.Faces) {
+                        // if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
+                        //     continue;
+
+                        if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
+                            continue;
+
+                        if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
+                            continue;
+
+                        faceList.Add(face);
+                    }
+                }
+
+                faceVertexOffsets = new NativeArray<int>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceTriIndexCounts = new NativeArray<int>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<faceList.Count; i++) {
+                    faceVertexOffsets[i] = vertCount;
+                    vertCount += faceList[i].Vertices.Count;
+                    faceTriIndexCounts[i] = triIndexCount;
+                    triIndexCount += (faceList[i].Vertices.Count-2)*3;
+                }
+
+                faceVertices = new NativeArray<Vector3>(vertCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceU = new NativeArray<Vector4>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceV = new NativeArray<Vector4>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceShift = new NativeArray<Vector2>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<faceList.Count; i++) {
+                    for(int v=faceVertexOffsets[i]; v < (i<faceVertexOffsets.Length-1 ? faceVertexOffsets[i+1] : vertCount); v++) {
+                        faceVertices[v] = faceList[i].Vertices[v-faceVertexOffsets[i]].ToUnity();
+                    }
+                    faceU[i] = new Vector4(faceList[i].UAxis.X, faceList[i].UAxis.Y, faceList[i].UAxis.Z, faceList[i].XScale);
+                    faceV[i] = new Vector4(faceList[i].VAxis.X, faceList[i].VAxis.Y, faceList[i].VAxis.Z, faceList[i].YScale);
+                    faceShift[i] = new Vector2(faceList[i].XShift, faceList[i].YShift);
+                }
+
+                outputMesh = Mesh.AllocateWritableMeshData(1);
+                var meshData = outputMesh[0];
+                meshData.SetVertexBufferParams(vertCount,
+                    new VertexAttributeDescriptor(VertexAttribute.Position),
+                    new VertexAttributeDescriptor(VertexAttribute.Normal, stream:1),
+                    new VertexAttributeDescriptor(VertexAttribute.TexCoord0, dimension:2, stream:2)
+                );
+                meshData.SetIndexBufferParams(triIndexCount, IndexFormat.UInt32);
+                 
+                var jobData = new MeshBuildingJob();
+                jobData.faceVertexOffsets = faceVertexOffsets;
+                jobData.faceTriIndexCounts = faceTriIndexCounts;
+
+                #if SCOPA_USE_BURST
+                jobData.faceVertices = faceVertices.Reinterpret<float3>();
+                jobData.faceU = faceU.Reinterpret<float4>();
+                jobData.faceV = faceV.Reinterpret<float4>();
+                jobData.faceShift = faceShift.Reinterpret<float2>();
+                #else
+                jobData.faceVertices = faceVertices;
+                jobData.faceU = faceU;
+                jobData.faceV = faceV;
+                jobData.faceShift = faceShift;
+                #endif
+
+                jobData.meshData = outputMesh[0];
+                jobData.scalingFactor = config.scalingFactor;
+                jobData.globalTexelScale = config.globalTexelScale;
+                jobData.textureWidth = textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize;
+                jobData.textureHeight = textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize;
+                jobData.vertCount = vertCount;
+                jobData.triIndexCount = triIndexCount;
+                jobData.meshOrigin = meshOrigin;
+                jobHandle = jobData.Schedule(faceList.Count, 128);
+
+                newMesh = new Mesh();
+                newMesh.name = meshName;
+            }
+
+            public Mesh Complete() {
+                jobHandle.Complete();
+
+                var meshData = outputMesh[0];
+                meshData.subMeshCount = 1;
+                meshData.SetSubMesh(0, new SubMeshDescriptor(0, triIndexCount), MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
+
+                Mesh.ApplyAndDisposeWritableMeshData(outputMesh, newMesh);
+                newMesh.RecalculateNormals();
+                newMesh.RecalculateBounds();
+
+                faceVertexOffsets.Dispose();
+                faceTriIndexCounts.Dispose();
+                faceVertices.Dispose();
+                faceU.Dispose();
+                faceV.Dispose();
+                faceShift.Dispose();
+
+                return newMesh;
+            }
+
+        }
+
+        #if SCOPA_USE_BURST
+        [BurstCompile]
+        #endif
+        public struct MeshBuildingJob : IJobParallelFor
+        {
+            [ReadOnlyAttribute] public NativeArray<int> faceVertexOffsets, faceTriIndexCounts; // index = i
+
+            #if SCOPA_USE_BURST
+            [ReadOnlyAttribute] public NativeArray<float3> faceVertices;
+            [ReadOnlyAttribute] public NativeArray<float4> faceU, faceV; // index = i, .w = scale
+            [ReadOnlyAttribute] public NativeArray<float2> faceShift; // index = i
+            public float3 meshOrigin;
+            #else            
+            [ReadOnlyAttribute] public NativeArray<Vector3> faceVertices;
+            [ReadOnlyAttribute] public NativeArray<Vector4> faceU, faceV; // index = i, .w = scale
+            [ReadOnlyAttribute] public NativeArray<Vector2> faceShift; // index = i
+            public Vector3 meshOrigin;
+            #endif
+            
+            [NativeDisableParallelForRestriction]
+            public Mesh.MeshData meshData;
+
+            public float scalingFactor, globalTexelScale, textureWidth, textureHeight;
+            public int vertCount, triIndexCount;
+
+            public void Execute(int i)
+            {
+                var offsetStart = faceVertexOffsets[i];
+                var offsetEnd = i<faceVertexOffsets.Length-1 ? faceVertexOffsets[i+1] : faceVertices.Length;
+
+                #if SCOPA_USE_BURST
+                var outputVerts = meshData.GetVertexData<float3>();
+                var outputUVs = meshData.GetVertexData<float2>(stream:2);
+                #else
+                var outputVerts = meshData.GetVertexData<Vector3>();
+                var outputUVs = meshData.GetVertexData<Vector2>(stream:2);
+                #endif
+
+                var outputTris = meshData.GetIndexData<int>();
+
+                // add all verts and UVs
+                for( int n=offsetStart; n<offsetEnd; n++ ) {
+                    outputVerts[n] = faceVertices[n] * scalingFactor - meshOrigin;
+                    #if SCOPA_USE_BURST
+                    outputUVs[n] = new Vector2(
+                        (math.dot(faceVertices[n], faceU[i].xyz / faceU[i].w) + (faceShift[i].x % textureWidth)) / (textureWidth),
+                        (math.dot(faceVertices[n], faceV[i].xyz / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / (textureHeight)
+                    ) * globalTexelScale;
+                    #else
+                    outputUVs[n] = new Vector2(
+                        (Vector3.Dot(faceVertices[n], faceU[i] / faceU[i].w) + (faceShift[i].x % textureWidth)) / (textureWidth),
+                        (Vector3.Dot(faceVertices[n], faceV[i] / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / (textureHeight)
+                    ) * globalTexelScale;
+                    #endif
+                }
+
+                // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
+                for(int t=2; t<offsetEnd-offsetStart; t++) {
+                    outputTris[faceTriIndexCounts[i]+(t-2)*3] = offsetStart;
+                    outputTris[faceTriIndexCounts[i]+(t-2)*3+1] = offsetStart + t-1;
+                    outputTris[faceTriIndexCounts[i]+(t-2)*3+2] = offsetStart + t;
+                }
+            }
         }
 
         /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers</summary>
@@ -424,9 +700,17 @@ namespace Scopa {
             var jobData = new SmoothJob();
             jobData.cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
             jobData.maxDelta = maxDelta;
+
+            #if SCOPA_USE_BURST
+            jobData.verts = verts.Reinterpret<float3>();
+            jobData.normals = normals.Reinterpret<float3>();
+            jobData.results = smoothNormalsResults.Reinterpret<float3>();
+            #else
             jobData.verts = verts;
             jobData.normals = normals;
             jobData.results = smoothNormalsResults;
+            #endif
+
             var handle = jobData.Schedule(smoothNormalsResults.Length, 8);
             handle.Complete();
 
@@ -439,12 +723,18 @@ namespace Scopa {
             smoothNormalsResults.Dispose();
         }
 
+        #if SCOPA_USE_BURST
+        [BurstCompile]
+        #endif
         public struct SmoothJob : IJobParallelFor
         {
-            [ReadOnlyAttribute]
-            public NativeArray<Vector3> verts, normals;
-            
+            #if SCOPA_USE_BURST
+            [ReadOnlyAttribute] public NativeArray<float3> verts, normals;
+            public NativeArray<float3> results;
+            #else
+            [ReadOnlyAttribute] public NativeArray<Vector3> verts, normals;
             public NativeArray<Vector3> results;
+            #endif
 
             public float cos, maxDelta;
 
@@ -454,15 +744,23 @@ namespace Scopa {
                 var resultCount = 1;
                 
                 for(int i2 = 0; i2 < verts.Length; i2++) {
-                    if ( (verts[i2] - verts[i] ).sqrMagnitude <= maxDelta
-                        && Vector3.Dot(normals[i2], normals[i] ) >= cos ) {
+                    #if SCOPA_USE_BURST
+                    if ( math.lengthsq(verts[i2] - verts[i] ) <= maxDelta && math.dot(normals[i2], normals[i] ) >= cos ) 
+                    #else
+                    if ( (verts[i2] - verts[i] ).sqrMagnitude <= maxDelta && Vector3.Dot(normals[i2], normals[i] ) >= cos ) 
+                    #endif
+                    {
                         tempResult += normals[i2];
                         resultCount++;
                     }
                 }
 
                 if (resultCount > 1)
+                #if SCOPA_USE_BURST
+                    tempResult = math.normalize(tempResult / resultCount);
+                #else
                     tempResult = (tempResult / resultCount).normalized;
+                #endif
                 results[i] = tempResult;
             }
         }

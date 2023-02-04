@@ -46,7 +46,7 @@ namespace Scopa {
             var gameObject = ScopaCore.BuildMapIntoGameObject(mapFile, currentConfig, out meshList);
             buildTimer.Stop();
 
-            UnityEngine.Debug.Log($"imported {mapFilepath}\n Parsed in {parseTimer.ElapsedMilliseconds} ms, Built in {buildTimer.ElapsedMilliseconds} ms");
+            UnityEngine.Debug.Log($"imported {mapFilepath}\n Parsed in {parseTimer.ElapsedMilliseconds} ms, Built in {buildTimer.ElapsedMilliseconds} ms", gameObject);
             return gameObject;
         }
 
@@ -349,18 +349,29 @@ namespace Scopa {
             // wait as long as possible before we call in the face culling job
             if (faceCullingJob != null)
                 faceCullingJob.Complete();
+            faceCullingJob = null;
 
             // main loop: for each material, build a mesh and add a game object with mesh components
             foreach ( var textureKVP in materialLookup ) {
-                ScopaMesh.ClearMeshBuffers();
+                // ScopaMesh.ClearMeshBuffers();
                 
-                foreach ( var solid in solids) {
-                    ScopaMesh.BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
-                }
+                // foreach ( var solid in solids) {
+                //     ScopaMesh.BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
+                // }
 
-                if ( ScopaMesh.IsMeshBufferEmpty() ) 
-                    continue;
-                    
+                // if ( ScopaMesh.IsMeshBufferEmpty() ) 
+                //     continue;
+
+                var meshBuildJob = new ScopaMesh.MeshBuildingJobGroup(
+                    $"{namePrefix}-{entityObject.name}-{textureKVP.Key}", 
+                    entityOrigin,
+                    solids,
+                    // faceList[textureKVP.Value],
+                    config, 
+                    textureKVP.Value, 
+                    false
+                );
+                
                 // finally, add mesh as game object, while we still have all the entity information
                 GameObject newMeshObj = null;
                 var thisMeshPrefab = meshPrefab;
@@ -412,13 +423,15 @@ namespace Scopa {
                     smoothNormalAngle = textureKVP.Value.materialConfig.smoothingAngle;
                 }
 
-                var newMesh = ScopaMesh.BuildMeshFromBuffers(
-                    $"{namePrefix}-{entityObject.name}-{textureKVP.Key}", 
-                    config, 
-                    entityOrigin,
-                    smoothNormalAngle
-                );
+                // var newMesh = ScopaMesh.BuildMeshFromBuffers(
+                //     $"{namePrefix}-{entityObject.name}-{textureKVP.Key}", 
+                //     config, 
+                //     entityOrigin,
+                //     smoothNormalAngle
+                // );
+                var newMesh = meshBuildJob.Complete();
                 meshList.Add(newMesh, newMeshObj.transform);
+                meshBuildJob = null;
 
                 // you can inherit ScopaMaterialConfig + override OnBuildMeshObject for extra per-material import logic
                 if ( textureKVP.Value.materialConfig != null ) {

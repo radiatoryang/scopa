@@ -2,7 +2,9 @@
     "name": "Scopa.Runtime",
     "rootNamespace": "",
     "references": [
-        "GUID:8c99226570017ef478306d84c29f0597"
+        "GUID:8c99226570017ef478306d84c29f0597",
+        "GUID:2665a8d13d1b3f18800f46e256720795",
+        "GUID:d8b63aba1907145bea998dd612889d6b"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -11,6 +13,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.burst",
+            "expression": "1.0",
+            "define": "SCOPA_USE_BURST"
+        }
+    ],
     "noEngineReferences": false
 }
