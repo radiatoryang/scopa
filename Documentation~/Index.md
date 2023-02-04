@@ -13,13 +13,15 @@ Scopa is a Unity package that adds Quake / Half-Life 1 .MAP, .WAD, and .FGD file
 
 ## Installation
 
-This is a custom [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) that can be automatically installed / updated in Unity 2020.1 or later. There are zero dependencies.
+This is a custom [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) that can be automatically installed / updated in Unity 2020.1 or later.
 
 1. in Unity, open the [Package Manager window](https://docs.unity3d.com/Manual/upm-ui.html)
 2. click the "+" button and select "add package from Git URL" [(see Unity Manual: Installing from a Git URL)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html)
 3. paste the .git URL of this repo: `https://github.com/radiatoryang/scopa.git` and click Add.
 
 If you're using an older version of Unity or don't want to use the Package Manager, then you can also clone, submodule, or download+unzip this repo into your /Assets/ or /Packages/ folder. 
+
+This package has zero dependencies, but has optional [Burst](https://docs.unity3d.com/Packages/com.unity.burst@1.8/manual/index.html) support for significantly faster map import. Just install the Burst package and Scopa will automatically detect it and use Burst functions.
 
 ## Usage
 
