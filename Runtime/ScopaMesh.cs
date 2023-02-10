@@ -417,8 +417,6 @@ namespace Scopa {
                 jobData.globalTexelScale = config.globalTexelScale;
                 jobData.textureWidth = textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize;
                 jobData.textureHeight = textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize;
-                jobData.vertCount = vertCount;
-                jobData.triIndexCount = triIndexCount;
                 jobData.meshOrigin = meshOrigin;
                 jobHandle = jobData.Schedule(faceList.Count, 128);
 
@@ -460,19 +458,18 @@ namespace Scopa {
             [ReadOnlyAttribute] public NativeArray<float3> faceVertices;
             [ReadOnlyAttribute] public NativeArray<float4> faceU, faceV; // index = i, .w = scale
             [ReadOnlyAttribute] public NativeArray<float2> faceShift; // index = i
-            public float3 meshOrigin;
+            [ReadOnlyAttribute] public float3 meshOrigin;
             #else            
             [ReadOnlyAttribute] public NativeArray<Vector3> faceVertices;
             [ReadOnlyAttribute] public NativeArray<Vector4> faceU, faceV; // index = i, .w = scale
             [ReadOnlyAttribute] public NativeArray<Vector2> faceShift; // index = i
-            public Vector3 meshOrigin;
+            [ReadOnlyAttribute] public Vector3 meshOrigin;
             #endif
             
             [NativeDisableParallelForRestriction]
             public Mesh.MeshData meshData;
 
-            public float scalingFactor, globalTexelScale, textureWidth, textureHeight;
-            public int vertCount, triIndexCount;
+            [ReadOnlyAttribute] public float scalingFactor, globalTexelScale, textureWidth, textureHeight;
 
             public void Execute(int i)
             {
@@ -481,15 +478,15 @@ namespace Scopa {
 
                 #if SCOPA_USE_BURST
                 var outputVerts = meshData.GetVertexData<float3>();
-                var outputUVs = meshData.GetVertexData<float2>(stream:2);
+                var outputUVs = meshData.GetVertexData<float2>(2);
                 #else
                 var outputVerts = meshData.GetVertexData<Vector3>();
-                var outputUVs = meshData.GetVertexData<Vector2>(stream:2);
+                var outputUVs = meshData.GetVertexData<Vector2>(2);
                 #endif
 
                 var outputTris = meshData.GetIndexData<int>();
 
-                // add all verts and UVs
+                // add all verts, normals, and UVs
                 for( int n=offsetStart; n<offsetEnd; n++ ) {
                     outputVerts[n] = faceVertices[n] * scalingFactor - meshOrigin;
                     #if SCOPA_USE_BURST
@@ -511,6 +508,239 @@ namespace Scopa {
                     outputTris[faceTriIndexCounts[i]+(t-2)*3+1] = offsetStart + t-1;
                     outputTris[faceTriIndexCounts[i]+(t-2)*3+2] = offsetStart + t;
                 }
+            }
+        }
+
+        public class ColliderJobGroup {
+
+            NativeArray<int> faceVertexOffsets, faceTriIndexCounts, solidFaceOffsets; // index = i
+            NativeArray<Vector3> faceVertices, facePlaneNormals;
+            NativeArray<bool> canBeBoxCollider;
+            int vertCount, triIndexCount, faceCount;
+
+            public GameObject gameObject;
+            public Mesh.MeshDataArray outputMesh;
+            JobHandle jobHandle;
+            Mesh[] meshes;
+            bool isTrigger, isConvex;
+
+            public ColliderJobGroup(GameObject gameObject, bool isTrigger, bool forceConvex, string colliderNameFormat, IEnumerable<Solid> solids, ScopaMapConfig config, Dictionary<Solid, Entity> mergedEntityData) {
+                this.gameObject = gameObject;
+
+                var faceList = new List<Face>();
+                var solidFaceOffsetsManaged = new List<int>();
+                var solidCount = 0;
+                this.isTrigger = isTrigger;
+                this.isConvex = forceConvex || config.colliderMode != ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider;
+                foreach( var solid in solids) {
+                    if (mergedEntityData.ContainsKey(solid) && (config.IsEntityNonsolid(mergedEntityData[solid].ClassName) || config.IsEntityTrigger(mergedEntityData[solid].ClassName)) )
+                        continue;
+
+                    foreach(var face in solid.Faces) {
+                        faceList.Add(face);
+                    }
+
+                    // if forceConvex or MergeAllToOneConcaveMeshCollider, then pretend it's all just one giant brush
+                    // unless it's a trigger, then it MUST be convex
+                    if (isTrigger || (!forceConvex && config.colliderMode != ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) || solidCount == 0) {
+                        solidFaceOffsetsManaged.Add(faceCount);
+                        solidCount++;
+                    }
+
+                    faceCount += solid.Faces.Count;
+                }
+                solidFaceOffsetsManaged.Add(faceCount);
+
+                solidFaceOffsets = new NativeArray<int>(solidFaceOffsetsManaged.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                solidFaceOffsets.CopyFrom( solidFaceOffsetsManaged.ToArray() );
+                canBeBoxCollider = new NativeArray<bool>(solidCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+
+                faceVertexOffsets = new NativeArray<int>(faceList.Count+1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceTriIndexCounts = new NativeArray<int>(faceList.Count+1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<faceList.Count; i++) {
+                    faceVertexOffsets[i] = vertCount;
+                    vertCount += faceList[i].Vertices.Count;
+                    faceTriIndexCounts[i] = triIndexCount;
+                    triIndexCount += (faceList[i].Vertices.Count-2)*3;
+                }
+                faceVertexOffsets[faceVertexOffsets.Length-1] = vertCount;
+                faceTriIndexCounts[faceTriIndexCounts.Length-1] = triIndexCount;
+
+                faceVertices = new NativeArray<Vector3>(vertCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                facePlaneNormals = new NativeArray<Vector3>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for(int i=0; i<faceList.Count; i++) {
+                    for(int v=faceVertexOffsets[i]; v < faceVertexOffsets[i+1]; v++) {
+                        faceVertices[v] = faceList[i].Vertices[v-faceVertexOffsets[i]].ToUnity();
+                    }
+                    facePlaneNormals[i] = faceList[i].Plane.Normal.ToUnity();
+                }
+
+                outputMesh = Mesh.AllocateWritableMeshData(solidCount);
+                meshes = new Mesh[solidCount];
+                for(int i=0; i<solidCount; i++) {
+                    meshes[i] = new Mesh();
+                    meshes[i].name = string.Format(colliderNameFormat, i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
+
+                    var solidOffsetStart = solidFaceOffsets[i];
+                    var solidOffsetEnd = solidFaceOffsets[i+1];
+                    var finalVertCount = faceVertexOffsets[solidOffsetEnd] - faceVertexOffsets[solidOffsetStart];
+                    var finalTriCount = faceTriIndexCounts[solidOffsetEnd] - faceTriIndexCounts[solidOffsetStart];
+
+                    var meshData = outputMesh[i];
+                    meshData.SetVertexBufferParams(finalVertCount,
+                        new VertexAttributeDescriptor(VertexAttribute.Position)
+                    );
+                    meshData.SetIndexBufferParams(finalTriCount, IndexFormat.UInt32);
+                }
+                
+                var jobData = new ColliderJob();
+                jobData.faceVertexOffsets = faceVertexOffsets;
+                jobData.faceTriIndexCounts = faceTriIndexCounts;
+                jobData.solidFaceOffsets = solidFaceOffsets;
+
+                #if SCOPA_USE_BURST
+                jobData.faceVertices = faceVertices.Reinterpret<float3>();
+                jobData.facePlaneNormals = facePlaneNormals.Reinterpret<float3>();
+                #else
+                jobData.faceVertices = faceVertices;
+                jobData.facePlaneNormals = facePlaneNormals;
+                #endif
+
+                jobData.meshDataArray = outputMesh;
+                jobData.canBeBoxColliderResults = canBeBoxCollider;
+                jobData.colliderMode = config.colliderMode;
+                jobData.scalingFactor = config.scalingFactor;
+                jobData.meshOrigin = gameObject.transform.position;
+                jobHandle = jobData.Schedule(solidCount, 64);
+            }
+
+            public Mesh[] Complete() {
+                jobHandle.Complete();
+
+                Mesh.ApplyAndDisposeWritableMeshData(outputMesh, meshes);
+                for (int i = 0; i < meshes.Length; i++) {
+                    Mesh newMesh = meshes[i];
+                    var newGO = new GameObject(newMesh.name);
+                    newGO.transform.SetParent( gameObject.transform );
+                    newGO.transform.localPosition = Vector3.zero;
+                    newGO.transform.localRotation = Quaternion.identity;
+                    newGO.transform.localScale = Vector3.one;
+
+                    newMesh.RecalculateBounds();
+                    if (canBeBoxCollider[i]) { // if box collider, we'll just use the mesh bounds to config a collider
+                        var bounds = newMesh.bounds;
+                        var boxCol = newGO.AddComponent<BoxCollider>();
+                        boxCol.center = bounds.center;
+                        boxCol.size = bounds.size;
+                        boxCol.isTrigger = isTrigger;
+                    } else { // but usually this is a convex mesh collider
+                        var newMeshCollider = newGO.AddComponent<MeshCollider>();
+                        newMeshCollider.convex = isTrigger ? true : isConvex;
+                        newMeshCollider.isTrigger = isTrigger;
+                        newMeshCollider.sharedMesh = newMesh;
+                    }
+                }
+
+                faceVertexOffsets.Dispose();
+                faceTriIndexCounts.Dispose();
+                solidFaceOffsets.Dispose();
+
+                faceVertices.Dispose();
+                facePlaneNormals.Dispose();
+                canBeBoxCollider.Dispose();
+
+                return meshes;
+            }
+
+            #if SCOPA_USE_BURST
+            [BurstCompile]
+            #endif
+            public struct ColliderJob : IJobParallelFor
+            {
+                [ReadOnlyAttribute] public NativeArray<int> faceVertexOffsets, faceTriIndexCounts, solidFaceOffsets; // index = i
+
+                #if SCOPA_USE_BURST
+                [ReadOnlyAttribute] public NativeArray<float3> faceVertices, facePlaneNormals;
+                [ReadOnlyAttribute] public float3 meshOrigin;
+                #else            
+                [ReadOnlyAttribute] public NativeArray<Vector3> faceVertices, facePlaneNormals;
+                [ReadOnlyAttribute] public Vector3 meshOrigin;
+                #endif
+                
+                public Mesh.MeshDataArray meshDataArray;
+                [WriteOnly] public NativeArray<bool> canBeBoxColliderResults;
+
+                [ReadOnlyAttribute] public float scalingFactor;
+                [ReadOnlyAttribute] public ScopaMapConfig.ColliderImportMode colliderMode;
+
+                public void Execute(int i)
+                {
+                    var solidOffsetStart = solidFaceOffsets[i];
+                    var solidOffsetEnd = solidFaceOffsets[i+1];
+
+                    var solidVertStart = faceVertexOffsets[solidOffsetStart];
+                    var finalVertCount = faceVertexOffsets[solidOffsetEnd] - solidVertStart;
+                    var finalTriIndexCount = faceTriIndexCounts[solidOffsetEnd] - faceTriIndexCounts[solidOffsetStart];
+
+                    var meshData = meshDataArray[i];
+
+                    #if SCOPA_USE_BURST
+                    var outputVerts = meshData.GetVertexData<float3>();
+                    #else
+                    var outputVerts = meshData.GetVertexData<Vector3>();
+                    #endif
+
+                    var outputTris = meshData.GetIndexData<int>();
+
+                    // for each solid, gather faces...
+                    var canBeBoxCollider = colliderMode == ScopaMapConfig.ColliderImportMode.BoxAndConvex || colliderMode == ScopaMapConfig.ColliderImportMode.BoxColliderOnly;
+                    for(int face=solidOffsetStart; face<solidOffsetEnd; face++) {
+                        // don't bother doing BoxCollider test if we're forcing BoxColliderOnly
+                        if (canBeBoxCollider && colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly && !IsNormalAxisAligned(facePlaneNormals[face]))
+                            canBeBoxCollider = false;
+
+                        var vertOffsetStart = faceVertexOffsets[face];
+                        var vertOffsetEnd = faceVertexOffsets[face+1];
+                        for( int n=vertOffsetStart; n<vertOffsetEnd; n++ ) {
+                            outputVerts[n-solidVertStart] = faceVertices[n] * scalingFactor - meshOrigin;
+                        }
+
+                        // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
+                        var triIndexStart = faceTriIndexCounts[face] - faceTriIndexCounts[solidOffsetStart];
+                        var faceVertStart = vertOffsetStart-solidVertStart;
+                        for(int t=2; t<vertOffsetEnd-vertOffsetStart; t++) {
+                            outputTris[triIndexStart+(t-2)*3] = faceVertStart;
+                            outputTris[triIndexStart+(t-2)*3+1] = faceVertStart + t-1;
+                            outputTris[triIndexStart+(t-2)*3+2] = faceVertStart + t;
+                        }
+                    }
+
+                    canBeBoxColliderResults[i] = canBeBoxCollider;
+                    meshData.subMeshCount = 1;
+                    meshData.SetSubMesh(
+                        0, 
+                        new SubMeshDescriptor(0, finalTriIndexCount)
+                    );
+                }
+
+                #if SCOPA_USE_BURST
+                public static bool IsNormalAxisAligned(float3 faceNormal) {
+                    var absNormal = math.abs(faceNormal);
+                    return !((absNormal.x > 0.01f && absNormal.x < 0.99f) || (absNormal.z > 0.01f && absNormal.z < 0.99f) || (absNormal.y > 0.01f && absNormal.y < 0.99f));
+                }
+                #else
+                public static bool IsNormalAxisAligned(Vector3 faceNormal) {
+                    var absNormal = faceNormal.Absolute();
+                    if ( absNormal.x > 0.01f && absNormal.x < 0.99f ) {
+                        return false;
+                    } else if ( absNormal.z > 0.01f && absNormal.z < 0.99f ) {
+                        return false;
+                    } else if ( absNormal.y > 0.01f && absNormal.y < 0.99f ) {
+                        return false;
+                    }
+                    return true;
+                }
+                #endif
             }
         }
 

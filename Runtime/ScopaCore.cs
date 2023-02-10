@@ -321,6 +321,22 @@ namespace Scopa {
             entityObject.transform.localScale = Vector3.one;
             entityObject.transform.SetParent(rootGameObject.transform);
 
+            // begin collision jobs
+            ScopaMesh.ColliderJobGroup colliderJob = null;
+            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider ) {
+                bool isTrigger = config.IsEntityTrigger(entData.ClassName);
+                bool forceConvex = entData.TryGetInt("_convex", out var num) && num == 1;
+                colliderJob = new ScopaMesh.ColliderJobGroup(
+                    entityObject, 
+                    isTrigger, 
+                    forceConvex,
+                    entityObject.name + "_Collider{0}", 
+                    solids, 
+                    config,
+                    mergedEntityData
+                );
+            }
+
             // populate the rest of the entity data    
             var entityComponent = entityObject.GetComponent<IScopaEntityData>();
 
@@ -336,14 +352,6 @@ namespace Scopa {
             }
             else if ( entityPrefab == null) { 
                 entityObject.layer = config.layer;
-            }
-
-            // collision pass, treat it all as one object and ignore texture names
-            if ( config.colliderMode != ScopaMapConfig.ColliderImportMode.None && entityNeedsCollider ) {
-                var collisionMeshes = ScopaCore.AddColliders( entityObject, entData, config, namePrefix );
-                foreach ( var cMesh in collisionMeshes ) {
-                    meshList.Add( cMesh, null ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
-                }
             }
 
             // wait as long as possible before we call in the face culling job
@@ -456,6 +464,14 @@ namespace Scopa {
                 }
             }
 
+            if (colliderJob != null) {
+                var collisionMeshes = colliderJob.Complete();
+                foreach ( var cMesh in collisionMeshes ) {
+                    meshList.Add( cMesh, null ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
+                }
+                colliderJob = null;
+            }
+
             // now that we've finished building the gameobject, notify any custom user components that import is complete
             var allEntityComponents = entityObject.GetComponentsInChildren<IScopaEntityImport>();
             foreach( var entComp in allEntityComponents ) { 
@@ -542,115 +558,115 @@ namespace Scopa {
         }
 
         /// <summary> for each solid in an Entity, add either a Box Collider or a Mesh Collider component... or make one big merged Mesh Collider </summary>
-        public static List<Mesh> AddColliders(GameObject gameObject, ScopaEntityData ent, ScopaMapConfig config, string namePrefix, bool forceBoxCollidersForAll = false) {
-            var meshList = new List<Mesh>();
+        // public static List<Mesh> AddColliders(GameObject gameObject, ScopaEntityData ent, ScopaMapConfig config, string namePrefix, bool forceBoxCollidersForAll = false) {
+        //     var meshList = new List<Mesh>();
 
-            var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
-            if ( solids.Count() == 0)
-                return meshList;
+        //     var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
+        //     if ( solids.Count() == 0)
+        //         return meshList;
 
-            bool isTrigger = config.IsEntityTrigger(ent.ClassName);
-            bool forceConvex = ent.TryGetInt("_convex", out var num) && num == 1;
+        //     bool isTrigger = config.IsEntityTrigger(ent.ClassName);
+        //     bool forceConvex = ent.TryGetInt("_convex", out var num) && num == 1;
 
-            // just one big Mesh Collider... one collider to rule them all
-            if ( forceConvex || (!isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) ) {
-                ScopaMesh.ClearMeshBuffers();
-                foreach ( var solid in solids ) {
-                    // omit non-solids and triggers
-                    if ( mergedEntityData.ContainsKey(solid) && (config.IsEntityNonsolid(mergedEntityData[solid].ClassName) || config.IsEntityTrigger(mergedEntityData[solid].ClassName)) )
-                        continue;
+        //     // just one big Mesh Collider... one collider to rule them all
+        //     if ( forceConvex || (!isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) ) {
+        //         ScopaMesh.ClearMeshBuffers();
+        //         foreach ( var solid in solids ) {
+        //             // omit non-solids and triggers
+        //             if ( mergedEntityData.ContainsKey(solid) && (config.IsEntityNonsolid(mergedEntityData[solid].ClassName) || config.IsEntityTrigger(mergedEntityData[solid].ClassName)) )
+        //                 continue;
 
-                    ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
-                }
+        //             ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
+        //         }
 
-                var newMesh = ScopaMesh.BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
-                var newMeshCollider = gameObject.AddComponent<MeshCollider>();
-                newMeshCollider.convex = forceConvex;
-                // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
-                //     | MeshColliderCookingOptions.EnableMeshCleaning 
-                //     | MeshColliderCookingOptions.WeldColocatedVertices 
-                //     | MeshColliderCookingOptions.UseFastMidphase;
-                newMeshCollider.isTrigger = isTrigger;
-                newMeshCollider.sharedMesh = newMesh;
+        //         var newMesh = ScopaMesh.BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
+        //         var newMeshCollider = gameObject.AddComponent<MeshCollider>();
+        //         newMeshCollider.convex = forceConvex;
+        //         // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
+        //         //     | MeshColliderCookingOptions.EnableMeshCleaning 
+        //         //     | MeshColliderCookingOptions.WeldColocatedVertices 
+        //         //     | MeshColliderCookingOptions.UseFastMidphase;
+        //         newMeshCollider.isTrigger = isTrigger;
+        //         newMeshCollider.sharedMesh = newMesh;
 
-                meshList.Add( newMesh );
+        //         meshList.Add( newMesh );
 
-            } // otherwise, generate individual colliders for each brush solid
-            else 
-            { 
-                var solidCount = 0;
-                foreach ( var solid in solids ) {
-                    solidCount++;
-                    var colliderName = $"{namePrefix}#{ent.ID}-{solidCount}";
+        //     } // otherwise, generate individual colliders for each brush solid
+        //     else 
+        //     { 
+        //         var solidCount = 0;
+        //         foreach ( var solid in solids ) {
+        //             solidCount++;
+        //             var colliderName = $"{namePrefix}#{ent.ID}-{solidCount}";
 
-                    // does the brush have an entity data override that was non solid? then ignore this brush
-                    if ( mergedEntityData.ContainsKey(solid) && config.IsEntityNonsolid(mergedEntityData[solid].ClassName) )
-                        continue;
+        //             // does the brush have an entity data override that was non solid? then ignore this brush
+        //             if ( mergedEntityData.ContainsKey(solid) && config.IsEntityNonsolid(mergedEntityData[solid].ClassName) )
+        //                 continue;
 
-                    // box collider is the simplest, so we should always try it first       
-                    if ( (config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly || config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxAndConvex) 
-                    && TryAddBoxCollider(colliderName, gameObject, solid, config, isTrigger) ) {
-                        continue;
-                    }
+        //             // box collider is the simplest, so we should always try it first       
+        //             if ( (config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly || config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxAndConvex) 
+        //             && TryAddBoxCollider(colliderName, gameObject, solid, config, isTrigger) ) {
+        //                 continue;
+        //             }
 
-                    // otherwise, use a convex mesh collider
-                    var newMeshCollider = AddMeshCollider(colliderName, gameObject, solid, config, mergedEntityData.ContainsKey(solid) ? config.IsEntityTrigger(mergedEntityData[solid].ClassName) : isTrigger);
-                    meshList.Add( newMeshCollider ); 
-                }
-            }
+        //             // otherwise, use a convex mesh collider
+        //             var newMeshCollider = AddMeshCollider(colliderName, gameObject, solid, config, mergedEntityData.ContainsKey(solid) ? config.IsEntityTrigger(mergedEntityData[solid].ClassName) : isTrigger);
+        //             meshList.Add( newMeshCollider ); 
+        //         }
+        //     }
 
-            return meshList;
-        }
+        //     return meshList;
+        // }
 
-        /// <summary> given a brush solid, calculate the AABB bounds for all its vertices, and add that Box Collider to the gameObject </summary>
-        static bool TryAddBoxCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-            faceVerts.Clear();
+        // /// <summary> given a brush solid, calculate the AABB bounds for all its vertices, and add that Box Collider to the gameObject </summary>
+        // static bool TryAddBoxCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
+        //     faceVerts.Clear();
 
-            for ( int x=0; x<solid.Faces.Count; x++ ) {
-                if ( !solid.Faces[x].Plane.IsOrthogonal() ) {
-                    return false;
-                } else {
-                    for( int y=0; y<solid.Faces[x].Vertices.Count; y++) {
-                        faceVerts.Add( solid.Faces[x].Vertices[y].ToUnity() * config.scalingFactor - gameObject.transform.position);
-                    }
-                }
-            }
+        //     for ( int x=0; x<solid.Faces.Count; x++ ) {
+        //         if ( !solid.Faces[x].Plane.IsOrthogonal() ) {
+        //             return false;
+        //         } else {
+        //             for( int y=0; y<solid.Faces[x].Vertices.Count; y++) {
+        //                 faceVerts.Add( solid.Faces[x].Vertices[y].ToUnity() * config.scalingFactor - gameObject.transform.position);
+        //             }
+        //         }
+        //     }
 
-            var bounds = GeometryUtility.CalculateBounds(faceVerts.ToArray(), Matrix4x4.identity);
-            var newGO = new GameObject("BoxCollider " + colliderName );
-            newGO.transform.SetParent( gameObject.transform );
-            newGO.transform.localPosition = Vector3.zero;
-            newGO.transform.localRotation = Quaternion.identity;
-            newGO.transform.localScale = Vector3.one;
-            var boxCol = newGO.AddComponent<BoxCollider>();
-            boxCol.center = bounds.center;
-            boxCol.size = bounds.size;
-            boxCol.isTrigger = isTrigger;
-            return true;
-        }
+        //     var bounds = GeometryUtility.CalculateBounds(faceVerts.ToArray(), Matrix4x4.identity);
+        //     var newGO = new GameObject("BoxCollider " + colliderName );
+        //     newGO.transform.SetParent( gameObject.transform );
+        //     newGO.transform.localPosition = Vector3.zero;
+        //     newGO.transform.localRotation = Quaternion.identity;
+        //     newGO.transform.localScale = Vector3.one;
+        //     var boxCol = newGO.AddComponent<BoxCollider>();
+        //     boxCol.center = bounds.center;
+        //     boxCol.size = bounds.size;
+        //     boxCol.isTrigger = isTrigger;
+        //     return true;
+        // }
 
-        /// <summary> given a brush solid, build a convex mesh from its vertices, and add that Mesh Collider to the gameObject </summary>
-        static Mesh AddMeshCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-            ScopaMesh.ClearMeshBuffers();
-            ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
-            var newMesh = ScopaMesh.BuildMeshFromBuffers( colliderName + "Collider", config, gameObject.transform.position, -1);
+        // /// <summary> given a brush solid, build a convex mesh from its vertices, and add that Mesh Collider to the gameObject </summary>
+        // static Mesh AddMeshCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
+        //     ScopaMesh.ClearMeshBuffers();
+        //     ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
+        //     var newMesh = ScopaMesh.BuildMeshFromBuffers( colliderName + "Collider", config, gameObject.transform.position, -1);
         
-            var newGO = new GameObject("MeshColliderConvex " + colliderName );
-            newGO.transform.SetParent( gameObject.transform );
-            newGO.transform.localPosition = Vector3.zero;
-            newGO.transform.localRotation = Quaternion.identity;
-            newGO.transform.localScale = Vector3.one;
-            var newMeshCollider = newGO.AddComponent<MeshCollider>();
-            newMeshCollider.convex = true;
-            // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
-            //     | MeshColliderCookingOptions.EnableMeshCleaning 
-            //     | MeshColliderCookingOptions.WeldColocatedVertices 
-            //     | MeshColliderCookingOptions.UseFastMidphase;
-            newMeshCollider.isTrigger = isTrigger;
-            newMeshCollider.sharedMesh = newMesh;
+        //     var newGO = new GameObject("MeshColliderConvex " + colliderName );
+        //     newGO.transform.SetParent( gameObject.transform );
+        //     newGO.transform.localPosition = Vector3.zero;
+        //     newGO.transform.localRotation = Quaternion.identity;
+        //     newGO.transform.localScale = Vector3.one;
+        //     var newMeshCollider = newGO.AddComponent<MeshCollider>();
+        //     newMeshCollider.convex = true;
+        //     // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
+        //     //     | MeshColliderCookingOptions.EnableMeshCleaning 
+        //     //     | MeshColliderCookingOptions.WeldColocatedVertices 
+        //     //     | MeshColliderCookingOptions.UseFastMidphase;
+        //     newMeshCollider.isTrigger = isTrigger;
+        //     newMeshCollider.sharedMesh = newMesh;
             
-            return newMesh;
-        }
+        //     return newMesh;
+        // }
 
         static float Frac(float decimalNumber) {
             if ( Mathf.Round(decimalNumber) > decimalNumber ) {
