@@ -179,13 +179,27 @@ namespace Scopa {
             var texNames = new List<string>();
             var newWad = new WadFile(Formats.Texture.Wad.Version.Wad3);
             newWad.Name = wadName;
+
+            var whiteTexture = new Texture2D(32, 32);
+            Color[] pixels = Enumerable.Repeat(Color.white, 32*32).ToArray();
+            whiteTexture.SetPixels(pixels);
+            whiteTexture.Apply();
+
             for (int i1 = 0; i1 < wadConfig.materials.Length; i1++) {
                 Material mat = wadConfig.materials[i1];
-                if (mat == null)
+                if (mat == null) {
+                    Debug.LogWarning($"{wadName}: materials slot {i1} is empty.");
                     continue;
+                }
 
                 var hasDuplicateName = false;
                 var texName = SanitizeWadTextureName(mat.name);
+
+                var texture = mat.mainTexture;
+                if (texture == null) {
+                    texture = whiteTexture;
+                    Debug.LogWarning($"{wadName}: {mat.name} doesn't have a mainTexture! Make sure the shader has a _MainTex or [MainTexture] property, and assign a Texture in the material!... Defaulting to a 32x32 white texture.");
+                }
 
                 // duplicate texture name handling
                 for( int c=0; texNames.Contains(texName); c++ ) {
@@ -207,12 +221,12 @@ namespace Scopa {
 
                 var mipTex = new MipTextureLump();
                 mipTex.Name = texName;
-                mipTex.Width = System.Convert.ToUInt32(mat.mainTexture.width / (int)wadConfig.resolution);
-                mipTex.Height = System.Convert.ToUInt32(mat.mainTexture.height / (int)wadConfig.resolution);
+                mipTex.Width = System.Convert.ToUInt32(texture.width / (int)wadConfig.resolution);
+                mipTex.Height = System.Convert.ToUInt32(texture.height / (int)wadConfig.resolution);
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
                 // Debug.Log($"{mipTex.Name} is {mipTex.Width} x {mipTex.Height}");
 
-                mipTex.MipData = QuantizeToMipmap( mat, mat.color, (int)wadConfig.resolution, out var palette );
+                mipTex.MipData = QuantizeToMipmap( texture, mat.color, (int)wadConfig.resolution, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {
@@ -241,13 +255,17 @@ namespace Scopa {
             return newWad;
         }
 
-        public static byte[][] QuantizeToMipmap(Material material, Color colorTint, int resizeFactor, out Color32[] fixedPalette, bool generatePalette=true)
+        public static byte[][] QuantizeToMipmap(Texture mainTexture, Color colorTint, int resizeFactor, out Color32[] fixedPalette, bool generatePalette=true)
         {
             // we have to do this in two passes, with two render textures (to bypass texture read/write limits + for fast processing of pixels)
 
             // pass 1: read the texture, and while we're at it, tint it too
-            var original = material.mainTexture;
-            ResizeCopyToBuffer((Texture2D)original, colorTint, original.width / resizeFactor, original.height / resizeFactor); 
+            ResizeCopyToBuffer(
+                (Texture2D)mainTexture, 
+                colorTint, 
+                Mathf.Max(Mathf.RoundToInt(mainTexture.width / resizeFactor), 4), 
+                Mathf.Max(Mathf.RoundToInt(mainTexture.height / resizeFactor), 4)
+            ); 
 
             if ( generatePalette ) {
                 var colors = resizedTexture.GetPixels32();
@@ -258,7 +276,7 @@ namespace Scopa {
                 while (buckets.Count < paletteColorCount && iterations < paletteColorCount) {
                     newBuckets.Clear();
                     for (var i = 0; i < buckets.Count; i++) {
-                        if (newBuckets.Count + (buckets.Count - i) < paletteColorCount) {
+                        if (newBuckets.Count + (buckets.Count - i) < paletteColorCount && buckets[i].colorCount > 1) {
                             buckets[i].Split(out var b1, out var b2);
                             newBuckets.Add(b1);
                             newBuckets.Add(b2);
@@ -297,7 +315,7 @@ namespace Scopa {
             // File.WriteAllBytes(  System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop) + "/" + material.name + ".png", resizedTexture.EncodeToPNG() );
             // Debug.Log($"pixel 0 for {material.name} should be {resizedTexture.GetPixels32(0)[0]}");
 
-            ResizeCopyToBuffer((Texture2D)original, colorTint, width, height, fixedPalette);
+            ResizeCopyToBuffer((Texture2D)mainTexture, colorTint, width, height, fixedPalette);
 
             for( int mip=0; mip<4; mip++) {
                 int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
@@ -372,6 +390,8 @@ namespace Scopa {
         public class ColorBucket
         {
             private readonly IDictionary<Color32, int> colors;
+
+            public int colorCount => colors.Count;
 
             public Color32 Color { get; }
 
