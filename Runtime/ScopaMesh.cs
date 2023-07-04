@@ -358,7 +358,7 @@ namespace Scopa {
                         if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
                             continue;
 
-                        if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
+                        if ( textureFilter != null && textureFilter.textureName.ToLowerInvariant().GetHashCode() != face.TextureName.GetHashCode() )
                             continue;
 
                         faceList.Add(face);
@@ -753,7 +753,7 @@ namespace Scopa {
                 if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
                     continue;
 
-                if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
+                if ( textureFilter != null && textureFilter.textureName.ToLowerInvariant().GetHashCode() != face.TextureName.GetHashCode() )
                     continue;
 
                 BufferScaledMeshFragmentForFace(
