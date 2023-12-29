@@ -12,6 +12,8 @@ namespace Sledge.Formats.Precision
 
         public Vector3 Origin => Polygons.Aggregate(Vector3.Zero, (x, y) => x + y.Origin) / Polygons.Count;
 
+        static List<Polygon> polygons = new List<Polygon>(64);
+
         /// <summary>
         /// Creates a polyhedron from a list of polygons which are assumed to be valid.
         /// </summary>
@@ -25,7 +27,8 @@ namespace Sledge.Formats.Precision
         /// </summary>
         public Polyhedron(IEnumerable<Plane> planes)
         {
-            var polygons = new List<Polygon>();
+            // var polygons = new List<Polygon>();
+            polygons.Clear();
             
             var list = planes.ToList();
             for (var i = 0; i < list.Count; i++)
@@ -43,12 +46,12 @@ namespace Sledge.Formats.Precision
             }
 
             // Ensure all the faces point outwards
-            var origin = polygons.Aggregate(Vector3.Zero, (x, y) => x + y.Origin) / polygons.Count;
-            for (var i = 0; i < polygons.Count; i++)
-            {
-                var face = polygons[i];
-                if (face.Plane.OnPlane(origin) >= 0) polygons[i] = new Polygon(face.Vertices.Reverse());
-            }
+            // var origin = polygons.Aggregate(Vector3.Zero, (x, y) => x + y.Origin) / polygons.Count;
+            // for (var i = 0; i < polygons.Count; i++)
+            // {
+            //     var face = polygons[i];
+            //     if (face.Plane.OnPlane(origin) >= 0) polygons[i] = new Polygon(face.Vertices.Reverse());
+            // }
 
             Polygons = polygons;
         }

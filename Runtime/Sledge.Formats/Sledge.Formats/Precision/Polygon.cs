@@ -13,6 +13,8 @@ namespace Sledge.Formats.Precision
         public Plane Plane => new Plane(Vertices[0], Vertices[1], Vertices[2]);
         public Vector3 Origin => Vertices.Aggregate(Vector3.Zero, (x, y) => x + y) / Vertices.Count;
 
+        static List<Vector3> backVerts = new List<Vector3>(64);
+
         /// <summary>
         /// Creates a polygon from a list of points
         /// </summary>
@@ -109,32 +111,38 @@ namespace Sledge.Formats.Precision
             }
 
             // Check non-spanning cases
-            if (cb == 0 && cf == 0)
-            {
-                // Co-planar
+            // if (cb == 0 && cf == 0)
+            // {
+            //     // Co-planar
+            //     back = front = coplanarBack = coplanarFront = null;
+            //     if (Plane.Normal.Dot(clip.Normal) > 0) coplanarFront = this;
+            //     else coplanarBack = this;
+            //     return false;
+            // }
+            // else if (cb == 0)
+            // {
+            //     // All vertices in front
+            //     back = coplanarBack = coplanarFront = null;
+            //     front = this;
+            //     return false;
+            // }
+            // else if (cf == 0)
+            // {
+            //     // All vertices behind
+            //     front = coplanarBack = coplanarFront = null;
+            //     back = this;
+            //     return false;
+            // }
+
+            if(cb == 0 || cf == 0) {
                 back = front = coplanarBack = coplanarFront = null;
-                if (Plane.Normal.Dot(clip.Normal) > 0) coplanarFront = this;
-                else coplanarBack = this;
-                return false;
-            }
-            else if (cb == 0)
-            {
-                // All vertices in front
-                back = coplanarBack = coplanarFront = null;
-                front = this;
-                return false;
-            }
-            else if (cf == 0)
-            {
-                // All vertices behind
-                front = coplanarBack = coplanarFront = null;
-                back = this;
                 return false;
             }
 
             // Get the new front and back vertices
-            var backVerts = new List<Vector3>();
-            var frontVerts = new List<Vector3>();
+            // var backVerts = new List<Vector3>();
+            // var frontVerts = new List<Vector3>();
+            backVerts.Clear();
 
             for (var i = 0; i < Vertices.Count; i++)
             {
@@ -144,7 +152,7 @@ namespace Sledge.Formats.Precision
                 double sd = distances[i], ed = distances[j];
 
                 if (sd <= 0) backVerts.Add(s);
-                if (sd >= 0) frontVerts.Add(s);
+                // if (sd >= 0) frontVerts.Add(s);
 
                 if ((sd < 0 && ed > 0) || (ed < 0 && sd > 0))
                 {
@@ -152,7 +160,7 @@ namespace Sledge.Formats.Precision
                     var intersect = s * (1 - t) + e * t;
 
                     backVerts.Add(intersect);
-                    frontVerts.Add(intersect);
+                //     frontVerts.Add(intersect);
                 }
             }
             

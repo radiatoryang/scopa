@@ -76,9 +76,9 @@ namespace Scopa {
             return Mathf.Abs( a.x - b.x) + Mathf.Abs( a.y - b.y) + Mathf.Abs( a.z - b.z);
         }
 
-        public static Vector3 ToPrecisionVector3(this Vector3 vec) {
-            return vec;
-        }
+        // public static Vector3 ToPrecisionVector3(this Vector3 vec) {
+        //     return vec;
+        // }
 
         public static string ToStringIntWithNoPunctuation(this Vector3 vec) {
             return Vector3Int.RoundToInt(vec).ToString().Replace(",", "").TrimStart('(').TrimEnd(')');
