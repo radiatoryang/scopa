@@ -38,7 +38,6 @@ Issues and pull requests are currently NOT accepted at this time. Development is
 ## Acknowledgments / Credits
 
 - lots of file format handling from [Sledge Formats](https://github.com/LogicAndTrick/sledge-formats)
-- vertex color AO baking from [VTAO](https://github.com/Helix128/VTAO)
 - GPU-based texture resizing from [Unity GPU Texture Resize](https://github.com/ababilinski/unity-gpu-texture-resize)
 - color palette generation from [cSharpColourQuantization](https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/MedianCut.cs)
 - looking for a BSP plugin? try [Unity3D BSP Importer](https://github.com/wfowler1/Unity3D-BSP-Importer)
