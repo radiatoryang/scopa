@@ -360,7 +360,7 @@ namespace Scopa {
                         if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
                             continue;
 
-                        if ( materialOverride != null && materialOverride.textureName.GetHashCode() != face.TextureName.GetHashCode() )
+                        if ( materialOverride != null && materialOverride.textureName.ToLowerInvariant().GetHashCode() != face.TextureName.ToLowerInvariant().GetHashCode() )
                             continue;
 
                         faceList.Add(face);
