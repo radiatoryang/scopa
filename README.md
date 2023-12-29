@@ -33,7 +33,8 @@ For more info (i.e. runtime import for modding), see the full [Documentation](Do
 
 ## Contributions
 
-Issues and pull requests are currently NOT accepted at this time. Development is still very early.
+- Issues currently ARE NOT ACCEPTED at this time. Development is still very early.
+- Pull Requests ARE ACCEPTED if you know what you're doing / it can be merged easily / it's not a major feature that I'll have to maintain.
 
 ## Acknowledgments / Credits
 
