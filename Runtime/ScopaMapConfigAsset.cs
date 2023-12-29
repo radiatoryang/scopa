@@ -36,12 +36,6 @@ namespace Scopa {
         [Tooltip("(EDITOR-ONLY) (default: Off) Use Unity's built-in mesh compressor. Reduces file size but may cause glitches and seams.")]
         public ModelImporterMeshCompression meshCompression = ModelImporterMeshCompression.Off;
 
-        [Tooltip("(default: false) After all meshes and colliders are generated, fire semi-randomized physics raycasts for each mesh vertex to approximate ambient occlusion, and store as a grayscale vertex color. Just make sure your shader actually uses the vertex colors! In the shader, we suggest using vertex color AO to scale GI.")]
-        public bool bakeVertexColorAO = false;
-
-        [Tooltip("(default: 25) The length (in Unity meters) of the vertex color AO raycasts. Shorter raycasts limit AO to small details, while longer raycasts may feel more like local room shadowing obscurance effects.")]
-        public float occlusionLength = 25f;
-
 
         [Tooltip("(default: sky, trigger, skip, hint, nodraw, null, clip, origin) When a face's texture name contains any word in this list, discard that face from the mesh. But this does not affect mesh colliders.")]
         public List<string> cullTextures = new List<string>() {"sky", "trigger", "skip", "hint", "nodraw", "null", "clip", "origin"};

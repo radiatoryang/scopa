@@ -33,7 +33,7 @@ namespace Scopa {
         static int entityCount = 0;
         
         /// <summary>The main high-level map file import function. Use this to support mods. For editor-time import with asset handling, see ImportMapInEditor().</summary>
-        public static GameObject ImportMap(string mapFilepath, ScopaMapConfig currentConfig, out Dictionary<Mesh, Transform> meshList)
+        public static GameObject ImportMap(string mapFilepath, ScopaMapConfig currentConfig, out List<ScopaMeshData> meshList)
         {
             var parseTimer = new Stopwatch();
             parseTimer.Start();
@@ -82,14 +82,16 @@ namespace Scopa {
 
         /// <summary>The main function for converting parsed MapFile data into a Unity GameObject with 3D mesh and colliders.
         /// Outputs a lists of built meshes (e.g. so UnityEditor can serialize them)</summary>
-        public static GameObject BuildMapIntoGameObject( MapFile mapFile, ScopaMapConfig config, out Dictionary<Mesh, Transform> meshList ) {
+        public static GameObject BuildMapIntoGameObject( MapFile mapFile, ScopaMapConfig config, out List<ScopaMeshData> meshList ) {
             var rootGameObject = new GameObject( mapName );
             var defaultMaterial = config.GetDefaultMaterial();
 
             BuildMapPrepass( mapFile, config );
             if ( config.findMaterials )
                 CacheMaterialSearch();
-            meshList = ScopaCore.AddGameObjectFromEntityRecursive(rootGameObject, mapFile.Worldspawn, mapName, defaultMaterial, config);
+
+            meshList = new List<ScopaMeshData>(8192);
+            ScopaCore.AddGameObjectFromEntityRecursive(meshList, rootGameObject, mapFile.Worldspawn, mapName, defaultMaterial, config);
 
             // create a separate physics scene for the object, or else we can't raycast against it?
             // var csp = new CreateSceneParameters(LocalPhysicsMode.Physics3D);
@@ -97,12 +99,11 @@ namespace Scopa {
             // SceneManager.MoveGameObjectToScene( rootGameObject, prefabScene );
             // var physicsScene = prefabScene.GetPhysicsScene();
 
-            // we have to wait until the whole map is built before we bake AO, because we need all the colliders in place
-            if ( config.bakeVertexColorAO ) {
-                foreach ( var meshKVP in meshList ) {
-                    if ( meshKVP.Value != null && meshKVP.Value.gameObject.isStatic ) // if the Transform is null, that means it's a collision mesh and we should ignore it for AO purposes
-                        ScopaVertexAO.BakeObject( meshKVP.Key, meshKVP.Value, config.occlusionLength );
-                }
+            // originally this was where we baked AO, but this is now a generalized API that any ScopaMaterialConfig can touch
+            foreach ( var meshData in meshList ) {
+                // if the Transform is null, that means it's a collision mesh and we should ignore it
+                if ( meshData.transform != null && meshData.materialConfig != null && meshData.materialConfig.useOnPostBuildMeshObject) 
+                    meshData.materialConfig.OnPostBuildMeshObject(meshData.transform.gameObject, meshData.mesh, meshData.entityData);
             }
 
             return rootGameObject;
@@ -151,32 +152,18 @@ namespace Scopa {
         }
 
         /// <summary> The main core function for converting entities (worldspawn, func_, etc.) into 3D meshes. </summary>
-        static Dictionary<Mesh, Transform> AddGameObjectFromEntityRecursive( GameObject rootGameObject, Entity rawEntityData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
-            var allMeshes = new Dictionary<Mesh, Transform>();
-
-            var newMeshes = AddGameObjectFromEntity(rootGameObject, new ScopaEntityData(rawEntityData, entityCount), namePrefix, defaultMaterial, config) ;
-            if ( newMeshes != null ) {
-                foreach ( var meshKVP in newMeshes ) {
-                    allMeshes.Add( meshKVP.Key, meshKVP.Value );
-                }
-            }
+        static void AddGameObjectFromEntityRecursive(List<ScopaMeshData> meshList, GameObject rootGameObject, Entity rawEntityData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+            AddGameObjectFromEntity(meshList, rootGameObject, new ScopaEntityData(rawEntityData, entityCount), namePrefix, defaultMaterial, config) ;
             entityCount++;
 
             foreach ( var child in rawEntityData.Children ) {
                 if ( child is Entity && config.IsEntityMergeToWorld(((Entity)child).ClassName) == false ) {
-                    var newMeshChildren = AddGameObjectFromEntityRecursive(rootGameObject, child as Entity, namePrefix, defaultMaterial, config);
-                    if ( newMeshChildren.Count > 0) {
-                        foreach ( var meshKVP in newMeshChildren ) {
-                            allMeshes.Add( meshKVP.Key, meshKVP.Value );
-                        }
-                    }
+                    AddGameObjectFromEntityRecursive(meshList, rootGameObject, child as Entity, namePrefix, defaultMaterial, config);
                 }
             }
-
-            return allMeshes;
         }
 
-        public static Dictionary<Mesh, Transform> AddGameObjectFromEntity( GameObject rootGameObject, ScopaEntityData entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+        public static void AddGameObjectFromEntity(List<ScopaMeshData> meshList, GameObject rootGameObject, ScopaEntityData entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>();
             ScopaMesh.ClearFaceCullingList();
 
@@ -243,7 +230,7 @@ namespace Scopa {
                         var materialOverride = config.GetMaterialOverrideFor(face.TextureName);
 
                         // look for custom user logic for face prepass
-                        if (materialOverride != null && materialOverride.materialConfig != null) {
+                        if (materialOverride != null && materialOverride.materialConfig != null && materialOverride.materialConfig.useOnPrepassBrushFace) {
                             var maybeNewMaterial = materialOverride.materialConfig.OnPrepassBrushFace(solid, face, config, newMaterial);
                             if (maybeNewMaterial == null) {
                                 ScopaMesh.DiscardFace(face);
@@ -289,8 +276,6 @@ namespace Scopa {
             }
 
             // pass 2: now build one mesh + one game object per textureName
-            var meshList = new Dictionary<Mesh, Transform>();
-
             // user can specify a template entityPrefab if desired
             var entityPrefab = config.GetEntityPrefabFor(entData.ClassName);
             var meshPrefab = config.GetMeshPrefabFor(entData.ClassName);
@@ -438,11 +423,11 @@ namespace Scopa {
                 //     smoothNormalAngle
                 // );
                 var newMesh = meshBuildJob.Complete();
-                meshList.Add(newMesh, newMeshObj.transform);
+                meshList.Add( new ScopaMeshData(newMesh, entData, textureKVP.Value.materialConfig, newMeshObj.transform) );
                 meshBuildJob = null;
 
                 // you can inherit ScopaMaterialConfig + override OnBuildMeshObject for extra per-material import logic
-                if ( textureKVP.Value.materialConfig != null ) {
+                if ( textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.useOnBuildMeshObject ) {
                     textureKVP.Value.materialConfig.OnBuildMeshObject( newMeshObj, newMesh );
                 }
 
@@ -467,7 +452,7 @@ namespace Scopa {
             if (colliderJob != null) {
                 var collisionMeshes = colliderJob.Complete();
                 foreach ( var cMesh in collisionMeshes ) {
-                    meshList.Add( cMesh, null ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
+                    meshList.Add( new ScopaMeshData(cMesh) ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
                 }
                 colliderJob = null;
             }
@@ -530,8 +515,6 @@ namespace Scopa {
                 if ( config.callOnEntityImport )
                     entComp.OnEntityImport( entData );
             }
-            
-            return meshList;
         }
 
         static GameObject Instantiate(GameObject prefab) {
@@ -681,6 +664,24 @@ namespace Scopa {
             return !string.IsNullOrWhiteSpace(newPath) && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(newPath));
         }
 
+    }
+
+    public class ScopaMeshData {
+        public Mesh mesh;
+        public ScopaEntityData entityData;
+        public ScopaMaterialConfig materialConfig;
+        public Transform transform;
+
+        public ScopaMeshData(Mesh mesh) {
+            this.mesh = mesh;
+        }
+
+        public ScopaMeshData(Mesh mesh, ScopaEntityData entityData, ScopaMaterialConfig materialConfig, Transform transform) {
+            this.mesh = mesh;
+            this.entityData = entityData;
+            this.materialConfig = materialConfig;
+            this.transform = transform;
+        }
     }
 
 }

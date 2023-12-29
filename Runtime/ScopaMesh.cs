@@ -341,14 +341,16 @@ namespace Scopa {
             NativeArray<int> faceVertexOffsets, faceTriIndexCounts; // index = i
             NativeArray<Vector3> faceVertices;
             NativeArray<Vector4> faceU, faceV; // index = i, .w = scale
-            NativeArray<Vector2> faceShift; // index = i
+            NativeArray<Vector2> faceShift, faceUVoverride; // index = i
             int vertCount, triIndexCount;
 
             public Mesh.MeshDataArray outputMesh;
             Mesh newMesh;
             JobHandle jobHandle;
+            ScopaMapConfig config;
 
-            public MeshBuildingJobGroup(string meshName, Vector3 meshOrigin, IEnumerable<Solid> solids, ScopaMapConfig config, ScopaMapConfig.MaterialOverride textureFilter = null, bool includeDiscardedFaces = false) {
+            public MeshBuildingJobGroup(string meshName, Vector3 meshOrigin, IEnumerable<Solid> solids, ScopaMapConfig config, ScopaMapConfig.MaterialOverride materialOverride = null, bool includeDiscardedFaces = false) {       
+                this.config = config;
                 var faceList = new List<Face>();
                 foreach( var solid in solids) {
                     foreach(var face in solid.Faces) {
@@ -358,28 +360,46 @@ namespace Scopa {
                         if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
                             continue;
 
-                        if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
+                        if ( materialOverride != null && materialOverride.textureName.GetHashCode() != face.TextureName.GetHashCode() )
                             continue;
 
                         faceList.Add(face);
                     }
                 }
 
-                faceVertexOffsets = new NativeArray<int>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-                faceTriIndexCounts = new NativeArray<int>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceVertexOffsets = new NativeArray<int>(faceList.Count+1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceTriIndexCounts = new NativeArray<int>(faceList.Count+1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 for(int i=0; i<faceList.Count; i++) {
                     faceVertexOffsets[i] = vertCount;
                     vertCount += faceList[i].Vertices.Count;
                     faceTriIndexCounts[i] = triIndexCount;
                     triIndexCount += (faceList[i].Vertices.Count-2)*3;
                 }
+                faceVertexOffsets[faceList.Count] = vertCount;
+                faceTriIndexCounts[faceList.Count] = triIndexCount;
 
                 faceVertices = new NativeArray<Vector3>(vertCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 faceU = new NativeArray<Vector4>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 faceV = new NativeArray<Vector4>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 faceShift = new NativeArray<Vector2>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceUVoverride = new NativeArray<Vector2>(vertCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+
                 for(int i=0; i<faceList.Count; i++) {
-                    for(int v=faceVertexOffsets[i]; v < (i<faceVertexOffsets.Length-1 ? faceVertexOffsets[i+1] : vertCount); v++) {
+                    if (materialOverride != null 
+                        && materialOverride.materialConfig != null
+                        && materialOverride.materialConfig.useOnBuildBrushFace 
+                        && materialOverride.materialConfig.OnBuildBrushFace(faceList[i], config, out var overrideUVs)
+                    ) {
+                        for(int u=0; u<overrideUVs.Length; u++) {
+                            faceUVoverride[faceVertexOffsets[i]+u] = overrideUVs[u];
+                        }
+                    } else {
+                        for(int u=faceVertexOffsets[i]; u<faceVertexOffsets[i+1]; u++) { // fill with dummy values to ignore in the Job later
+                            faceUVoverride[u] = new Vector2(MeshBuildingJob.IGNORE_UV, MeshBuildingJob.IGNORE_UV);
+                        }
+                    }
+
+                    for(int v=faceVertexOffsets[i]; v < faceVertexOffsets[i+1]; v++) {
                         faceVertices[v] = faceList[i].Vertices[v-faceVertexOffsets[i]].ToUnity();
                     }
                     faceU[i] = new Vector4(faceList[i].UAxis.X, faceList[i].UAxis.Y, faceList[i].UAxis.Z, faceList[i].XScale);
@@ -405,18 +425,20 @@ namespace Scopa {
                 jobData.faceU = faceU.Reinterpret<float4>();
                 jobData.faceV = faceV.Reinterpret<float4>();
                 jobData.faceShift = faceShift.Reinterpret<float2>();
+                jobData.uvOverride = faceUVoverride.Reinterpret<float2>();
                 #else
                 jobData.faceVertices = faceVertices;
                 jobData.faceU = faceU;
                 jobData.faceV = faceV;
                 jobData.faceShift = faceShift;
+                jobData.uvOverride = faceUVoverride;
                 #endif
 
                 jobData.meshData = outputMesh[0];
                 jobData.scalingFactor = config.scalingFactor;
                 jobData.globalTexelScale = config.globalTexelScale;
-                jobData.textureWidth = textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : config.defaultTexSize;
-                jobData.textureHeight = textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : config.defaultTexSize;
+                jobData.textureWidth = materialOverride?.material?.mainTexture != null ? materialOverride.material.mainTexture.width : config.defaultTexSize;
+                jobData.textureHeight = materialOverride?.material?.mainTexture != null ? materialOverride.material.mainTexture.height : config.defaultTexSize;
                 jobData.meshOrigin = meshOrigin;
                 jobHandle = jobData.Schedule(faceList.Count, 128);
 
@@ -435,9 +457,25 @@ namespace Scopa {
                 newMesh.RecalculateNormals();
                 newMesh.RecalculateBounds();
 
+                if (config.addTangents) {
+                    newMesh.RecalculateTangents();
+                }
+
+                #if UNITY_EDITOR
+                if ( config.addLightmapUV2 ) {
+                    UnwrapParam.SetDefaults( out var unwrap);
+                    unwrap.packMargin *= 2;
+                    Unwrapping.GenerateSecondaryUVSet( newMesh, unwrap );
+                }
+
+                if ( config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
+                    UnityEditor.MeshUtility.SetMeshCompression(newMesh, (ModelImporterMeshCompression)config.meshCompression);
+                #endif
+
                 faceVertexOffsets.Dispose();
                 faceTriIndexCounts.Dispose();
                 faceVertices.Dispose();
+                faceUVoverride.Dispose();
                 faceU.Dispose();
                 faceV.Dispose();
                 faceShift.Dispose();
@@ -457,12 +495,12 @@ namespace Scopa {
             #if SCOPA_USE_BURST
             [ReadOnlyAttribute] public NativeArray<float3> faceVertices;
             [ReadOnlyAttribute] public NativeArray<float4> faceU, faceV; // index = i, .w = scale
-            [ReadOnlyAttribute] public NativeArray<float2> faceShift; // index = i
+            [ReadOnlyAttribute] public NativeArray<float2> faceShift, uvOverride; // index = i
             [ReadOnlyAttribute] public float3 meshOrigin;
             #else            
             [ReadOnlyAttribute] public NativeArray<Vector3> faceVertices;
             [ReadOnlyAttribute] public NativeArray<Vector4> faceU, faceV; // index = i, .w = scale
-            [ReadOnlyAttribute] public NativeArray<Vector2> faceShift; // index = i
+            [ReadOnlyAttribute] public NativeArray<Vector2> faceShift, uvOverride; // index = i
             [ReadOnlyAttribute] public Vector3 meshOrigin;
             #endif
             
@@ -470,11 +508,12 @@ namespace Scopa {
             public Mesh.MeshData meshData;
 
             [ReadOnlyAttribute] public float scalingFactor, globalTexelScale, textureWidth, textureHeight;
+            public const float IGNORE_UV = -99999f;
 
             public void Execute(int i)
             {
                 var offsetStart = faceVertexOffsets[i];
-                var offsetEnd = i<faceVertexOffsets.Length-1 ? faceVertexOffsets[i+1] : faceVertices.Length;
+                var offsetEnd = faceVertexOffsets[i+1];
 
                 #if SCOPA_USE_BURST
                 var outputVerts = meshData.GetVertexData<float3>();
@@ -489,17 +528,22 @@ namespace Scopa {
                 // add all verts, normals, and UVs
                 for( int n=offsetStart; n<offsetEnd; n++ ) {
                     outputVerts[n] = faceVertices[n] * scalingFactor - meshOrigin;
-                    #if SCOPA_USE_BURST
-                    outputUVs[n] = new Vector2(
-                        (math.dot(faceVertices[n], faceU[i].xyz / faceU[i].w) + (faceShift[i].x % textureWidth)) / (textureWidth),
-                        (math.dot(faceVertices[n], faceV[i].xyz / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / (textureHeight)
-                    ) * globalTexelScale;
-                    #else
-                    outputUVs[n] = new Vector2(
-                        (Vector3.Dot(faceVertices[n], faceU[i] / faceU[i].w) + (faceShift[i].x % textureWidth)) / (textureWidth),
-                        (Vector3.Dot(faceVertices[n], faceV[i] / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / (textureHeight)
-                    ) * globalTexelScale;
-                    #endif
+
+                    if (uvOverride[n].x > IGNORE_UV) {
+                        outputUVs[n] = uvOverride[n];
+                    } else {
+                        #if SCOPA_USE_BURST
+                        outputUVs[n] = new float2(
+                            (math.dot(faceVertices[n], faceU[i].xyz / faceU[i].w) + (faceShift[i].x % textureWidth)) / textureWidth,
+                            (math.dot(faceVertices[n], faceV[i].xyz / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / textureHeight
+                        ) * globalTexelScale;
+                        #else
+                        outputUVs[n] = new Vector2(
+                            (Vector3.Dot(faceVertices[n], faceU[i] / faceU[i].w) + (faceShift[i].x % textureWidth)) / (textureWidth),
+                            (Vector3.Dot(faceVertices[n], faceV[i] / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / (textureHeight)
+                        ) * globalTexelScale;
+                        #endif
+                    }
                 }
 
                 // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
@@ -679,7 +723,6 @@ namespace Scopa {
                     var solidOffsetEnd = solidFaceOffsets[i+1];
 
                     var solidVertStart = faceVertexOffsets[solidOffsetStart];
-                    var finalVertCount = faceVertexOffsets[solidOffsetEnd] - solidVertStart;
                     var finalTriIndexCount = faceTriIndexCounts[solidOffsetEnd] - faceTriIndexCounts[solidOffsetStart];
 
                     var meshData = meshDataArray[i];
@@ -696,8 +739,18 @@ namespace Scopa {
                     var canBeBoxCollider = colliderMode == ScopaMapConfig.ColliderImportMode.BoxAndConvex || colliderMode == ScopaMapConfig.ColliderImportMode.BoxColliderOnly;
                     for(int face=solidOffsetStart; face<solidOffsetEnd; face++) {
                         // don't bother doing BoxCollider test if we're forcing BoxColliderOnly
-                        if (canBeBoxCollider && colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly && !IsNormalAxisAligned(facePlaneNormals[face]))
-                            canBeBoxCollider = false;
+                        if (canBeBoxCollider && colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly) {
+                            // but otherwise, test if all face normals are axis aligned... if so, it can be a box collider
+                            #if SCOPA_USE_BURST
+                            var absNormal = math.abs(facePlaneNormals[face]);
+                            #else
+                            var absNormal = faceNormal.Absolute();
+                            #endif
+
+                            canBeBoxCollider = !((absNormal.x > 0.01f && absNormal.x < 0.99f) 
+                                            || (absNormal.z > 0.01f && absNormal.z < 0.99f) 
+                                            || (absNormal.y > 0.01f && absNormal.y < 0.99f));
+                        }
 
                         var vertOffsetStart = faceVertexOffsets[face];
                         var vertOffsetEnd = faceVertexOffsets[face+1];
@@ -722,143 +775,7 @@ namespace Scopa {
                         new SubMeshDescriptor(0, finalTriIndexCount)
                     );
                 }
-
-                #if SCOPA_USE_BURST
-                public static bool IsNormalAxisAligned(float3 faceNormal) {
-                    var absNormal = math.abs(faceNormal);
-                    return !((absNormal.x > 0.01f && absNormal.x < 0.99f) || (absNormal.z > 0.01f && absNormal.z < 0.99f) || (absNormal.y > 0.01f && absNormal.y < 0.99f));
-                }
-                #else
-                public static bool IsNormalAxisAligned(Vector3 faceNormal) {
-                    var absNormal = faceNormal.Absolute();
-                    if ( absNormal.x > 0.01f && absNormal.x < 0.99f ) {
-                        return false;
-                    } else if ( absNormal.z > 0.01f && absNormal.z < 0.99f ) {
-                        return false;
-                    } else if ( absNormal.y > 0.01f && absNormal.y < 0.99f ) {
-                        return false;
-                    }
-                    return true;
-                }
-                #endif
             }
-        }
-
-        /// <summary> given a brush / solid (and optional textureFilter texture name) it generates mesh data for verts / tris / UV list buffers</summary>
-        public static void BufferMeshDataFromSolid(Solid solid, ScopaMapConfig mapConfig, ScopaMapConfig.MaterialOverride textureFilter = null, bool includeDiscardedFaces = false) {
-            foreach (var face in solid.Faces) {
-                if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
-                    continue;
-
-                if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
-                    continue;
-
-                if ( textureFilter != null && textureFilter.textureName.GetHashCode() != face.TextureName.GetHashCode() )
-                    continue;
-
-                BufferScaledMeshFragmentForFace(
-                    solid,
-                    face, 
-                    mapConfig, 
-                    verts, 
-                    tris, 
-                    uvs, 
-                    textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.width : mapConfig.defaultTexSize, 
-                    textureFilter?.material?.mainTexture != null ? textureFilter.material.mainTexture.height : mapConfig.defaultTexSize,
-                    textureFilter != null ? textureFilter.materialConfig : null
-                );
-            }
-        }
-
-        /// <summary> utility function that actually generates the Mesh object </summary>
-        public static Mesh BuildMeshFromBuffers(string meshName, ScopaMapConfig config, Vector3 meshOrigin = default(Vector3), float smoothNormalAngle = 0) {
-            var mesh = new Mesh();
-            mesh.name = meshName;
-
-            if(verts.Count > 65535)
-                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-
-            if ( meshOrigin != default(Vector3) ) {
-                for(int i=0; i<verts.Count; i++) {
-                    verts[i] -= meshOrigin;
-                }
-            }
-
-            mesh.SetVertices(verts);
-            mesh.SetTriangles(tris, 0);
-            mesh.SetUVs(0, uvs);
-
-            mesh.RecalculateBounds();
-
-            mesh.RecalculateNormals(UnityEngine.Rendering.MeshUpdateFlags.DontRecalculateBounds); // built-in Unity method provides a base for SmoothNormalsJobs
-            if ( smoothNormalAngle > 0.01f) {
-                mesh.SmoothNormalsJobs(smoothNormalAngle);
-            }
-
-            if ( config.addTangents )
-                mesh.RecalculateTangents();
-            
-            #if UNITY_EDITOR
-            if ( config.addLightmapUV2 ) {
-                UnwrapParam.SetDefaults( out var unwrap);
-                unwrap.packMargin *= 2;
-                Unwrapping.GenerateSecondaryUVSet( mesh, unwrap );
-            }
-
-            if ( config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
-                UnityEditor.MeshUtility.SetMeshCompression(mesh, (ModelImporterMeshCompression)config.meshCompression);
-            #endif
-
-            mesh.Optimize();
-
-            return mesh;
-        }
-
-        /// <summary> build mesh fragment (verts / tris / uvs), usually run for each face of a solid </summary>
-        static void BufferScaledMeshFragmentForFace(Solid brush, Face face, ScopaMapConfig mapConfig, List<Vector3> verts, List<int> tris, List<Vector2> uvs, int textureWidth = 128, int textureHeight = 128, ScopaMaterialConfig materialConfig = null) {
-            var lastVertIndexOfList = verts.Count;
-
-            faceVerts.Clear();
-            faceUVs.Clear();
-            faceTris.Clear();
-
-            // add all verts and UVs
-            for( int v=0; v<face.Vertices.Count; v++) {
-                faceVerts.Add(face.Vertices[v].ToUnity() * mapConfig.scalingFactor);
-                
-                faceUVs.Add(new Vector2(
-                    (Vector3.Dot(face.Vertices[v].ToUnity(), face.UAxis.ToUnity() / face.XScale) + (face.XShift % textureWidth)) / (textureWidth),
-                    (Vector3.Dot(face.Vertices[v].ToUnity(), face.VAxis.ToUnity() / -face.YScale) + (-face.YShift % textureHeight)) / (textureHeight)
-                ) * mapConfig.globalTexelScale);
-            }
-
-            // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
-            for(int i=2; i<face.Vertices.Count; i++) {
-                faceTris.Add(lastVertIndexOfList);
-                faceTris.Add(lastVertIndexOfList + i - 1);
-                faceTris.Add(lastVertIndexOfList + i);
-            }
-
-            // user override
-            if (materialConfig != null) {
-                materialConfig.OnBuildBrushFace(brush, face, mapConfig, faceVerts, faceUVs, faceTris);
-            }
-
-            // add back to global mesh buffer
-            verts.AddRange(faceVerts);
-            uvs.AddRange(faceUVs);
-            tris.AddRange(faceTris);
-        }
-
-        public static bool IsMeshBufferEmpty() {
-            return verts.Count == 0 || tris.Count == 0;
-        }
-
-        public static void ClearMeshBuffers()
-        {
-            verts.Clear();
-            tris.Clear();
-            uvs.Clear();
         }
 
         public static void WeldVertices(this Mesh aMesh, float aMaxDelta = 0.1f, float maxAngle = 180f)
