@@ -7,6 +7,8 @@ using Scopa.Formats.Texture.Wad.Lumps;
 using Scopa.Formats;
 using Scopa.Formats.Id;
 using UnityEngine;
+using UnityEngine.Rendering;
+
 
 #if UNITY_EDITOR
 using System.Diagnostics;
@@ -110,34 +112,44 @@ namespace Scopa {
         }
 
         public static Material GenerateMaterialOpaque( ScopaWadConfig config ) {
-            // TODO: URP, HDRP
             Material material;
 
             if ( config.opaqueTemplate != null ) {
                 material = new Material(config.opaqueTemplate);
             }
             else {
-                material = new Material(Shader.Find("Standard"));
-                material.SetFloat("_Glossiness", 0.1f);
+                if (GraphicsSettings.currentRenderPipeline != null) {
+                    material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                    material.SetFloat("_Smoothness", 0.1f);
+                } else {
+                    material = new Material(Shader.Find("Standard"));
+                    material.SetFloat("_Glossiness", 0.1f);
+                }
             }
 
             return material;
         }
 
         public static Material GenerateMaterialAlpha( ScopaWadConfig config ) {
-			// TODO: URP, HDRP
 			Material material;
 
 			if ( config.alphaTemplate != null ) {
 				material = new Material(config.alphaTemplate);
 			}
 			else {
-				material = new Material(Shader.Find("Standard"));
-				material.SetFloat("_Glossiness", 0.1f);
-				material.SetFloat("_Mode", 1);
-				material.EnableKeyword("_ALPHATEST_ON");
-				material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
-				material.renderQueue = 2450;
+                if (GraphicsSettings.currentRenderPipeline != null) {
+                    material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                    material.SetFloat("_Smoothness", 0.1f);
+                    material.SetFloat("_AlphaClip", 1);
+                    material.SetFloat("_AlphaToMask", 1);
+                } else {
+                    material = new Material(Shader.Find("Standard"));
+                    material.SetFloat("_Glossiness", 0.1f);
+                    material.SetFloat("_Mode", 1);
+                    material.EnableKeyword("_ALPHATEST_ON");
+                    material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+                    material.renderQueue = 2450;
+                }
 			}
 
             return material;
