@@ -677,6 +677,7 @@ namespace Scopa {
                         boxCol.center = bounds.center;
                         boxCol.size = bounds.size;
                         boxCol.isTrigger = isTrigger;
+                        meshes[i] = null; // and don't save box collider meshes
                     } else { // but usually this is a convex mesh collider
                         var newMeshCollider = newGO.AddComponent<MeshCollider>();
                         newMeshCollider.convex = isTrigger ? true : isConvex;

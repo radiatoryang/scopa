@@ -453,7 +453,8 @@ namespace Scopa {
             if (colliderJob != null) {
                 var collisionMeshes = colliderJob.Complete();
                 foreach ( var cMesh in collisionMeshes ) {
-                    meshList.Add( new ScopaMeshData(cMesh) ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
+                    if (cMesh != null)
+                        meshList.Add( new ScopaMeshData(cMesh) ); // collision meshes have their KVP Value's Transform set to null, so that Vertex Color AO bake knows to ignore them
                 }
                 colliderJob = null;
             }
