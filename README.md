@@ -41,4 +41,7 @@ For more info (i.e. runtime import for modding), see the full [Documentation](Do
 - lots of file format handling from [Sledge Formats](https://github.com/LogicAndTrick/sledge-formats)
 - GPU-based texture resizing from [Unity GPU Texture Resize](https://github.com/ababilinski/unity-gpu-texture-resize)
 - color palette generation from [cSharpColourQuantization](https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/MedianCut.cs)
+
+## Advice
+- I prefer more control, but if you want to pay for something simpler with magic auto configuration then try [Tremble Map Importer (Asset Store)](https://assetstore.unity.com/packages/tools/level-design/tremble-map-importer-277805)
 - looking for a BSP plugin? try [Unity3D BSP Importer](https://github.com/wfowler1/Unity3D-BSP-Importer)
