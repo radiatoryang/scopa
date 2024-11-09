@@ -117,9 +117,10 @@ namespace Scopa {
                 // if there's multiple Materials attached to one Asset, we have to do additional filtering
                 var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
                 foreach ( var asset in allAssets ) {
-                    if ( asset != null && !materials.ContainsKey(asset.name) && asset is Material ) {
-                        // Debug.Log("loaded " + asset.name);
-                        materials.Add(asset.name, asset as Material);
+                    if ( asset != null && asset is Material) {
+                        var key = asset.name.ToLowerInvariant();
+                        if (!materials.ContainsKey(key))
+                            materials.Add(key, asset as Material);
                     }
                 }
 

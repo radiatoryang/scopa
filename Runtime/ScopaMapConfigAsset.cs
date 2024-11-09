@@ -182,13 +182,13 @@ namespace Scopa {
             if (builtinDefaultMaterial == null)
                 builtinDefaultMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>( 
                     GraphicsSettings.currentRenderPipeline != null ?
-                    "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark_URP.mat"
+                    "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDarkURP.mat"
                     : "Packages/com.radiatoryang.scopa/Runtime/Textures/BlockoutDark.mat" 
                 );
             if (builtinDefaultMaterial == null )
                 builtinDefaultMaterial = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>( 
                     GraphicsSettings.currentRenderPipeline != null ?
-                    UnityEditor.AssetDatabase.FindAssets("BlockoutDark_URP.mat")[0] 
+                    UnityEditor.AssetDatabase.FindAssets("BlockoutDarkURP.mat")[0] 
                     : UnityEditor.AssetDatabase.FindAssets("BlockoutDark.mat")[0] 
                 );
             if (builtinDefaultMaterial == null )
