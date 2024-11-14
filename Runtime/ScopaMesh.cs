@@ -510,6 +510,22 @@ namespace Scopa {
             [ReadOnlyAttribute] public float scalingFactor, globalTexelScale, textureWidth, textureHeight;
             public const float IGNORE_UV = -99999f;
 
+            #if SCOPA_USE_BURST
+            // will need this to support non-Valve formats
+            public static float2 Rotate(float2 v, float deltaRadians) {
+                return new float2(
+                    v.x * math.cos(deltaRadians) - v.y * math.sin(deltaRadians),
+                    v.x * math.sin(deltaRadians) + v.y * math.cos(deltaRadians)
+            );
+            #else
+            public static Vector2 Rotate(Vector2 v, float deltaRadians) {
+                return new Vector2(
+                    v.x * Mathf.Cos(deltaRadians) - v.y * Mathf.Sin(deltaRadians),
+                    v.x * Mathf.Sin(deltaRadians) + v.y * Mathf.Cos(deltaRadians)
+            );
+            #endif
+}
+
             public void Execute(int i)
             {
                 var offsetStart = faceVertexOffsets[i];
@@ -534,13 +550,13 @@ namespace Scopa {
                     } else {
                         #if SCOPA_USE_BURST
                         outputUVs[n] = new float2(
-                            (math.dot(faceVertices[n], faceU[i].xyz / faceU[i].w) + (faceShift[i].x % textureWidth)) / textureWidth,
-                            (math.dot(faceVertices[n], faceV[i].xyz / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / textureHeight
+                            (math.dot(faceVertices[n], faceU[i].xyz / faceU[i].w) + faceShift[i].x) / textureWidth,
+                            (math.dot(faceVertices[n], faceV[i].xyz / faceV[i].w) - faceShift[i].y) / textureHeight
                         ) * globalTexelScale;
                         #else
                         outputUVs[n] = new Vector2(
-                            (Vector3.Dot(faceVertices[n], faceU[i] / faceU[i].w) + (faceShift[i].x % textureWidth)) / (textureWidth),
-                            (Vector3.Dot(faceVertices[n], faceV[i] / -faceV[i].w) + (-faceShift[i].y % textureHeight)) / (textureHeight)
+                            (Vector3.Dot(faceVertices[n], faceU[i] / faceU[i].w) + faceShift[i].x) / textureWidth,
+                            (Vector3.Dot(faceVertices[n], faceV[i] / faceV[i].w) - faceShift[i].y) / textureHeight
                         ) * globalTexelScale;
                         #endif
                     }
