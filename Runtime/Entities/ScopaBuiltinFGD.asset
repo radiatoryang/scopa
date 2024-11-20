@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: ScopaBuiltinFGD
   m_EditorClassIdentifier: 
   config:
+    exportModels: 0
     worldspawn:
       className: worldspawn
       classType: 1
@@ -39,7 +40,7 @@ MonoBehaviour:
       - key: spawnflags
         type: 3
         editorLabel: Spawnflags
-        editorHelp: By the way, all Flags types must have key = "spawnflags"
+        editorHelp: By the way, all Flags types must be called spawnflags
         defaultValue: 
         choices: []
         flags: []
@@ -144,7 +145,8 @@ MonoBehaviour:
         serializedVersion: 2
         rgba: 4294181119
       editorHelp: All-purpose entity for buttons, doors, two-state elevators, etc.
-      entityPrefab: {fileID: 279625310630176367, guid: 3e60b18141d8b814489287dffc49ec4a, type: 3}
+      entityPrefab: {fileID: 279625310630176367, guid: 3e60b18141d8b814489287dffc49ec4a,
+        type: 3}
       meshPrefab: {fileID: 0}
       objScale: 0
       baseIncludes:
