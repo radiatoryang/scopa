@@ -170,7 +170,9 @@ namespace Scopa {
                 return null;
             }
 
-            var search = materialOverrides.Where( ov => textureName.Contains(ov.textureName.ToLowerInvariant()) ).FirstOrDefault();
+            var search = materialOverrides.Where( 
+                ov => ov.allowPartialMatch ? textureName.Contains(ov.GetTextureName()) : textureName == ov.GetTextureName() 
+            ).FirstOrDefault();
             return search;
         }
 
@@ -260,8 +262,13 @@ namespace Scopa {
 
         [System.Serializable]
         public class MaterialOverride {
-            [Tooltip("If a face has a texture name that matches this override, then use this Material no matter what. Partial matches count, e.g. an override for 'stone' will match all faces with texture names that contain the word 'stone'")]
-            public string textureName;
+            [Tooltip("(optional) If a face's texture name matches this, then use this Material no matter what. If empty, then use Material's name.")]
+            [SerializeField, FormerlySerializedAs("textureName")]
+            private string textureNameOverride;
+
+            [Tooltip("(default: false) if true, then partial texture name matches count, e.g. an override for 'stone' will match all faces with texture names that contain the word 'stone'")]
+            public bool allowPartialMatch = false;
+
             public Material material;
 
             [Tooltip("(optional) use this to add additional auto-UV / auto-detail treatments to brushes with this texture")]
@@ -269,8 +276,15 @@ namespace Scopa {
             public ScopaMaterialConfig materialConfig;
 
             public MaterialOverride(string texName, Material mat) {
-                this.textureName = texName;
+                this.textureNameOverride = texName;
                 this.material = mat;
+            }
+
+            public string GetTextureName() {
+                if (string.IsNullOrWhiteSpace(textureNameOverride))
+                    return material.name.ToLowerInvariant();
+                else
+                    return textureNameOverride.ToLowerInvariant();
             }
         }
 
