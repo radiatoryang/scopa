@@ -8,6 +8,8 @@ using Scopa.Formats;
 using Scopa.Formats.Id;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Experimental.Rendering;
+
 
 
 #if UNITY_EDITOR
@@ -89,7 +91,9 @@ namespace Scopa {
                 var newTexture = new Texture2D( width, height, usesTransparency ? TextureFormat.RGBA32 : TextureFormat.RGB24, true, config.linearColorspace);
                 newTexture.name = texData.Name.ToLowerInvariant();
                 newTexture.SetPixels32(pixels);
+                #if UNITY_EDITOR
                 newTexture.alphaIsTransparency = usesTransparency;
+                #endif
                 newTexture.filterMode = config.filterMode;
                 newTexture.anisoLevel = config.anisoLevel;
                 newTexture.Apply();
@@ -104,7 +108,7 @@ namespace Scopa {
         }
 
         public static Material BuildMaterialForTexture( Texture2D texture, ScopaWadConfig config ) {
-            var material = texture.alphaIsTransparency ? GenerateMaterialAlpha(config) : GenerateMaterialOpaque(config);
+            var material = GraphicsFormatUtility.HasAlphaChannel(texture.graphicsFormat) ? GenerateMaterialAlpha(config) : GenerateMaterialOpaque(config);
             material.name = texture.name;
             material.mainTexture = texture;
 
@@ -238,7 +242,9 @@ namespace Scopa {
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
                 // Debug.Log($"{mipTex.Name} is {mipTex.Width} x {mipTex.Height}");
 
-                mipTex.MipData = QuantizeToMipmap( texture, mat.color, (int)wadConfig.resolution, out var palette );
+                bool isTransparent = GraphicsFormatUtility.HasAlphaChannel(mat.mainTexture.graphicsFormat);
+
+                mipTex.MipData = QuantizeToMipmap( texture, mat.color, isTransparent, (int)wadConfig.resolution, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {
@@ -267,7 +273,7 @@ namespace Scopa {
             return newWad;
         }
 
-        public static byte[][] QuantizeToMipmap(Texture mainTexture, Color colorTint, int resizeFactor, out Color32[] fixedPalette, bool generatePalette=true)
+        public static byte[][] QuantizeToMipmap(Texture mainTexture, Color colorTint, bool isTransparent, int resizeFactor, out Color32[] fixedPalette, bool generatePalette=true)
         {
             // we have to do this in two passes, with two render textures (to bypass texture read/write limits + for fast processing of pixels)
 
@@ -327,7 +333,7 @@ namespace Scopa {
             // File.WriteAllBytes(  System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop) + "/" + material.name + ".png", resizedTexture.EncodeToPNG() );
             // Debug.Log($"pixel 0 for {material.name} should be {resizedTexture.GetPixels32(0)[0]}");
 
-            ResizeCopyToBuffer((Texture2D)mainTexture, colorTint, width, height, fixedPalette);
+            ResizeCopyToBuffer((Texture2D)mainTexture, colorTint, width, height, fixedPalette, isTransparent);
 
             for( int mip=0; mip<4; mip++) {
                 int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
@@ -352,7 +358,7 @@ namespace Scopa {
 
         // code from https://github.com/ababilinski/unity-gpu-texture-resize
         // and https://support.unity.com/hc/en-us/articles/206486626-How-can-I-get-pixels-from-unreadable-textures-
-        public static void ResizeCopyToBuffer(Texture2D source, Color tint, int targetX, int targetY, Color32[] palette = null) {
+        public static void ResizeCopyToBuffer(Texture2D source, Color tint, int targetX, int targetY, Color32[] palette = null, bool isTransparent = false) {
             RenderTexture tmp = RenderTexture.GetTemporary( 
                 targetX,
                 targetY,
@@ -367,12 +373,12 @@ namespace Scopa {
                 var mat = new Material( Shader.Find("Hidden/PalettizeBlit") );
                 mat.SetColor("_Color", tint);
                 mat.SetColorArray( "_Colors", palette.Select( c => new Color(c.r / 255f, c.g / 255f, c.b / 255f) ).ToArray() );
+                mat.SetInteger("_AlphaIsTransparency", isTransparent ? 1 : 0);
                 Graphics.Blit(source, tmp, mat);
             } else {
                 var mat = new Material( Shader.Find("Hidden/BlitTint") );
                 mat.SetColor("_Color", tint);
                 Graphics.Blit(source, tmp, mat);
-                // Graphics.Blit(source, tmp);
             }
 
             // Backup the currently set RenderTexture

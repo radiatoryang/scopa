@@ -535,6 +535,7 @@ namespace Scopa {
             if ( isNavigationStatic ) {
                 go.isStatic = true;
             } else {
+                #if UNITY_EDITOR
                 GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.ContributeGI 
                     | StaticEditorFlags.OccluderStatic 
                     | StaticEditorFlags.BatchingStatic 
@@ -542,6 +543,7 @@ namespace Scopa {
                     | StaticEditorFlags.OffMeshLinkGeneration 
                     | StaticEditorFlags.ReflectionProbeStatic
                 );
+                #endif
             }
         }
 
