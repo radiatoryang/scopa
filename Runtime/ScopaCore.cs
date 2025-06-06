@@ -198,27 +198,9 @@ namespace Scopa {
                     var plane = face.Plane;
                     face.Plane = new System.Numerics.Plane(new System.Numerics.Vector3(plane.Normal.X, plane.Normal.Z, plane.Normal.Y), plane.D);
                     
-                    // Convert rotation to radians
-                    float radians = -face.Rotation * Mathf.Deg2Rad;
-    
-                    // Create rotation matrix components
-                    float cos = Mathf.Cos(radians);
-                    float sin = Mathf.Sin(radians);
-    
                     // Save original values
-                    var origU = new System.Numerics.Vector3(face.UAxis.X, face.UAxis.Z, face.UAxis.Y);
-                    var origV = new System.Numerics.Vector3(-face.VAxis.X, -face.VAxis.Z, -face.VAxis.Y);
-    
-                    // Apply 2D rotation on the texture plane
-                    face.UAxis = new System.Numerics.Vector3(
-                        origU.X * cos - origV.X * sin,
-                        origU.Y * cos - origV.Y * sin,
-                        origU.Z * cos - origV.Z * sin);
-    
-                    face.VAxis = new System.Numerics.Vector3(
-                        origU.X * sin + origV.X * cos,
-                        origU.Y * sin + origV.Y * cos,
-                        origU.Z * sin + origV.Z * cos);
+                    face.UAxis = new System.Numerics.Vector3(face.UAxis.X, face.UAxis.Z, face.UAxis.Y);
+                    face.VAxis = new System.Numerics.Vector3(-face.VAxis.X, -face.VAxis.Z, -face.VAxis.Y);
 
                     // var direction = ScopaMesh.GetMainAxisToNormal(face.Plane.Normal.ToUnity());
                     // face.UAxis = direction == ScopaMesh.Axis.X ? System.Numerics.Vector3.UnitZ : System.Numerics.Vector3.UnitX;

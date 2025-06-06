@@ -291,6 +291,26 @@ namespace Sledge.Formats.Map.Formats
                     face.SurfaceFlags = (int) numbers[6];
                     face.Value = (float) numbers[7];
                 }
+                
+                float radians = face.Rotation * UnityEngine.Mathf.Deg2Rad;
+                
+                // Create rotation matrix components
+                float cos = UnityEngine.Mathf.Cos(radians);
+                float sin = UnityEngine.Mathf.Sin(radians);
+                
+                // Apply 2D rotation on the texture plane
+                var targetU = new Vector3(
+                    face.UAxis.X * cos - face.VAxis.X * sin,
+                    face.UAxis.Y * cos - face.VAxis.Y * sin,
+                    face.UAxis.Z * cos - face.VAxis.Z * sin);
+                    
+                var targetV = new Vector3(
+                    face.UAxis.X * sin + face.VAxis.X * cos,
+                    face.UAxis.Y * sin + face.VAxis.Y * cos,
+                    face.UAxis.Z * sin + face.VAxis.Z * cos);
+                    
+                face.UAxis = targetU;
+                face.VAxis = targetV;
             }
 
             return face;
