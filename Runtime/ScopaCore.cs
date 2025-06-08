@@ -198,6 +198,7 @@ namespace Scopa {
                     var plane = face.Plane;
                     face.Plane = new System.Numerics.Plane(new System.Numerics.Vector3(plane.Normal.X, plane.Normal.Z, plane.Normal.Y), plane.D);
                     
+                    // Save original values
                     face.UAxis = new System.Numerics.Vector3(face.UAxis.X, face.UAxis.Z, face.UAxis.Y);
                     face.VAxis = new System.Numerics.Vector3(-face.VAxis.X, -face.VAxis.Z, -face.VAxis.Y);
 
