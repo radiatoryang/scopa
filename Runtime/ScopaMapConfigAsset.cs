@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Serialization;
 using System.Collections;
@@ -33,6 +34,9 @@ namespace Scopa {
 
         [Tooltip("(EDITOR-ONLY) (default: true) Generate lightmap UVs using Unity's built-in lightmap unwrapper. If you're not using lightmaps, maybe disable for small memory savings.")]
         public bool addLightmapUV2 = true;
+
+        [Tooltip("(default: everything) Optimize the mesh using Unity's built-in mesh optimization methods. Optimizes the mesh for rendering performance, but may increase import times.")]
+        public ModelImporterMeshOptimization optimizeMesh = ModelImporterMeshOptimization.OptimizeIndexBuffers | ModelImporterMeshOptimization.OptimizeVertexBuffers;
 
         [Tooltip("(EDITOR-ONLY) (default: Off) Use Unity's built-in mesh compressor. Reduces file size but may cause glitches and seams.")]
         public ModelImporterMeshCompression meshCompression = ModelImporterMeshCompression.Off;
@@ -302,6 +306,14 @@ namespace Scopa {
             Low = 1,
             Medium = 2,
             High = 3
+        }
+
+        [Flags]
+        public enum ModelImporterMeshOptimization
+        {
+            None = 0,
+            OptimizeIndexBuffers = 1,
+            OptimizeVertexBuffers = 2,
         }
 
         public ScopaMapConfig ShallowCopy() {
