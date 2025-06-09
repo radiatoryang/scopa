@@ -1,8 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.AI;
 using UnityEngine.Events;
+#if SCOPA_AI_MODULE
+using UnityEngine.AI;
+#endif
 
 namespace Scopa {
     /// <summary> 
@@ -18,7 +20,10 @@ namespace Scopa {
         public bool isImportEnabled = true;
 
         ScopaEntity rootEntity;
+        
+#if SCOPA_AI_MODULE
         NavMeshObstacle navMeshObstacle;
+#endif
 
         /// <summary> hacky override for mover's transform to move / rotate, if null it will use the current game object; beware that overriding this does NOT override the collider that will detect OnTrigger / OnCollision events for touch detection </summary>
         public Transform targetTransform;
@@ -189,6 +194,7 @@ namespace Scopa {
             }
         }
 
+#if SCOPA_AI_MODULE
         public void OnEntityImport( ScopaEntityData entityData ) { 
             // if using navmesh, then might need doors to carve navmesh obstacles, etc.
             navMeshObstacle = GetComponent<NavMeshObstacle>();
@@ -207,5 +213,6 @@ namespace Scopa {
                 }
             }
         }
+#endif
     }
 }
