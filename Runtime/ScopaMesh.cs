@@ -481,6 +481,27 @@ namespace Scopa {
                 faceV.Dispose();
                 faceShift.Dispose();
 
+                // If optimize everything, just combine the two optimizations into one call
+                if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeIndexBuffers) != 0 &&
+                    (config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0)
+                {
+                    newMesh.Optimize();
+                }
+                else
+                {
+                    // Optimize index buffers
+                    if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeIndexBuffers) != 0)
+                    {
+                        newMesh.OptimizeIndexBuffers();
+                    }
+                    
+                    // Optimize vertex buffers
+                    if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0)
+                    {
+                        newMesh.OptimizeReorderVertexBuffer();
+                    }
+                }
+
                 return newMesh;
             }
 
