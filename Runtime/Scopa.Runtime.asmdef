@@ -24,6 +24,11 @@
             "name": "com.unity.collections",
             "expression": "1.0",
             "define": "SCOPA_COLLECTIONS"
+        },
+        {
+            "name": "com.unity.modules.ai",
+            "expression": "",
+            "define": "SCOPA_AI_MODULE"
         }
     ],
     "noEngineReferences": false
