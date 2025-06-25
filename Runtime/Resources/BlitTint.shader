@@ -25,11 +25,7 @@ Shader "Hidden/BlitTint" {
 
 	  		fixed4 frag (v2f_img i) : COLOR
 	  		{
-				#if !UNITY_COLORSPACE_GAMMA
-	   			return pow(tex2D(_MainTex, i.uv), 2.2) * _Color;
-				#else
 				return tex2D(_MainTex, i.uv) * _Color;
-				#endif
 	  		}
 	  		ENDCG
 	 	}

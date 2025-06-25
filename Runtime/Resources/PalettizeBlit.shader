@@ -5,6 +5,7 @@ Shader "Hidden/PalettizeBlit" {
 		_Color ("Main Color", Color) = (1,1,1,1)
 	 	_MainTex ("", 2D) = "white" {}
 		_AlphaIsTransparency ("Alpha Is Transparency", Integer) = 0
+		_Gamma ("", Float) = 1.0
 	}
 
 	SubShader {
@@ -25,6 +26,7 @@ Shader "Hidden/PalettizeBlit" {
 			uniform float4 _Colors[256];
 	  		uniform sampler2D _MainTex;
 			uniform half _AlphaIsTransparency;
+			uniform half _Gamma;
 
 			half3 RGBtoHSV(half3 arg1)
 			{
@@ -48,11 +50,7 @@ Shader "Hidden/PalettizeBlit" {
 				float4 col = float4 (1,1,1,1);
 				float dist = 10000000.0;
 
-				#if !UNITY_COLORSPACE_GAMMA
-	   			float4 original = pow(lerp(1, tex2D(_MainTex, i.uv), _Color.a), 0.454545);
-				#else
-				float4 original = tex2D(_MainTex, i.uv);
-				#endif
+				float4 original = pow(tex2D(_MainTex, i.uv), _Gamma);
 
 				if (_AlphaIsTransparency == 1 && original.a < 0.9) {
 					col.a = 1;
@@ -63,19 +61,15 @@ Shader "Hidden/PalettizeBlit" {
 				half3 hsvA = RGBtoHSV(original.rgb);
 
 	   			for (int i = 0; i < 255; i++) { // ignore index 255, which is reserved for transparency
-					half d = distance(original.rgb, _Colors[i].rgb);
-
-					// Reverted, doesn't actually seem to be better than RGB distance really?
 					// via https://stackoverflow.com/questions/35113979/calculate-distance-between-colors-in-hsv-space
-					// if (hsvA.y > 0.5 || hsvA.z < 0.5) {
-					// 	half saturationWeight = lerp(0.5, 4.0, hsvA.y);
-					// 	half valueWeight = pow((1.0-hsvA.y + 1.0-hsvA.z)*2, 2);
-					// 	half3 hsvB = RGBtoHSV(_Colors[i].rgb);
-					// 	half dh = min(abs(hsvB.x-hsvA.x), 1.0-abs(hsvB.x-hsvA.x))*saturationWeight;
-					// 	half ds = abs(hsvB.y-hsvA.y);
-					// 	half dv = abs(hsvB.z-hsvA.z)*valueWeight;
-					// 	d = sqrt(dh*dh+ds*ds+dv*dv);
-					// }
+
+					half3 hsvB = RGBtoHSV(_Colors[i].rgb);
+					half dh = min(abs(hsvB.x-hsvA.x), 1.0-abs(hsvB.x-hsvA.x));
+					half ds = (hsvB.y-hsvA.y);
+					half dv = (hsvB.z-hsvA.z);
+					half d = sqrt(dh*dh+ds*ds+dv*dv);
+
+					// half d = distance(original.rgb, _Colors[i].rgb);
 
 	   				if (d < dist) {
 	   					dist = d;

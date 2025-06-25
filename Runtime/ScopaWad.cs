@@ -24,9 +24,8 @@ namespace Scopa {
 
         // static buffers for all reading and writing operations, to try to reduce GC
         static Color32[] palette = new Color32[256];
-        static List<ColorBucket> buckets = new List<ColorBucket>(128*128);
-        static List<ColorBucket> newBuckets = new List<ColorBucket>(256);
         public static Texture2D resizedTexture { get; private set; }
+        static WuColorQuantizer quantizer;
 
         #region WAD Reading
 
@@ -280,85 +279,97 @@ namespace Scopa {
             // pass 1: read the texture, and while we're at it, tint it too
             ResizeCopyToBuffer(
                 (Texture2D)mainTexture, 
-                colorTint, 
+                new Color(colorTint.r, colorTint.g, colorTint.b, 1f), // ignore colorTint alpha when tinting the texture
                 Mathf.Max(Mathf.RoundToInt(mainTexture.width / resizeFactor), 4), 
                 Mathf.Max(Mathf.RoundToInt(mainTexture.height / resizeFactor), 4)
             ); 
+            var width = resizedTexture.width;
+            var height = resizedTexture.height;
 
             if ( generatePalette ) {
-                var colors = resizedTexture.GetPixels32();
-                buckets.Clear();
-                buckets.Add( new ColorBucket(colors) );
-                int iterations = 0;
-                const int paletteColorCount = 255;
-                while (buckets.Count < paletteColorCount && iterations < paletteColorCount) {
-                    newBuckets.Clear();
-                    for (var i = 0; i < buckets.Count; i++) {
-                        if (newBuckets.Count + (buckets.Count - i) < paletteColorCount && buckets[i].colorCount > 1) {
-                            buckets[i].Split(out var b1, out var b2);
-                            newBuckets.Add(b1);
-                            newBuckets.Add(b2);
-                        }
-                        else {
-                            newBuckets.AddRange(buckets.GetRange(i, buckets.Count - i));
-                            break;
+                
+                var bytes = resizedTexture.GetRawTextureData();
+
+                if (quantizer == null)
+                    quantizer = new WuColorQuantizer();
+
+                var result = quantizer.Quantize(bytes, 255); // only generate 255 colors (last palette color is for transparency)
+
+                // convert quantizer byte array (ARGB) to Color32
+                fixedPalette = new Color32[256];
+                for(int i = 0; i < result.Palette.Length; i+=4) {
+                    var color = new Color32(result.Palette[i], result.Palette[i+1], result.Palette[i+2], 0xFF);
+                    fixedPalette[i/4] = color;
+                }
+                fixedPalette[255] = new Color32(0, 0, 0xFF, 0xFF); // last palette entry is always blue 255 for transparency
+
+                var mipmap = new byte[4][];
+
+                // mip 0: read directly from the quantizer
+                mipmap[0] = new byte[width*height];
+                for( int y=0; y<height; y++) {
+                    for( int x=0; x<width; x++) {
+                        var index = Mathf.RoundToInt(y*width+x);
+                        if (isTransparent && (int)bytes[index*4+3] < 128) // if original has a transparent pixel, use reserved palette index 0xFF
+                            mipmap[0][(height-1-y)*width + x] = 0xFF;
+                        else
+                            mipmap[0][(height-1-y)*width + x] = result.Bytes[index];
+                    }
+                }
+
+                // mips 1-3: resize and read the alpha
+                for( int mip=1; mip<4; mip++) {
+                    int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
+                    mipmap[mip] = new byte[ (width/factor) * (height/factor) ];
+
+                    ResizeCopyToBuffer(resizedTexture, Color.white, width/factor, height/factor, fixedPalette, isTransparent, mip == 1 ? 0.454545f : 1f);
+                    var indexEncodedAsPixels = resizedTexture.GetPixels();
+
+                    for( int y=0; y<height/factor; y++) {
+                        for( int x=0; x<width/factor; x++) {
+                            // recover palette index from alpha
+                            var index = Mathf.RoundToInt(indexEncodedAsPixels[y*width/factor+x].a * 255f);
+                            // textures are vertically flipped, so have to unflip them
+                            mipmap[mip][(height/factor-1-y)*width/factor + x] = System.Convert.ToByte(index);
                         }
                     }
-                    buckets.Clear();
-                    buckets.AddRange( newBuckets );
-                    iterations++;
                 }
+                return mipmap;
 
-                // if there's empty space for more colors for some reason, pad it out
-                var emptyBucket = new ColorBucket( new Color32[] { new Color32(0x00, 0x00, 0xff, 0xff) } );
-                while ( buckets.Count < paletteColorCount+1 ) {
-                    buckets.Add( emptyBucket );
-                }
-
-                fixedPalette = buckets.Select( bucket => bucket.Color ).ToArray();
             } else {
                 fixedPalette = new Color32[256];
                 for (int i=0; i<256; i++) {
                     fixedPalette[i] = new Color32( QuakePalette.Data[i*3], QuakePalette.Data[i*3+1], QuakePalette.Data[i*3+2], 0xff );
                 }
-            }
-            
-            // pass 2: now that we have a color palette, use render texture to palettize and generate mipmaps all at once
-            var width = resizedTexture.width;
-            var height = resizedTexture.height;
-            var mipmap = new byte[4][];
-
-            // debug
-            // ResizeCopyToBuffer((Texture2D)original, colorTint, width, height, fixedPalette, true);
-            // File.WriteAllBytes(  System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop) + "/" + material.name + ".png", resizedTexture.EncodeToPNG() );
-            // Debug.Log($"pixel 0 for {material.name} should be {resizedTexture.GetPixels32(0)[0]}");
-
-            ResizeCopyToBuffer((Texture2D)mainTexture, colorTint, width, height, fixedPalette, isTransparent);
-
-            for( int mip=0; mip<4; mip++) {
-                int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
-                mipmap[mip] = new byte[ (width/factor) * (height/factor) ];
                 
-                var indexEncodedAsPixels = resizedTexture.GetPixels(mip);
-                for( int y=0; y<height/factor; y++) {
-                    for( int x=0; x<width/factor; x++) {
-                        // textures are vertically flipped, so have to unflip them
-                        // also, ResizeCopyToBuffer saves the palette index in the alpha channel
-                        var index = Mathf.RoundToInt(indexEncodedAsPixels[y*width/factor+x].a * 255f);
-                        // if ( x==0 && y==0 && mip==0) {
-                        //     Debug.Log($"pixel 0 for {material.name} is {index} {Mathf.CeilToInt(index.a * 255f)} = {fixedPalette[Mathf.CeilToInt(index.a * 255f)]}");
-                        // }
-                        mipmap[mip][(height/factor-1-y)*width/factor + x] = System.Convert.ToByte(index);
+                // pass 2: now that we have a color palette, use render texture to palettize and generate mipmaps all at once
+                ResizeCopyToBuffer((Texture2D)mainTexture, colorTint, width, height, fixedPalette, isTransparent);
+                var mipmap = new byte[4][];
+                for( int mip=0; mip<4; mip++) {
+                    int factor = Mathf.RoundToInt( Mathf.Pow(2, mip) );
+                    mipmap[mip] = new byte[ (width/factor) * (height/factor) ];
+                    
+                    var indexEncodedAsPixels = resizedTexture.GetPixels(mip);
+                    for( int y=0; y<height/factor; y++) {
+                        for( int x=0; x<width/factor; x++) {
+                            // textures are vertically flipped, so have to unflip them
+                            // also, ResizeCopyToBuffer saves the palette index in the alpha channel
+                            var index = Mathf.RoundToInt(indexEncodedAsPixels[y*width/factor+x].a * 255f);
+                            // if ( x==0 && y==0 && mip==0) {
+                            //     Debug.Log($"pixel 0 for {material.name} is {index} {Mathf.CeilToInt(index.a * 255f)} = {fixedPalette[Mathf.CeilToInt(index.a * 255f)]}");
+                            // }
+                            mipmap[mip][(height/factor-1-y)*width/factor + x] = System.Convert.ToByte(index);
+                        }
                     }
                 }
+                return mipmap;
             }
-            return mipmap;
         }
 
 
         // code from https://github.com/ababilinski/unity-gpu-texture-resize
         // and https://support.unity.com/hc/en-us/articles/206486626-How-can-I-get-pixels-from-unreadable-textures-
-        public static void ResizeCopyToBuffer(Texture2D source, Color tint, int targetX, int targetY, Color32[] palette = null, bool isTransparent = false) {
+        public static void ResizeCopyToBuffer(Texture2D source, Color tint, int targetX, int targetY, Color32[] palette = null, bool isTransparent = false, float gamma = 1f) {
             RenderTexture tmp = RenderTexture.GetTemporary( 
                 targetX,
                 targetY,
@@ -374,6 +385,7 @@ namespace Scopa {
                 mat.SetColor("_Color", tint);
                 mat.SetColorArray( "_Colors", palette.Select( c => new Color(c.r / 255f, c.g / 255f, c.b / 255f) ).ToArray() );
                 mat.SetInteger("_AlphaIsTransparency", isTransparent ? 1 : 0);
+                mat.SetFloat("_Gamma", gamma);
                 Graphics.Blit(source, tmp, mat);
             } else {
                 var mat = new Material( Shader.Find("Hidden/BlitTint") );
@@ -388,11 +400,11 @@ namespace Scopa {
             RenderTexture.active = tmp;
 
             // Create a new readable Texture2D to copy the pixels to it
-            resizedTexture = new Texture2D(targetX, targetY, TextureFormat.RGBA32, palette != null ? 4 : 0, true );
+            resizedTexture = new Texture2D(targetX, targetY, TextureFormat.RGBA32, false, false);
             resizedTexture.filterMode = FilterMode.Bilinear;
 
             // Copy the pixels from the RenderTexture to the new Texture
-            resizedTexture.ReadPixels(new Rect(0, 0, targetX, targetY), 0, 0, palette != null);
+            resizedTexture.ReadPixels(new Rect(0, 0, targetX, targetY), 0, 0, false);
             resizedTexture.Apply();
 
             // Reset the active RenderTexture
@@ -402,87 +414,7 @@ namespace Scopa {
             RenderTexture.ReleaseTemporary(tmp);
         }
 
-        // median cut color palette quanitization code
-        // adapted from https://github.com/bacowan/cSharpColourQuantization/blob/master/ColourQuantization/MedianCut.cs
-        // used under Unlicense License
-        public class ColorBucket
-        {
-            private readonly IDictionary<Color32, int> colors;
-
-            public int colorCount => colors.Count;
-
-            public Color32 Color { get; }
-
-            public ColorBucket(IEnumerable<Color32> colors)
-            {
-                this.colors = colors.ToLookup(c => c)
-                    .ToDictionary(c => c.Key, c => c.Count());
-                this.Color = Average(this.colors);
-            }
-
-            public ColorBucket(IEnumerable<KeyValuePair<Color32, int>> enumerable)
-            {
-                this.colors = enumerable.ToDictionary(c => c.Key, c => c.Value);
-                this.Color = Average(this.colors);
-            }
-
-            private static Color32 Average(IEnumerable<KeyValuePair<Color32, int>> colors)
-            {
-                var totals = colors.Sum(c => c.Value);
-                return new Color32(
-                    r: System.Convert.ToByte( Mathf.RoundToInt(colors.Sum(c => System.Convert.ToSingle(c.Key.r) * c.Value) / Mathf.Max(1, totals)) ),
-                    g: System.Convert.ToByte( Mathf.RoundToInt(colors.Sum(c => System.Convert.ToSingle(c.Key.g) * c.Value) / Mathf.Max(1, totals)) ),
-                    b: System.Convert.ToByte( Mathf.RoundToInt(colors.Sum(c => System.Convert.ToSingle(c.Key.b) * c.Value) / Mathf.Max(1, totals)) ),
-                    a: 0xff
-                );
-            }
-
-            public bool HasColor(Color32 color)
-            {
-                return colors.ContainsKey(color);
-            }
-
-            public void Split(out ColorBucket bucket1, out ColorBucket bucket2)
-            {
-                var redRange = colors.Keys.Max(c => c.r) - colors.Keys.Min(c => c.r);
-                var greenRange = colors.Keys.Max(c => c.g) - colors.Keys.Min(c => c.g);
-                var blueRange = colors.Keys.Max(c => c.b) - colors.Keys.Min(c => c.b);
-
-                Func<Color32, int> sorter;
-                if (redRange > greenRange)
-                {
-                    if (redRange > blueRange)
-                    {
-                        sorter = c => c.r;
-                    }
-                    else
-                    {
-                        sorter = c => c.b;
-                    }
-                }
-                else
-                {
-                    if (greenRange > blueRange)
-                    {
-                        sorter = c => c.g;
-                    }
-                    else
-                    {
-                        sorter = c => c.b;
-                    }
-                }
-
-                var sorted = colors.OrderBy(c => sorter(c.Key));
-
-                var firstBucketCount = sorted.Count() / 2;
-
-                bucket1 = new ColorBucket(sorted.Take(firstBucketCount));
-                bucket2 = new ColorBucket(sorted.Skip(firstBucketCount));
-            }
-        }
-
-        #endregion
+#endregion
     }
-
 
 }
