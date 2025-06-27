@@ -31,16 +31,6 @@ namespace Scopa {
         static List<Face> allFaces = new List<Face>(8192);
         static HashSet<Face> discardedFaces = new HashSet<Face>(8192);
 
-        static List<Vector3> verts = new List<Vector3>(4096);
-        static List<Vector3> faceVerts = new List<Vector3>(64);
-        static List<int> tris = new List<int>(8192);
-        static List<int> faceTris = new List<int>(32);
-        static List<Vector2> uvs = new List<Vector2>(4096);
-        static List<Vector2> faceUVs = new List<Vector2>(64);
-
-        const float EPSILON = 0.01f;
-
-
         public static void AddFaceForCulling(Face brushFace) {
             allFaces.Add(brushFace);
         }
@@ -103,20 +93,16 @@ namespace Scopa {
 
                 jobData.faceVertexOffsets = cullingOffsets;
                 jobData.cullFaceResults = cullingResults;
-                jobHandle = jobData.Schedule(cullingResults.Length, 32);
+                jobHandle = jobData.Schedule(cullingResults.Length, 64);
             }
 
             public void Complete() {
                 jobHandle.Complete();
 
-                // int culledFaces = 0;
                 for(int i=0; i<cullingResults.Length; i++) {
-                    // if (!allFaces[i].discardWhenBuildingMesh && cullingResults[i])
-                    //     culledFaces++;
                     if(cullingResults[i])
                         discardedFaces.Add(allFaces[i]);
                 }
-                // Debug.Log($"Culled {culledFaces} faces!");
 
                 cullingOffsets.Dispose();
                 cullingVerts.Dispose();
@@ -131,24 +117,17 @@ namespace Scopa {
         #endif
         public struct FaceCullingJob : IJobParallelFor
         {
-            [ReadOnlyAttribute]
-            #if SCOPA_USE_BURST
-            public NativeArray<float3> faceVertices;
-            #else
-            public NativeArray<Vector3> faceVertices;
-            #endif   
-
-            [ReadOnlyAttribute]
-            #if SCOPA_USE_BURST
-            public NativeArray<float4> facePlanes;
-            #else
-            public NativeArray<Vector4> facePlanes;
-            #endif
-
-            [ReadOnlyAttribute]
-            public NativeArray<int> faceVertexOffsets;
             
-            public NativeArray<bool> cullFaceResults;
+            #if SCOPA_USE_BURST
+            [ReadOnlyAttribute] public NativeArray<float3> faceVertices;
+            [ReadOnlyAttribute] public NativeArray<float4> facePlanes;
+            #else
+            [ReadOnlyAttribute] public NativeArray<Vector3> faceVertices;
+            [ReadOnlyAttribute] public NativeArray<Vector4> facePlanes;
+            #endif
+            
+            [ReadOnlyAttribute] public NativeArray<int> faceVertexOffsets;
+            [NativeDisableParallelForRestriction] public NativeArray<bool> cullFaceResults;
 
             public void Execute(int i)
             {
@@ -354,9 +333,6 @@ namespace Scopa {
                 var faceList = new List<Face>();
                 foreach( var solid in solids) {
                     foreach(var face in solid.Faces) {
-                        // if ( face.Vertices == null || face.Vertices.Count == 0) // this shouldn't happen though
-                        //     continue;
-
                         if ( !includeDiscardedFaces && IsFaceCulledDiscard(face) )
                             continue;
 
@@ -546,7 +522,7 @@ namespace Scopa {
                     v.x * Mathf.Sin(deltaRadians) + v.y * Mathf.Cos(deltaRadians)
             );
             #endif
-}
+            }
 
             public void Execute(int i)
             {
