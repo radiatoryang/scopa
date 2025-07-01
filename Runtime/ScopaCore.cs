@@ -21,9 +21,6 @@ using UnityEditor;
 namespace Scopa {
     /// <summary>main class for core Scopa MAP functions</summary>
     public static class ScopaCore {
-        // most mesh functions are in ScopaMesh, but we keep a small vert buffer here to generate Box Colliders
-        static List<Vector3> faceVerts = new List<Vector3>(128);
-
         // (editor only) search for all materials in the project once per import, save results here
         static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
 
@@ -351,20 +348,10 @@ namespace Scopa {
 
             // main loop: for each material, build a mesh and add a game object with mesh components
             foreach ( var textureKVP in materialLookup ) {
-                // ScopaMesh.ClearMeshBuffers();
-                
-                // foreach ( var solid in solids) {
-                //     ScopaMesh.BufferMeshDataFromSolid( solid, config, textureKVP.Value, false);
-                // }
-
-                // if ( ScopaMesh.IsMeshBufferEmpty() ) 
-                //     continue;
-
                 var meshBuildJob = new ScopaMesh.MeshBuildingJobGroup(
                     $"{namePrefix}-{entityObject.name}-{textureKVP.Key}", 
                     entityOrigin,
                     solids,
-                    // faceList[textureKVP.Value],
                     config, 
                     textureKVP.Value, 
                     false
@@ -421,12 +408,6 @@ namespace Scopa {
                     smoothNormalAngle = textureKVP.Value.materialConfig.smoothingAngle;
                 }
 
-                // var newMesh = ScopaMesh.BuildMeshFromBuffers(
-                //     $"{namePrefix}-{entityObject.name}-{textureKVP.Key}", 
-                //     config, 
-                //     entityOrigin,
-                //     smoothNormalAngle
-                // );
                 var newMesh = meshBuildJob.Complete();
                 meshList.Add( new ScopaMeshData(newMesh, entData, textureKVP.Value.materialConfig, newMeshObj.transform) );
                 meshBuildJob = null;
@@ -523,15 +504,6 @@ namespace Scopa {
             }
         }
 
-        static GameObject Instantiate(GameObject prefab) {
-            // using InstantiatePrefab didn't actually help, since the instance still doesn't auto-update and requires manual reimport anyway
-            // #if UNITY_EDITOR
-            //     return PrefabUtility.InstantiatePrefab(prefab) as GameObject;
-            // #else
-                return UnityEngine.Object.Instantiate(prefab);
-            // #endif
-        }
-
         static void SetGameObjectStatic(GameObject go, bool isNavigationStatic = true) {
             if ( isNavigationStatic ) {
                 go.isStatic = true;
@@ -541,129 +513,12 @@ namespace Scopa {
                     | StaticEditorFlags.OccluderStatic 
                     | StaticEditorFlags.BatchingStatic 
                     | StaticEditorFlags.OccludeeStatic 
+                    #if !UNITY_2022_2_OR_NEWER 
                     | StaticEditorFlags.OffMeshLinkGeneration 
+                    #endif
                     | StaticEditorFlags.ReflectionProbeStatic
                 );
                 #endif
-            }
-        }
-
-        /// <summary> for each solid in an Entity, add either a Box Collider or a Mesh Collider component... or make one big merged Mesh Collider </summary>
-        // public static List<Mesh> AddColliders(GameObject gameObject, ScopaEntityData ent, ScopaMapConfig config, string namePrefix, bool forceBoxCollidersForAll = false) {
-        //     var meshList = new List<Mesh>();
-
-        //     var solids = ent.Children.Where( x => x is Solid).Cast<Solid>();
-        //     if ( solids.Count() == 0)
-        //         return meshList;
-
-        //     bool isTrigger = config.IsEntityTrigger(ent.ClassName);
-        //     bool forceConvex = ent.TryGetInt("_convex", out var num) && num == 1;
-
-        //     // just one big Mesh Collider... one collider to rule them all
-        //     if ( forceConvex || (!isTrigger && config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) ) {
-        //         ScopaMesh.ClearMeshBuffers();
-        //         foreach ( var solid in solids ) {
-        //             // omit non-solids and triggers
-        //             if ( mergedEntityData.ContainsKey(solid) && (config.IsEntityNonsolid(mergedEntityData[solid].ClassName) || config.IsEntityTrigger(mergedEntityData[solid].ClassName)) )
-        //                 continue;
-
-        //             ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
-        //         }
-
-        //         var newMesh = ScopaMesh.BuildMeshFromBuffers(namePrefix + "-" + ent.ClassName + "#" + ent.ID.ToString() + "-Collider", config, gameObject.transform.position, -1 );
-        //         var newMeshCollider = gameObject.AddComponent<MeshCollider>();
-        //         newMeshCollider.convex = forceConvex;
-        //         // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
-        //         //     | MeshColliderCookingOptions.EnableMeshCleaning 
-        //         //     | MeshColliderCookingOptions.WeldColocatedVertices 
-        //         //     | MeshColliderCookingOptions.UseFastMidphase;
-        //         newMeshCollider.isTrigger = isTrigger;
-        //         newMeshCollider.sharedMesh = newMesh;
-
-        //         meshList.Add( newMesh );
-
-        //     } // otherwise, generate individual colliders for each brush solid
-        //     else 
-        //     { 
-        //         var solidCount = 0;
-        //         foreach ( var solid in solids ) {
-        //             solidCount++;
-        //             var colliderName = $"{namePrefix}#{ent.ID}-{solidCount}";
-
-        //             // does the brush have an entity data override that was non solid? then ignore this brush
-        //             if ( mergedEntityData.ContainsKey(solid) && config.IsEntityNonsolid(mergedEntityData[solid].ClassName) )
-        //                 continue;
-
-        //             // box collider is the simplest, so we should always try it first       
-        //             if ( (config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly || config.colliderMode != ScopaMapConfig.ColliderImportMode.BoxAndConvex) 
-        //             && TryAddBoxCollider(colliderName, gameObject, solid, config, isTrigger) ) {
-        //                 continue;
-        //             }
-
-        //             // otherwise, use a convex mesh collider
-        //             var newMeshCollider = AddMeshCollider(colliderName, gameObject, solid, config, mergedEntityData.ContainsKey(solid) ? config.IsEntityTrigger(mergedEntityData[solid].ClassName) : isTrigger);
-        //             meshList.Add( newMeshCollider ); 
-        //         }
-        //     }
-
-        //     return meshList;
-        // }
-
-        // /// <summary> given a brush solid, calculate the AABB bounds for all its vertices, and add that Box Collider to the gameObject </summary>
-        // static bool TryAddBoxCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-        //     faceVerts.Clear();
-
-        //     for ( int x=0; x<solid.Faces.Count; x++ ) {
-        //         if ( !solid.Faces[x].Plane.IsOrthogonal() ) {
-        //             return false;
-        //         } else {
-        //             for( int y=0; y<solid.Faces[x].Vertices.Count; y++) {
-        //                 faceVerts.Add( solid.Faces[x].Vertices[y].ToUnity() * config.scalingFactor - gameObject.transform.position);
-        //             }
-        //         }
-        //     }
-
-        //     var bounds = GeometryUtility.CalculateBounds(faceVerts.ToArray(), Matrix4x4.identity);
-        //     var newGO = new GameObject("BoxCollider " + colliderName );
-        //     newGO.transform.SetParent( gameObject.transform );
-        //     newGO.transform.localPosition = Vector3.zero;
-        //     newGO.transform.localRotation = Quaternion.identity;
-        //     newGO.transform.localScale = Vector3.one;
-        //     var boxCol = newGO.AddComponent<BoxCollider>();
-        //     boxCol.center = bounds.center;
-        //     boxCol.size = bounds.size;
-        //     boxCol.isTrigger = isTrigger;
-        //     return true;
-        // }
-
-        // /// <summary> given a brush solid, build a convex mesh from its vertices, and add that Mesh Collider to the gameObject </summary>
-        // static Mesh AddMeshCollider(string colliderName, GameObject gameObject, Solid solid, ScopaMapConfig config, bool isTrigger = false) {
-        //     ScopaMesh.ClearMeshBuffers();
-        //     ScopaMesh.BufferMeshDataFromSolid(solid, config, null, true);
-        //     var newMesh = ScopaMesh.BuildMeshFromBuffers( colliderName + "Collider", config, gameObject.transform.position, -1);
-        
-        //     var newGO = new GameObject("MeshColliderConvex " + colliderName );
-        //     newGO.transform.SetParent( gameObject.transform );
-        //     newGO.transform.localPosition = Vector3.zero;
-        //     newGO.transform.localRotation = Quaternion.identity;
-        //     newGO.transform.localScale = Vector3.one;
-        //     var newMeshCollider = newGO.AddComponent<MeshCollider>();
-        //     newMeshCollider.convex = true;
-        //     // newMeshCollider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation 
-        //     //     | MeshColliderCookingOptions.EnableMeshCleaning 
-        //     //     | MeshColliderCookingOptions.WeldColocatedVertices 
-        //     //     | MeshColliderCookingOptions.UseFastMidphase;
-        //     newMeshCollider.isTrigger = isTrigger;
-        //     newMeshCollider.sharedMesh = newMesh;
-            
-        //     return newMesh;
-        // }
-
-        static float Frac(float decimalNumber) {
-            if ( Mathf.Round(decimalNumber) > decimalNumber ) {
-                return (Mathf.Ceil(decimalNumber) - decimalNumber);
-            } else {
-                return (decimalNumber - Mathf.Floor(decimalNumber));
             }
         }
 

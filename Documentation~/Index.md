@@ -19,9 +19,11 @@ This is a custom [Unity Package](https://docs.unity3d.com/Manual/PackagesList.ht
 2. click the "+" button and select "add package from Git URL" [(see Unity Manual: Installing from a Git URL)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html)
 3. paste the .git URL of this repo: `https://github.com/radiatoryang/scopa.git` and click Add.
 
-If you're using an older version of Unity or don't want to use the Package Manager, then you can also clone, submodule, or download+unzip this repo into your /Assets/ or /Packages/ folder. 
+If you're using an older version of Unity or don't want to use the Package Manager, you can also clone, submodule, or download + unzip this repo into your /Packages/ folder. If you manually install like this, make sure the dependencies get installed too:
 
-This package has zero dependencies, but has optional [Burst](https://docs.unity3d.com/Packages/com.unity.burst@1.8/manual/index.html) support for significantly faster map import. Just install the Burst package and Scopa will automatically detect it and use Burst functions.
+Dependencies: [Unity.Collections](https://docs.unity3d.com/Packages/com.unity.collections@latest/) and [Unity.Mathematics](https://docs.unity3d.com/Packages/com.unity.mathematics@latest) if you don't already have them from URP / HDRP. 
+
+[Burst](https://docs.unity3d.com/Packages/com.unity.burst@latest/) is optional but strongly recommended for much faster map imports.
 
 ## Usage
 

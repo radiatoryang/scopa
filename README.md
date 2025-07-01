@@ -1,6 +1,6 @@
 # Scopa
 
-*Scopa* ("broom" in Latin) is a Unity level design plugin that adds supports for various Quake / Half-Life / Source file formats. Like [Qodot](https://github.com/QodotPlugin/qodot-plugin) but for Unity. To build levels, we strongly recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom) and the Quake 1 .MAP file format.
+*Scopa* ("broom" in Latin) is a Unity level design plugin that adds support for various Quake / Half-Life / Source map file formats. Like [func_godot](https://github.com/func-godot/func_godot_plugin) but for Unity. To build levels, we strongly recommend [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom).
 
 # WARNING: in unstable early development, not ready for production use yet, might change a lot or break
 
@@ -13,7 +13,9 @@
 
 ## Installation
 
-This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2020.1 or later. To install, open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html) (TIP: You'll probably need to [install Git](https://git-scm.com/downloads) first.) There's zero dependencies, but if you have [Burst](https://docs.unity3d.com/Packages/com.unity.burst@1.8/manual/index.html) installed then map imports will be significantly faster.
+This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2020.1 or later. To install, open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html)
+
+Dependencies: [Unity.Collections](https://docs.unity3d.com/Packages/com.unity.collections@latest/) and [Unity.Mathematics](https://docs.unity3d.com/Packages/com.unity.mathematics@latest). [Burst](https://docs.unity3d.com/Packages/com.unity.burst@latest/) is optional but strongly recommended for much faster map imports.
 
 ## Usage
 
@@ -23,7 +25,7 @@ Put a supported file (MAP, RMF, VMF, JMF, WAD) in your `/Assets/` folder and it'
 
 **Do your edits in the level editor, not in Unity!** Any in-editor changes may be erased when you re-import the .MAP again. Treat the .MAP file as the [single source of truth](https://en.wikipedia.org/wiki/Single_source_of_truth). 
 
-For more info (i.e. runtime import for modding), see the full [Documentation](Documentation~/Index.md).
+For more info, see [Documentation](Documentation~/Index.md).
 
 ## Limitations
 

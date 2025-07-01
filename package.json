@@ -12,5 +12,9 @@
     "email": "2285943+radiatoryang@users.noreply.github.com",
     "url": "https://debacle.us"
   },
+  "dependencies": {
+    "com.unity.mathematics": "1.2.1",
+    "com.unity.collections": "1.0.0"
+  },
   "type": "tool"
 }
