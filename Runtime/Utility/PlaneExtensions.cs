@@ -15,15 +15,15 @@ namespace Scopa {
             return true;
         }
 
-        public static ScopaMesh.Axis GetMainAxisToNormal(this UnityEngine.Plane _plane) {
-            // VHE prioritises the axes in order of X, Y, Z.
-            // so in Unity land, that's X, Z, and Y
-            var norm = _plane.normal.Absolute();
+        // public static ScopaMesh.Axis GetMainAxisToNormal(this UnityEngine.Plane _plane) {
+        //     // VHE prioritises the axes in order of X, Y, Z.
+        //     // so in Unity land, that's X, Z, and Y
+        //     var norm = _plane.normal.Absolute();
 
-            if (norm.x >= norm.y && norm.x >= norm.z) return ScopaMesh.Axis.X;
-            if (norm.z >= norm.y) return ScopaMesh.Axis.Z;
-            return ScopaMesh.Axis.Y;
-        }
+        //     if (norm.x >= norm.y && norm.x >= norm.z) return ScopaMesh.Axis.X;
+        //     if (norm.z >= norm.y) return ScopaMesh.Axis.Z;
+        //     return ScopaMesh.Axis.Y;
+        // }
 
     }
 }
