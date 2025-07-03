@@ -270,7 +270,7 @@ namespace Scopa {
                 // var finalVisibleMeshCount = textureData.Where( tex => tex.textureIndex >= 0).Count();
                 meshDataArray = Mesh.AllocateWritableMeshData(textureNames.Count);
                 for (int i = 0; i < textureNames.Count; i++) {
-                    Debug.Log($"meshData {i}: {textureData[i]}");
+                    // Debug.Log($"meshData {i}: {textureData[i]}");
                     var meshData = meshDataArray[i];
                     meshData.SetVertexBufferParams(meshCounts[i].vertCount,
                         new VertexAttributeDescriptor(VertexAttribute.Position),
@@ -298,7 +298,7 @@ namespace Scopa {
             }
 
 #if SCOPA_USE_BURST
-            [BurstCompile]
+            [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
             public struct VertJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<double4> facePlanes;
@@ -435,7 +435,7 @@ namespace Scopa {
 //             }
 
 #if SCOPA_USE_BURST
-            [BurstCompile]
+            [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
             public struct VertCountJob : IJob {
                 public NativeStream vertStream;
@@ -462,7 +462,7 @@ namespace Scopa {
             /// <summary> Job that does a simple occlusion test: for each plane/face, is it covered up by another plane/face in same brush?
             /// If it is, then set its faceData as culled.</summary>
             #if SCOPA_USE_BURST
-            [BurstCompile]
+            [BurstCompile(FloatMode = FloatMode.Fast)]
             #endif
             public struct OcclusionJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<float3> faceVerts;
@@ -477,9 +477,9 @@ namespace Scopa {
                     // test face (i) against all other faces (n) 
                     for(int n=0; n<faceData.Length; n++) {
                         // Debug.Log($"OcclusionJob {i} - test {n}");
-                        // first, test (1) share similar plane distance OR (2) face opposite directions
-                        // we are testing the NEGATIVE case for early out
-                        if ( math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > -0.999f )
+                        // early out test: if any of these are true, then occlusion is impossible...
+                        // (1) if other face is culled OR (2) if they're far apart OR (3) face similar directions
+                        if ( faceMeshData[n].materialIndex < 0 || math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > 0.99d )
                             continue;
 
                         // now test whether this face's vertices are completely inside another
@@ -497,7 +497,7 @@ namespace Scopa {
 
                         // 2D math is easier, so let's ignore the least important axis
                         var foundUnoccludedVert = false;
-                        var ignoreAxis = GetIgnoreAxis(planes[i]);
+                        var ignoreAxis = GetIgnoreAxis(math.abs(planes[i]));
                         for( int x=offsetStart; x<offsetEnd && !foundUnoccludedVert; x++ ) {
                             var point = faceVerts[x] + math.normalize(center - faceVerts[x]) * 0.2f; // shrink face point slightly
                             switch (ignoreAxis) {
@@ -508,12 +508,9 @@ namespace Scopa {
                         }
                         otherPolygon.Dispose();
 
-                        // if this face has a vert outside of the polygon, then it's not occluded... don't cull it!
-                        if (foundUnoccludedVert) 
-                            continue;
-
-                        // otherwise, this face should be culled
-                        faceMeshData[i] = new(faceMeshData[i].materialIndex, true);
+                        // if no verts outside polygon, then it's occluded... cull it!
+                        if (!foundUnoccludedVert)
+                            faceMeshData[i] *= new int3(0, 0, -1);
                         return;
                     }
                 }
@@ -561,7 +558,7 @@ namespace Scopa {
             }
 
 #if SCOPA_USE_BURST
-            [BurstCompile]
+            [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
             public struct MeshCountJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
@@ -576,7 +573,8 @@ namespace Scopa {
 
                     int vertCount = 0, triCount = 0;
                     for(int face=0; face<faceData.Length; face++) {
-                        if (faceMeshDataReadOnly[face].materialIndex != i) // ignore already culled faces, ignore any face not in this mesh
+                        // ignore already culled faces, ignore any face not in this mesh
+                        if (faceMeshDataReadOnly[face].materialIndex != i) 
                             continue;
 
                         faceMeshData[face] = new(vertCount, triCount, i);
@@ -589,7 +587,7 @@ namespace Scopa {
             }
 
 #if SCOPA_USE_BURST
-            [BurstCompile]
+            [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
             public struct MeshJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
@@ -694,7 +692,7 @@ namespace Scopa {
                         if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0)
                             newMesh.OptimizeReorderVertexBuffer();
                     }
-                    Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
+                    // Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
                     results.Add(new(newMesh, null, textureToMaterial[textureNames[i]], null));
                 }
 
@@ -711,8 +709,10 @@ namespace Scopa {
                 vertStream.Dispose();
                 faceVerts.Dispose();
                 faceData.Dispose();
+                faceMeshData.Dispose();
                 faceUVData.Dispose();
                 textureData.Dispose();
+                meshCounts.Dispose();
             }
         }
 
