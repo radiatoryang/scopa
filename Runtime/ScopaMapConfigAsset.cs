@@ -35,9 +35,8 @@ namespace Scopa {
         [Tooltip("(EDITOR-ONLY) (default: true) Generate lightmap UVs using Unity's built-in lightmap unwrapper. If you're not using lightmaps, maybe disable for small memory savings.")]
         public bool addLightmapUV2 = true;
 
-        [Tooltip("(default: everything) Optimize the mesh using Unity's built-in mesh optimization methods. Optimizes the mesh for rendering performance, but may increase import times.")]
-        public ModelImporterMeshOptimization optimizeMesh = ModelImporterMeshOptimization.OptimizeIndexBuffers | ModelImporterMeshOptimization.OptimizeVertexBuffers;
-
+        [Tooltip("(default: None) Optimize the mesh using Unity's built-in mesh optimization methods. Optimizes the mesh for rendering performance, but may increase import times... or even crash Unity.")]
+        public ModelImporterMeshOptimization optimizeMesh = ModelImporterMeshOptimization.None;
         [Tooltip("(EDITOR-ONLY) (default: Off) Use Unity's built-in mesh compressor. Reduces file size but may cause glitches and seams.")]
         public ModelImporterMeshCompression meshCompression = ModelImporterMeshCompression.Off;
 
@@ -110,12 +109,12 @@ namespace Scopa {
 
         static Material builtinDefaultMaterial = null;
 
-        /// <summary> note: textureName must already be ToLowerInvariant() </summary>
-        public bool IsTextureNameCulled(string textureName) {
-            if ( string.IsNullOrWhiteSpace(textureName) )
+        /// <summary> note: textureName is NOT case sensitive, no need to convert ToLowerInvariant() </summary>
+        public bool IsTextureNameCulled(string textureNameSearch) {
+            if ( string.IsNullOrWhiteSpace(textureNameSearch) )
                 return true;
 
-            var search = textureName;
+            var search = textureNameSearch.ToLowerInvariant();
             for(int i=0; i<cullTextures.Count; i++) {
                 if ( search.Contains(cullTextures[i]) ) {
                     return true;
@@ -168,14 +167,15 @@ namespace Scopa {
             return false;
         }
 
-        /// <summary> note: textureName must already be ToLowerInvariant() </summary>
-        public MaterialOverride GetMaterialOverrideFor(string textureName) {
+        /// <summary> note: textureName is NOT case sensitive, no need to convert ToLowerInvariant() anymore </summary>
+        public MaterialOverride GetMaterialOverrideFor(string textureNameSearch) {
             if ( materialOverrides == null || materialOverrides.Length == 0) {
                 return null;
             }
 
+            textureNameSearch = textureNameSearch.ToLowerInvariant();
             var search = materialOverrides.Where( 
-                ov => ov.allowPartialMatch ? textureName.Contains(ov.GetTextureName()) : textureName == ov.GetTextureName() 
+                ov => ov.allowPartialMatch ? textureNameSearch.Contains(ov.GetTextureNameForSearching()) : textureNameSearch == ov.GetTextureNameForSearching() 
             ).FirstOrDefault();
             return search;
         }
@@ -284,7 +284,7 @@ namespace Scopa {
                 this.material = mat;
             }
 
-            public string GetTextureName() {
+            public string GetTextureNameForSearching() {
                 if (string.IsNullOrWhiteSpace(textureNameOverride))
                     return material.name.ToLowerInvariant();
                 else

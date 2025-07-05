@@ -22,11 +22,6 @@ using UnityEditor;
 namespace Scopa {
     /// <summary>main class for core Scopa MAP functions</summary>
     public static class ScopaCore {
-        // (editor only) search for all materials in the project once per import, save results here
-        static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
-
-        // static Dictionary<Solid, Entity> mergedEntityData = new Dictionary<Solid, Entity>(4096);
-
         static string mapName = "NEW_MAPFILE";
         static int entityCount = 0;
         
@@ -82,26 +77,30 @@ namespace Scopa {
         /// Outputs a lists of built meshes (e.g. so UnityEditor can serialize them)</summary>
         public static GameObject BuildMapIntoGameObject( MapFile mapFile, ScopaMapConfig config, out List<ScopaMeshData> meshList ) {
             var rootGameObject = new GameObject( mapName );
-            var defaultMaterial = config.GetDefaultMaterial();
 
-            BuildMapPrepass( mapFile, config );
-            if ( config.findMaterials )
-                CacheMaterialSearch();
+            var mergedEntityData = PrepassEntityRecursive( mapFile.Worldspawn, mapFile.Worldspawn, config );
 
             meshList = new List<ScopaMeshData>(8192);
-            ScopaCore.AddGameObjectFromEntityRecursive(meshList, rootGameObject, mapFile.Worldspawn, mapName, defaultMaterial, config);
+            ScopaCore.AddGameObjectFromEntityRecursive(
+                meshList, 
+                rootGameObject, 
+                mapFile.Worldspawn, 
+                mapName, 
+                config, 
+                config.findMaterials ? CacheMaterialSearch() : null,
+                mergedEntityData
+            );
             return rootGameObject;
         }
 
-        static void CacheMaterialSearch() {
+        static Dictionary<string, Material> CacheMaterialSearch() {
             #if UNITY_EDITOR
-            materials.Clear();
-
             // var findTimer = new Stopwatch();
             // findTimer.Start();
             var materialSearch = AssetDatabase.FindAssets("t:Material a:assets");
             // findTimer.Stop();
 
+            var materials = new Dictionary<string, Material>(materialSearch.Length);
             foreach ( var materialSearchGUID in materialSearch) {
                 // if there's multiple Materials attached to one Asset, we have to do additional filtering
                 var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
@@ -114,48 +113,51 @@ namespace Scopa {
                 }
             }
             // Debug.Log($"CacheMaterialSearch: {findTimer.ElapsedMilliseconds} ms / {forTimer.ElapsedMilliseconds} ms");
+            return materials;
             #else
             Debug.Log("CacheMaterialSearch() is not available at runtime.");
+            return null;
             #endif
         }
 
-        /// <summary>Before generating game objects, we may want to modify some of the MapFile data. For example, when merging entities into worldspawn.</summary>
-        static void BuildMapPrepass( MapFile mapFile, ScopaMapConfig config ) {
-            PrepassEntityRecursive( mapFile.Worldspawn, mapFile.Worldspawn, config );
-        }
-
-        /// <summary>Core recursive function for traversing entity tree and pre-passing each entity</summary>
-        static void PrepassEntityRecursive( Worldspawn worldspawn, Entity ent, ScopaMapConfig config) {
+        /// <summary>Core recursive function for traversing entity tree and pre-passing each entity. 
+        /// Before generating game objects, we may want to modify some of the MapFile data. 
+        /// For example, when merging entities into worldspawn.</summary>
+        static Dictionary<Solid, Entity> PrepassEntityRecursive( Worldspawn worldspawn, Entity ent, ScopaMapConfig config) {
+            var mergedEntityData = new Dictionary<Solid, Entity>();
             for (int i=0; i<ent.Children.Count; i++) {
                 if ( ent.Children[i] is Entity ) {
-                    PrepassEntityRecursive( worldspawn, ent.Children[i] as Entity, config );
+                    var moreMerges = PrepassEntityRecursive( worldspawn, ent.Children[i] as Entity, config );
+                    foreach(var merge in moreMerges) {
+                        mergedEntityData.Append(merge);
+                    }
                 } // merge child brush to worldspawn
                 else if ( config.IsEntityMergeToWorld(ent.ClassName) && ent.Children[i] is Solid ) {
-                    // mergedEntityData.Add(((Solid)ent.Children[i]), ent); // but preserve old entity data for mesh / collider generation
+                    mergedEntityData.Add(((Solid)ent.Children[i]), ent); // but preserve old entity data for mesh / collider generation
                     worldspawn.Children.Add(ent.Children[i]);
                     ent.Children.RemoveAt(i);
                     i--;
                     continue;
                 }
             }
-
+            return mergedEntityData;
         }
 
         /// <summary> The main core function for converting entities (worldspawn, func_, etc.) into 3D meshes. </summary>
-        static void AddGameObjectFromEntityRecursive(List<ScopaMeshData> meshList, GameObject rootGameObject, Entity rawEntityData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
-            AddGameObjectFromEntity(meshList, rootGameObject, new ScopaEntityData(rawEntityData, entityCount), namePrefix, defaultMaterial, config) ;
+        static void AddGameObjectFromEntityRecursive(List<ScopaMeshData> meshList, GameObject rootGameObject, Entity rawEntityData, string namePrefix, ScopaMapConfig config, Dictionary<string, Material> materialSearch, Dictionary<Solid, Entity> mergedEntityData ) {
+            AddGameObjectFromEntity(meshList, rootGameObject, new ScopaEntityData(rawEntityData, entityCount), namePrefix, config, materialSearch, mergedEntityData) ;
             entityCount++;
 
             foreach ( var child in rawEntityData.Children ) {
                 if ( child is Entity && config.IsEntityMergeToWorld(((Entity)child).ClassName) == false ) {
-                    AddGameObjectFromEntityRecursive(meshList, rootGameObject, child as Entity, namePrefix, defaultMaterial, config);
+                    AddGameObjectFromEntityRecursive(meshList, rootGameObject, child as Entity, namePrefix, config, materialSearch, mergedEntityData);
                 }
             }
         }
 
-        public static void AddGameObjectFromEntity(List<ScopaMeshData> meshList, GameObject rootGameObject, ScopaEntityData entData, string namePrefix, Material defaultMaterial, ScopaMapConfig config ) {
+        public static void AddGameObjectFromEntity(List<ScopaMeshData> meshList, GameObject rootGameObject, ScopaEntityData entData, string namePrefix, ScopaMapConfig config, Dictionary<string, Material> materialSearch, Dictionary<Solid, Entity> mergedEntityData) {
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>().ToArray();
-            var megaJob = solids.Length > 0 ? new ScopaMesh.ScopaMeshJobGroup(config, solids) : null;
+            var meshJobs = solids.Length > 0 ? new ScopaMesh.ScopaMeshJobGroup(config, namePrefix, entData, solids, mergedEntityData, materialSearch) : null;
 
             // // for worldspawn, pivot point should be 0, 0, 0... else, see if origin is defined... otherwise, calculate min of bounds
             // var calculateOrigin = entData.ClassName.ToLowerInvariant() != "worldspawn";
@@ -427,7 +429,7 @@ namespace Scopa {
             //     }
             // }
                 
-            var results = megaJob != null ? megaJob.CompleteJobsAndGetMeshes() : new List<ScopaMeshData>();
+            var results = meshJobs != null ? meshJobs.CompleteJobsAndGetMeshes() : new List<ScopaMeshData>();
             if (results.Count > 0)
                 meshList.AddRange(results);
             
