@@ -25,7 +25,7 @@ namespace Scopa {
         // (editor only) search for all materials in the project once per import, save results here
         static Dictionary<string, Material> materials = new Dictionary<string, Material>(512);
 
-        static Dictionary<Solid, Entity> mergedEntityData = new Dictionary<Solid, Entity>(4096);
+        // static Dictionary<Solid, Entity> mergedEntityData = new Dictionary<Solid, Entity>(4096);
 
         static string mapName = "NEW_MAPFILE";
         static int entityCount = 0;
@@ -90,14 +90,18 @@ namespace Scopa {
 
             meshList = new List<ScopaMeshData>(8192);
             ScopaCore.AddGameObjectFromEntityRecursive(meshList, rootGameObject, mapFile.Worldspawn, mapName, defaultMaterial, config);
-
             return rootGameObject;
         }
 
         static void CacheMaterialSearch() {
             #if UNITY_EDITOR
             materials.Clear();
-            var materialSearch = AssetDatabase.FindAssets("t:Material");
+
+            // var findTimer = new Stopwatch();
+            // findTimer.Start();
+            var materialSearch = AssetDatabase.FindAssets("t:Material a:assets");
+            // findTimer.Stop();
+
             foreach ( var materialSearchGUID in materialSearch) {
                 // if there's multiple Materials attached to one Asset, we have to do additional filtering
                 var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
@@ -108,8 +112,8 @@ namespace Scopa {
                             materials.Add(key, asset as Material);
                     }
                 }
-
             }
+            // Debug.Log($"CacheMaterialSearch: {findTimer.ElapsedMilliseconds} ms / {forTimer.ElapsedMilliseconds} ms");
             #else
             Debug.Log("CacheMaterialSearch() is not available at runtime.");
             #endif
@@ -127,7 +131,7 @@ namespace Scopa {
                     PrepassEntityRecursive( worldspawn, ent.Children[i] as Entity, config );
                 } // merge child brush to worldspawn
                 else if ( config.IsEntityMergeToWorld(ent.ClassName) && ent.Children[i] is Solid ) {
-                    mergedEntityData.Add(((Solid)ent.Children[i]), ent); // but preserve old entity data for mesh / collider generation
+                    // mergedEntityData.Add(((Solid)ent.Children[i]), ent); // but preserve old entity data for mesh / collider generation
                     worldspawn.Children.Add(ent.Children[i]);
                     ent.Children.RemoveAt(i);
                     i--;
