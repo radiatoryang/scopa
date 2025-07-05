@@ -1,5 +1,5 @@
 // uncomment to enable debug messages
-// #define SCOPA_MESH_DEBUG
+#define SCOPA_MESH_DEBUG
 // #define SCOPA_MESH_VERBOSE
 
 #if SCOPA_MESH_DEBUG
@@ -57,12 +57,12 @@ namespace Scopa {
             public NativeArray<float3> faceVerts;
 
             public NativeArray<ScopaFaceData> faceData;
-            public NativeArray<ScopaFaceMeshData> faceMeshData;
+            public NativeArray<ScopaFaceMeshData> faceMeshData, colliderFaceMeshData;
             public NativeArray<ScopaFaceUVData> faceUVData;
-            public Mesh.MeshDataArray meshDataArray;
+            public Mesh.MeshDataArray meshDataArray, colliderMeshDataArray;
 
             /// <summary> Burst-compatible list of various metadata / counters, corresponds to textureNames list </summary>
-            public NativeArray<ScopaMeshCounts> meshCounts;
+            public NativeArray<ScopaMeshCounts> meshCounts, colliderMeshCounts;
 
             /// <summary> Managed list of all texture names, verbatim </summary>
             public List<string> textureNames = new();
@@ -77,24 +77,24 @@ namespace Scopa {
 
             JobHandle finalJobHandle;
 
-            #if SCOPA_MESH_DEBUG
+#if SCOPA_MESH_DEBUG
             Dictionary<string, Stopwatch> timers = new();
-            #endif
+#endif
 
             void StartTimer(string timerLabel) {
-                #if SCOPA_MESH_DEBUG
+#if SCOPA_MESH_DEBUG
                 var timer = new Stopwatch();
                 timers.Add(timerLabel, timer);
                 timer.Start();
-                #endif
+#endif
             }
 
             void StopTimer(string timerLabel) {
-                #if SCOPA_MESH_DEBUG
+#if SCOPA_MESH_DEBUG
                 if (!timers.ContainsKey(timerLabel))
                     Debug.LogError($"no timer called {timerLabel}");
                 timers[timerLabel].Stop();
-                #endif
+#endif
             }
 
             public ScopaMeshJobGroup(ScopaMapConfig config, string namePrefix, ScopaEntityData entity, Solid[] solids, Dictionary<Solid, Entity> mergedEntityData, Dictionary<string, Material> materialSearch = null) {
@@ -200,7 +200,7 @@ namespace Scopa {
 
                 vertCountJobHandle.Complete();
                 StopTimer("VertCount");
-                
+
                 if (config.removeHiddenFaces) {
                     StartTimer("Occlusion");
                     var planeLookup = new NativeParallelMultiHashMap<int4, int>(planeCount, Allocator.TempJob);
@@ -210,7 +210,7 @@ namespace Scopa {
                         planeLookup = planeLookup
                     };
                     planeLookupJob.Run(planeCount);
-                    
+
                     var occlusionJob = new OcclusionJob {
                         faceVerts = faceVerts,
                         planes = planes,
@@ -265,7 +265,7 @@ namespace Scopa {
                 finalJobHandle = meshJob.Schedule(planeCount, 128);
 
                 // TODO: vertex snap + smooth normals job
-                
+
                 // StartTimer("VertSnap");
                 // var snappingJob = new VertSnapJob {
                 //     facePlanes = planes,
@@ -276,7 +276,7 @@ namespace Scopa {
                 // };
                 // snappingJob.Schedule(planeOffsets.Length, 128).Complete();
                 // StopTimer("VertSnap");
-                
+
             }
 
             /// <summary> Per-brush job that intersects planes to generate vertices.
@@ -324,9 +324,9 @@ namespace Scopa {
                         vertStream.EndForEachIndex();
                         polygon.Dispose();
                     }
-                    #if SCOPA_MESH_VERBOSE
+#if SCOPA_MESH_VERBOSE
                     Debug.Log($"VertJob finished job {i} with {planeCount} planes!");
-                    #endif
+#endif
                 }
 
                 static double3 GetClosestAxisToNormal(double3 normal) {
@@ -397,7 +397,7 @@ namespace Scopa {
                 public void Execute() {
                     var vRead = vertStream.AsReader();
                     var vertCounter = 0;
-                    for (int i = 0; i < planes.Length; i++) { 
+                    for (int i = 0; i < planes.Length; i++) {
                         var count = vRead.BeginForEachIndex(i); // each ForEachBuffer is a face
                         for (int v = 0; v < count; v++) {
                             faceVerts[vertCounter + v] = vRead.Read<float3>();
@@ -410,52 +410,52 @@ namespace Scopa {
                 }
             }
 
-//             /// <summary> Per-brush job that snaps verts together, outward, to minimize seams. </summary>
-// #if SCOPA_USE_BURST
-//             [BurstCompile(FloatMode = FloatMode.Fast)]
-// #endif
-//             public struct VertSnapJob : IJobParallelFor {
-//                 [ReadOnlyAttribute] public NativeArray<double4> facePlanes;
-//                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
-//                 [NativeDisableParallelForRestriction] public NativeArray<float3> faceVerts;
-//                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
-//                 [ReadOnlyAttribute] public float snappingDistance;
+            //             /// <summary> Per-brush job that snaps verts together, outward, to minimize seams. </summary>
+            // #if SCOPA_USE_BURST
+            //             [BurstCompile(FloatMode = FloatMode.Fast)]
+            // #endif
+            //             public struct VertSnapJob : IJobParallelFor {
+            //                 [ReadOnlyAttribute] public NativeArray<double4> facePlanes;
+            //                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
+            //                 [NativeDisableParallelForRestriction] public NativeArray<float3> faceVerts;
+            //                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
+            //                 [ReadOnlyAttribute] public float snappingDistance;
 
-//                 public void Execute(int i) { // i = solid index
-//                     int planeCount = (i + 1 < planeOffsets.Length ? planeOffsets[i + 1] : facePlanes.Length) - planeOffsets[i];
+            //                 public void Execute(int i) { // i = solid index
+            //                     int planeCount = (i + 1 < planeOffsets.Length ? planeOffsets[i + 1] : facePlanes.Length) - planeOffsets[i];
 
-//                     // snap nearby vertices together within each solid -- but always snap to the FURTHEST vertex from the center
-//                     var vertexCount = 0;
-//                     var origin = float3.zero;
-//                     for (var p=0; p<planeCount; p++) {
-//                         for (int v = 0; v<faceData[p].vertCount; i++) {
-//                             origin += faceVerts[faceData[p].vertIndexStart+v];
-//                         }
-//                         vertexCount += faceData[p].vertCount;
-//                     }
-//                     origin /= vertexCount;
+            //                     // snap nearby vertices together within each solid -- but always snap to the FURTHEST vertex from the center
+            //                     var vertexCount = 0;
+            //                     var origin = float3.zero;
+            //                     for (var p=0; p<planeCount; p++) {
+            //                         for (int v = 0; v<faceData[p].vertCount; i++) {
+            //                             origin += faceVerts[faceData[p].vertIndexStart+v];
+            //                         }
+            //                         vertexCount += faceData[p].vertCount;
+            //                     }
+            //                     origin /= vertexCount;
 
-//                     for(var f1=0; f1<planeCount; f1++) {
-//                         for(var f2=0; f2<planeCount; f2++) {
-//                             if (f1 == f2)
-//                                 continue;
+            //                     for(var f1=0; f1<planeCount; f1++) {
+            //                         for(var f2=0; f2<planeCount; f2++) {
+            //                             if (f1 == f2)
+            //                                 continue;
 
-//                             for (int a=0; a < faceData[f1].vertCount; a++) {
-//                                 var vA = faceData[f1].vertIndexStart+a;
-//                                 for (int b=0; b < faceData[f2].vertCount; b++) {
-//                                     var vB = faceData[f2].vertIndexStart+b;
-//                                     if (math.lengthsq(faceVerts[vA] - faceVerts[vB]) < snappingDistance * snappingDistance) {
-//                                         if (math.lengthsq(faceVerts[vA] - origin) > math.lengthsq(faceVerts[vB] - origin))
-//                                             faceVerts[vB] = faceVerts[vA];
-//                                         else
-//                                             faceVerts[vA] = faceVerts[vB];
-//                                     }
-//                                 }
-//                             }
-//                         }
-//                     }
-//                 }
-//             }
+            //                             for (int a=0; a < faceData[f1].vertCount; a++) {
+            //                                 var vA = faceData[f1].vertIndexStart+a;
+            //                                 for (int b=0; b < faceData[f2].vertCount; b++) {
+            //                                     var vB = faceData[f2].vertIndexStart+b;
+            //                                     if (math.lengthsq(faceVerts[vA] - faceVerts[vB]) < snappingDistance * snappingDistance) {
+            //                                         if (math.lengthsq(faceVerts[vA] - origin) > math.lengthsq(faceVerts[vB] - origin))
+            //                                             faceVerts[vB] = faceVerts[vA];
+            //                                         else
+            //                                             faceVerts[vA] = faceVerts[vB];
+            //                                     }
+            //                                 }
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             }
 
             /// <summary> Generates a plane lookup to accelerate OcclusionJob. </summary>
 #if SCOPA_USE_BURST
@@ -476,21 +476,21 @@ namespace Scopa {
             const double OCCLUSION_TOLERANCE = 0.01d;
             static int4 GetPlaneLookupKey(double4 plane) {
                 var roundedNormal = math.round(plane.xyz);
-                if (math.lengthsq(roundedNormal-plane.xyz) > OCCLUSION_TOLERANCE * OCCLUSION_TOLERANCE)
-                    return (int4)(plane*OCCLUSION_PRECISION);
+                if (math.lengthsq(roundedNormal - plane.xyz) > OCCLUSION_TOLERANCE * OCCLUSION_TOLERANCE)
+                    return (int4)(plane * OCCLUSION_PRECISION);
                 else
                     return new int4(
-                        ((int)roundedNormal.x)*OCCLUSION_PRECISION, 
-                        ((int)roundedNormal.y)*OCCLUSION_PRECISION,
-                        ((int)roundedNormal.z)*OCCLUSION_PRECISION, 
-                        (int)(plane.w*OCCLUSION_PRECISION)
+                        ((int)roundedNormal.x) * OCCLUSION_PRECISION,
+                        ((int)roundedNormal.y) * OCCLUSION_PRECISION,
+                        ((int)roundedNormal.z) * OCCLUSION_PRECISION,
+                        (int)(plane.w * OCCLUSION_PRECISION)
                     );
             }
 
             /// <summary> Per-face job to cull each face covered by another face (in same entity) </summary>
-            #if SCOPA_USE_BURST
+#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-            #endif
+#endif
             public struct OcclusionJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<float3> faceVerts;
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
@@ -502,7 +502,7 @@ namespace Scopa {
                     if (faceMeshData[i].meshIndex < 0)
                         return;
 
-                    var planeLookupKey = GetPlaneLookupKey(planes[i])*-1;
+                    var planeLookupKey = GetPlaneLookupKey(planes[i]) * -1;
                     if (!planeLookup.ContainsKey(planeLookupKey))
                         return;
 
@@ -510,27 +510,27 @@ namespace Scopa {
                     var offsetStart = face.vertIndexStart;
                     var offsetEnd = offsetStart + face.vertCount;
                     var faceCenter = faceVerts[offsetStart];
-                    for( int b=offsetStart+1; b<offsetEnd; b++) {
+                    for (int b = offsetStart + 1; b < offsetEnd; b++) {
                         faceCenter += faceVerts[b];
                     }
                     faceCenter /= face.vertCount;
                     var ignoreAxis = GetIgnoreAxis(math.abs(planes[i]));
 
                     var planeLookupEnumerator = planeLookup.GetValuesForKey(planeLookupKey);
-                    
-                    foreach(var n in planeLookupEnumerator) {
-                    // for(int n=0; n<planes.Length; n++) { // test face (i) against all other faces (n) 
-                    //     // early out test: if any of these are true, then occlusion is impossible...
-                    //     // (1) if other face is culled OR (2) if they're far apart OR (3) not facing exactly opposite directions
-                    //     if ( faceMeshData[n].materialIndex < 0 || math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > -0.99d )
-                    //         continue;
+
+                    foreach (var n in planeLookupEnumerator) {
+                        // for(int n=0; n<planes.Length; n++) { // test face (i) against all other faces (n) 
+                        //     // early out test: if any of these are true, then occlusion is impossible...
+                        //     // (1) if other face is culled OR (2) if they're far apart OR (3) not facing exactly opposite directions
+                        //     if ( faceMeshData[n].materialIndex < 0 || math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > -0.99d )
+                        //         continue;
 
                         // get occluding face ("polygon")
                         var otherPolygon = new NativeArray<float3>(faceData[n].vertCount, Allocator.Temp);
                         NativeArray<float3>.Copy(faceVerts, faceData[n].vertIndexStart, otherPolygon, 0, faceData[n].vertCount);
-                        
+
                         var foundOutsideVert = false;
-                        for( int x=offsetStart; x<offsetEnd && !foundOutsideVert; x++ ) {
+                        for (int x = offsetStart; x < offsetEnd && !foundOutsideVert; x++) {
                             var point = faceVerts[x] + math.normalize(faceCenter - faceVerts[x]) * 0.2f; // shrink face point slightly
                             switch (ignoreAxis) { // 2D math is easier, so let's ignore the least important axis
                                 case 0: if (!IsInPolygonYZ(point, otherPolygon)) foundOutsideVert = true; break;
@@ -649,7 +649,7 @@ namespace Scopa {
                 }
 
                 public void Execute(int i) { // i = face index
-                    if (faceMeshData[i].meshIndex < 0) 
+                    if (faceMeshData[i].meshIndex < 0)
                         return;
 
                     var face = faceData[i];
@@ -689,61 +689,47 @@ namespace Scopa {
                 }
             }
 
+            public void StartColliderJobs(ScopaMapConfig.ColliderImportMode colliderMode) {
+                if (colliderMode == ScopaMapConfig.ColliderImportMode.None || config.IsEntityNonsolid(entity.ClassName))
+                    return;
 
-            // public GameObject gameObject;
-            // public bool isTrigger, isConvex;
+                var isMegaMeshCollider = colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider
+                    && !config.IsEntityTrigger(entity.ClassName);
+                var allowBoxColliders = colliderMode != ScopaMapConfig.ColliderImportMode.ConvexMeshColliderOnly && !isMegaMeshCollider;
 
-            // public void StartColliderJobs(GameObject gameObject, bool isTrigger, bool forceConvex, string colliderNameFormat, IEnumerable<Solid> solids, ScopaMapConfig config, Dictionary<Solid, Entity> mergedEntityData) {
-            //     this.gameObject = gameObject;
+                colliderFaceMeshData = new(faceMeshData.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
-            //     var faceList = new List<Face>();
-            //     var solidFaceOffsetsManaged = new List<int>();
-            //     var solidCount = 0;
-            //     this.isTrigger = isTrigger;
-            //     this.isConvex = forceConvex || config.colliderMode != ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider;
+                for(int i=0; i<solids.Length; i++) {
+                    // is this a merged entity? if nonsolid, then skip it
+                    if (mergedEntityData.ContainsKey(solids[i]) && config.IsEntityNonsolid(mergedEntityData[solids[i]].ClassName))
+                        continue;
+                    // TODO: feed this into Job somehow
+                }
 
-            //     foreach (var solid in solids) {
-            //         if (mergedEntityData.ContainsKey(solid) && (config.IsEntityNonsolid(mergedEntityData[solid].ClassName) || config.IsEntityTrigger(mergedEntityData[solid].ClassName)))
-            //             continue;
+                var brushColliderJob = new BrushColliderJob {
+                    planes = planes,
+                    planeOffsets = planeOffsets,
+                    faceMeshData = colliderFaceMeshData,
+                    doBoxColliderTest = allowBoxColliders
+                };
+                brushColliderJob.Schedule(solids.Length, 64).Complete();
 
-            //         foreach (var face in solid.Faces) {
-            //             faceList.Add(face);
-            //         }
+                StartTimer("ColliderMeshCount");
+                var faceMeshDataReadOnly = new NativeArray<ScopaFaceMeshData>(faceMeshData.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                faceMeshData.CopyTo(faceMeshDataReadOnly);
 
-            //         // if forceConvex or MergeAllToOneConcaveMeshCollider, then pretend it's all just one giant brush
-            //         // unless it's a trigger, then it MUST be convex
-            //         if (isTrigger || (!forceConvex && config.colliderMode != ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider) || solidCount == 0) {
-            //             solidFaceOffsetsManaged.Add(faceCount);
-            //             solidCount++;
-            //         }
-
-            //         faceCount += solid.Faces.Count;
-            //     }
-            //     solidFaceOffsetsManaged.Add(faceCount);
-
-            //     solidFaceOffsets = new NativeArray<int>(solidFaceOffsetsManaged.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            //     solidFaceOffsets.CopyFrom(solidFaceOffsetsManaged.ToArray());
-            //     canBeBoxCollider = new NativeArray<bool>(solidCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-
-            //     faceVertexOffsets = new NativeArray<int>(faceList.Count + 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            //     faceTriIndexCounts = new NativeArray<int>(faceList.Count + 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            //     for (int i = 0; i < faceList.Count; i++) {
-            //         faceVertexOffsets[i] = vertCount;
-            //         vertCount += faceList[i].Vertices.Count;
-            //         faceTriIndexCounts[i] = triIndexCount;
-            //         triIndexCount += (faceList[i].Vertices.Count - 2) * 3;
-            //     }
-            //     faceVertexOffsets[faceVertexOffsets.Length - 1] = vertCount;
-            //     faceTriIndexCounts[faceTriIndexCounts.Length - 1] = triIndexCount;
-
-            //     faceVertices = new NativeArray<Vector3>(vertCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            //     facePlaneNormals = new NativeArray<Vector3>(faceList.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            //     for (int i = 0; i < faceList.Count; i++) {
-            //         for (int v = faceVertexOffsets[i]; v < faceVertexOffsets[i + 1]; v++) {
-            //             faceVertices[v] = faceList[i].Vertices[v - faceVertexOffsets[i]].ToUnity();
-            //         }
-            //         facePlaneNormals[i] = faceList[i].Plane.Normal.ToUnity();
-            //     }
+                colliderMeshCounts = new(isMegaMeshCollider ? 1 : solids.Length, Allocator.TempJob);
+                var meshCountJob = new MeshCountJob {
+                    faceData = faceData,
+                    faceMeshDataReadOnly = faceMeshDataReadOnly,
+                    faceMeshData = colliderFaceMeshData,
+                    meshCounts = colliderMeshCounts,
+                    // textureData = textureData.AsArray(),
+                };
+                meshCountJob.Schedule(isMegaMeshCollider ? 1 : solids.Length, 4).Complete();
+                faceMeshDataReadOnly.Dispose();
+                StopTimer("ColliderMeshCount");
+            }
 
             //     outputMesh = Mesh.AllocateWritableMeshData(solidCount);
             //     meshes = new Mesh[solidCount];
@@ -782,100 +768,38 @@ namespace Scopa {
             // }
 
 #if SCOPA_USE_BURST
-            [BurstCompile(FloatMode=FloatMode.Fast)]
+            [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
-            public struct BoxColliderJob : IJobParallelFor {
+            public struct BrushColliderJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
+                [NativeDisableParallelForRestriction, WriteOnly] public NativeArray<ScopaFaceMeshData> faceMeshData;
                 const double BOX_ORTHOGONAL_TOLERANCE = 0.001d;
+                [ReadOnlyAttribute] public bool doBoxColliderTest;
 
                 public void Execute(int i) { // i = solid index
                     int planeCount = (i + 1 < planeOffsets.Length ? planeOffsets[i + 1] : planes.Length) - planeOffsets[i];
-                    if (planeCount != 6) // a box must have 6 sides
-                        return;
+                    var planeStart = planeOffsets[i];
+                    var planeEnd = planeStart+planeCount;
+                    int meshIndex = doBoxColliderTest ? -1 : i;
 
-                    // every dot product must be a whole number
-                    for (int p = planeOffsets[i] + 1; p < planeOffsets[i] + planeCount; p++) {
-                        var dot = math.dot(planes[planeOffsets[i]].xyz, planes[p].xyz);
-                        if (math.abs(math.round(dot) - dot) > BOX_ORTHOGONAL_TOLERANCE)
-                            return;
+                    if (doBoxColliderTest && planeCount != 6) // a box must have 6 sides
+                        meshIndex = i;
+
+                    // for a box, every dot product must be a whole number
+                    for (int p = planeStart + 1; meshIndex == -1 && p < planeEnd; p++) {
+                        var dot = math.dot(planes[planeStart].xyz, planes[p].xyz);
+                        if (math.abs(math.round(dot)-dot) > BOX_ORTHOGONAL_TOLERANCE)
+                            meshIndex = i;
                     }
 
-                    // TODO: in a separate job, calculate box collider center / size / rotation from planes?
-                    // don't forget to use scaling factor
+                    for(int p=planeStart; p<planeEnd; p++) {
+                        faceMeshData[p] = new(0, 0, meshIndex);
+                    };
                 }
             }
 
-
-#if SCOPA_USE_BURST
-            [BurstCompile]
-#endif
-            public struct OldMeshColliderJob : IJobParallelFor {
-                [ReadOnlyAttribute] public NativeArray<int> faceVertexOffsets, faceTriIndexCounts, solidFaceOffsets; // index = i
-
-                [ReadOnlyAttribute] public NativeArray<float3> faceVertices, facePlaneNormals;
-                [ReadOnlyAttribute] public float3 meshOrigin;
-
-                public Mesh.MeshDataArray meshDataArray;
-                [WriteOnly] public NativeArray<bool> canBeBoxColliderResults;
-
-                [ReadOnlyAttribute] public float scalingFactor;
-                [ReadOnlyAttribute] public ScopaMapConfig.ColliderImportMode colliderMode;
-
-                public void Execute(int i) { // i = solid
-                    var solidOffsetStart = solidFaceOffsets[i];
-                    var solidOffsetEnd = solidFaceOffsets[i + 1];
-
-                    var solidVertStart = faceVertexOffsets[solidOffsetStart];
-                    var finalTriIndexCount = faceTriIndexCounts[solidOffsetEnd] - faceTriIndexCounts[solidOffsetStart];
-
-                    var meshData = meshDataArray[i];
-                    var outputVerts = meshData.GetVertexData<float3>();
-                    var outputTris = meshData.GetIndexData<int>();
-
-                    // for each solid, gather faces...
-                    var canBeBoxCollider = colliderMode == ScopaMapConfig.ColliderImportMode.BoxAndConvex || colliderMode == ScopaMapConfig.ColliderImportMode.BoxColliderOnly;
-                    for (int face = solidOffsetStart; face < solidOffsetEnd; face++) {
-                        // don't bother doing BoxCollider test if we're forcing BoxColliderOnly
-                        if (canBeBoxCollider && colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly) {
-                            // but otherwise, test if all face normals are axis aligned... if so, it can be a box collider
-#if SCOPA_USE_BURST
-                            var absNormal = math.abs(facePlaneNormals[face]);
-#else
-                            var absNormal = faceNormal.Absolute();
-#endif
-
-                            canBeBoxCollider = !((absNormal.x > 0.01f && absNormal.x < 0.99f)
-                                            || (absNormal.z > 0.01f && absNormal.z < 0.99f)
-                                            || (absNormal.y > 0.01f && absNormal.y < 0.99f));
-                        }
-
-                        var vertOffsetStart = faceVertexOffsets[face];
-                        var vertOffsetEnd = faceVertexOffsets[face + 1];
-                        for (int n = vertOffsetStart; n < vertOffsetEnd; n++) {
-                            outputVerts[n - solidVertStart] = faceVertices[n] * scalingFactor - meshOrigin;
-                        }
-
-                        // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
-                        var triIndexStart = faceTriIndexCounts[face] - faceTriIndexCounts[solidOffsetStart];
-                        var faceVertStart = vertOffsetStart - solidVertStart;
-                        for (int t = 2; t < vertOffsetEnd - vertOffsetStart; t++) {
-                            outputTris[triIndexStart + (t - 2) * 3] = faceVertStart;
-                            outputTris[triIndexStart + (t - 2) * 3 + 1] = faceVertStart + t - 1;
-                            outputTris[triIndexStart + (t - 2) * 3 + 2] = faceVertStart + t;
-                        }
-                    }
-
-                    canBeBoxColliderResults[i] = canBeBoxCollider;
-                    meshData.subMeshCount = 1;
-                    meshData.SetSubMesh(
-                        0,
-                        new SubMeshDescriptor(0, finalTriIndexCount)
-                    );
-                }
-            }
-
-            public struct MeshColliderJob : IJobParallelFor {
+            public struct MeshColliderBuildJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> faceMeshData;
                 [ReadOnlyAttribute] public NativeArray<float3> faceVertices;
@@ -894,7 +818,6 @@ namespace Scopa {
                     var outputTris = meshData.GetIndexData<uint>();
 
                     // add all verts... but mesh colliders don't need normals or UVs
-                    // Debug.Log($"MeshJob {i} - vertStart {face.vertIndexStart} vertCount {face.vertCount}");
                     for (int x = 0; x < face.vertCount; x++) {
                         var mdi = faceMesh.meshVertStart + x; // mesh data index
                         var n = face.vertIndexStart + x; // global vert buffer index
@@ -952,16 +875,16 @@ namespace Scopa {
                             newMesh.OptimizeReorderVertexBuffer();
                     }
 
-                    #if UNITY_EDITOR
-                    if ( config.addLightmapUV2 ) {
+#if UNITY_EDITOR
+                    if (config.addLightmapUV2) {
                         UnwrapParam.SetDefaults(out var unwrap);
                         unwrap.packMargin *= 2;
-                        Unwrapping.GenerateSecondaryUVSet(newMesh, unwrap );
+                        Unwrapping.GenerateSecondaryUVSet(newMesh, unwrap);
                     }
 
-                    if ( config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
+                    if (config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
                         MeshUtility.SetMeshCompression(newMesh, (ModelImporterMeshCompression)config.meshCompression);
-                    #endif
+#endif
 
                     // Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
                     results.Add(new(newMesh, null, textureToMaterial[textureNames[i]], null));
@@ -971,13 +894,13 @@ namespace Scopa {
 
                 // TODO: call OnMeshesDone()
 
-                #if SCOPA_MESH_DEBUG
+#if SCOPA_MESH_DEBUG
                 string timerLog = $"ScopaMeshJobGroup finished {meshes.Length} meshes for {entity.ClassName}";
-                foreach(var timerKVP in timers) {
+                foreach (var timerKVP in timers) {
                     timerLog += $"\n{timerKVP.Key} {timerKVP.Value.ElapsedMilliseconds} ms";
                 }
                 Debug.Log(timerLog);
-                #endif
+#endif
 
                 // TODO: don't dispose these, pass them into collider jobs?
                 Dispose();
@@ -1016,12 +939,11 @@ namespace Scopa {
         }
 
         public struct ScopaFaceMeshData {
-            /// <summary> will be 0 until VertCountJob fills it</summary>
+            /// <summary> will be 0 until MeshCountJob fills it</summary>
             public int meshVertStart, meshTriStart;
 
             /// <summary> Corresponds to textureName list index / meshDataArray index. 
             /// If negative, this face has been discarded / should be culled. 
-            /// Don't delete the data because it'll be needed for collision meshes! 
             /// Use math.abs() to recover original textureName / meshDataArray index / etc </summary>
             public int meshIndex;
 
@@ -1092,192 +1014,191 @@ namespace Scopa {
             }
         }
 
-            // public Mesh[] Complete() {
-            //     jobHandle.Complete();
+        // public Mesh[] Complete() {
+        //     jobHandle.Complete();
 
-            //     Mesh.ApplyAndDisposeWritableMeshData(outputMesh, meshes);
-            //     for (int i = 0; i < meshes.Length; i++) {
-            //         Mesh newMesh = meshes[i];
-            //         var newGO = new GameObject(newMesh.name);
-            //         newGO.transform.SetParent(gameObject.transform);
-            //         newGO.transform.localPosition = Vector3.zero;
-            //         newGO.transform.localRotation = Quaternion.identity;
-            //         newGO.transform.localScale = Vector3.one;
+        //     Mesh.ApplyAndDisposeWritableMeshData(outputMesh, meshes);
+        //     for (int i = 0; i < meshes.Length; i++) {
+        //         Mesh newMesh = meshes[i];
+        //         var newGO = new GameObject(newMesh.name);
+        //         newGO.transform.SetParent(gameObject.transform);
+        //         newGO.transform.localPosition = Vector3.zero;
+        //         newGO.transform.localRotation = Quaternion.identity;
+        //         newGO.transform.localScale = Vector3.one;
 
-            //         newMesh.RecalculateBounds();
-            //         if (canBeBoxCollider[i]) { // if box collider, we'll just use the mesh bounds to config a collider
-            //             var bounds = newMesh.bounds;
-            //             var boxCol = newGO.AddComponent<BoxCollider>();
-            //             boxCol.center = bounds.center;
-            //             boxCol.size = bounds.size;
-            //             boxCol.isTrigger = isTrigger;
-            //             meshes[i] = null; // and don't save box collider meshes
-            //         } else { // but usually this is a convex mesh collider
-            //             var newMeshCollider = newGO.AddComponent<MeshCollider>();
-            //             newMeshCollider.convex = isTrigger ? true : isConvex;
-            //             newMeshCollider.isTrigger = isTrigger;
-            //             newMeshCollider.sharedMesh = newMesh;
-            //         }
-            //     }
+        //         newMesh.RecalculateBounds();
+        //         if (canBeBoxCollider[i]) { // if box collider, we'll just use the mesh bounds to config a collider
+        //             var bounds = newMesh.bounds;
+        //             var boxCol = newGO.AddComponent<BoxCollider>();
+        //             boxCol.center = bounds.center;
+        //             boxCol.size = bounds.size;
+        //             boxCol.isTrigger = isTrigger;
+        //             meshes[i] = null; // and don't save box collider meshes
+        //         } else { // but usually this is a convex mesh collider
+        //             var newMeshCollider = newGO.AddComponent<MeshCollider>();
+        //             newMeshCollider.convex = isTrigger ? true : isConvex;
+        //             newMeshCollider.isTrigger = isTrigger;
+        //             newMeshCollider.sharedMesh = newMesh;
+        //         }
+        //     }
 
-            //     faceVertexOffsets.Dispose();
-            //     faceTriIndexCounts.Dispose();
-            //     solidFaceOffsets.Dispose();
+        //     faceVertexOffsets.Dispose();
+        //     faceTriIndexCounts.Dispose();
+        //     solidFaceOffsets.Dispose();
 
-            //     faceVertices.Dispose();
-            //     facePlaneNormals.Dispose();
-            //     canBeBoxCollider.Dispose();
+        //     faceVertices.Dispose();
+        //     facePlaneNormals.Dispose();
+        //     canBeBoxCollider.Dispose();
 
-            //     return meshes;
-            // }
+        //     return meshes;
+        // }
 
 #if SCOPA_USE_BURST
-            [BurstCompile]
+        [BurstCompile]
 #endif
-            public struct ColliderJob : IJobParallelFor {
-                [ReadOnlyAttribute] public NativeArray<int> faceVertexOffsets, faceTriIndexCounts, solidFaceOffsets; // index = i
+        public struct ColliderJob : IJobParallelFor {
+            [ReadOnlyAttribute] public NativeArray<int> faceVertexOffsets, faceTriIndexCounts, solidFaceOffsets; // index = i
 
-                [ReadOnlyAttribute] public NativeArray<float3> faceVertices, facePlaneNormals;
-                [ReadOnlyAttribute] public float3 meshOrigin;
+            [ReadOnlyAttribute] public NativeArray<float3> faceVertices, facePlaneNormals;
+            [ReadOnlyAttribute] public float3 meshOrigin;
 
-                public Mesh.MeshDataArray meshDataArray;
-                [WriteOnly] public NativeArray<bool> canBeBoxColliderResults;
+            public Mesh.MeshDataArray meshDataArray;
+            [WriteOnly] public NativeArray<bool> canBeBoxColliderResults;
 
-                [ReadOnlyAttribute] public float scalingFactor;
-                [ReadOnlyAttribute] public ScopaMapConfig.ColliderImportMode colliderMode;
+            [ReadOnlyAttribute] public float scalingFactor;
+            [ReadOnlyAttribute] public ScopaMapConfig.ColliderImportMode colliderMode;
 
-                public void Execute(int i) {
-                    var solidOffsetStart = solidFaceOffsets[i];
-                    var solidOffsetEnd = solidFaceOffsets[i + 1];
+            public void Execute(int i) {
+                var solidOffsetStart = solidFaceOffsets[i];
+                var solidOffsetEnd = solidFaceOffsets[i + 1];
 
-                    var solidVertStart = faceVertexOffsets[solidOffsetStart];
-                    var finalTriIndexCount = faceTriIndexCounts[solidOffsetEnd] - faceTriIndexCounts[solidOffsetStart];
+                var solidVertStart = faceVertexOffsets[solidOffsetStart];
+                var finalTriIndexCount = faceTriIndexCounts[solidOffsetEnd] - faceTriIndexCounts[solidOffsetStart];
 
-                    var meshData = meshDataArray[i];
-                    var outputVerts = meshData.GetVertexData<float3>();
-                    var outputTris = meshData.GetIndexData<int>();
+                var meshData = meshDataArray[i];
+                var outputVerts = meshData.GetVertexData<float3>();
+                var outputTris = meshData.GetIndexData<int>();
 
-                    // for each solid, gather faces...
-                    var canBeBoxCollider = colliderMode == ScopaMapConfig.ColliderImportMode.BoxAndConvex || colliderMode == ScopaMapConfig.ColliderImportMode.BoxColliderOnly;
-                    for (int face = solidOffsetStart; face < solidOffsetEnd; face++) {
-                        // don't bother doing BoxCollider test if we're forcing BoxColliderOnly
-                        if (canBeBoxCollider && colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly) {
-                            // but otherwise, test if all face normals are axis aligned... if so, it can be a box collider
+                // for each solid, gather faces...
+                var canBeBoxCollider = colliderMode == ScopaMapConfig.ColliderImportMode.BoxAndConvex || colliderMode == ScopaMapConfig.ColliderImportMode.BoxColliderOnly;
+                for (int face = solidOffsetStart; face < solidOffsetEnd; face++) {
+                    // don't bother doing BoxCollider test if we're forcing BoxColliderOnly
+                    if (canBeBoxCollider && colliderMode != ScopaMapConfig.ColliderImportMode.BoxColliderOnly) {
+                        // but otherwise, test if all face normals are axis aligned... if so, it can be a box collider
 #if SCOPA_USE_BURST
-                            var absNormal = math.abs(facePlaneNormals[face]);
+                        var absNormal = math.abs(facePlaneNormals[face]);
 #else
                             var absNormal = faceNormal.Absolute();
 #endif
 
-                            canBeBoxCollider = !((absNormal.x > 0.01f && absNormal.x < 0.99f)
-                                            || (absNormal.z > 0.01f && absNormal.z < 0.99f)
-                                            || (absNormal.y > 0.01f && absNormal.y < 0.99f));
-                        }
-
-                        var vertOffsetStart = faceVertexOffsets[face];
-                        var vertOffsetEnd = faceVertexOffsets[face + 1];
-                        for (int n = vertOffsetStart; n < vertOffsetEnd; n++) {
-                            outputVerts[n - solidVertStart] = faceVertices[n] * scalingFactor - meshOrigin;
-                        }
-
-                        // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
-                        var triIndexStart = faceTriIndexCounts[face] - faceTriIndexCounts[solidOffsetStart];
-                        var faceVertStart = vertOffsetStart - solidVertStart;
-                        for (int t = 2; t < vertOffsetEnd - vertOffsetStart; t++) {
-                            outputTris[triIndexStart + (t - 2) * 3] = faceVertStart;
-                            outputTris[triIndexStart + (t - 2) * 3 + 1] = faceVertStart + t - 1;
-                            outputTris[triIndexStart + (t - 2) * 3 + 2] = faceVertStart + t;
-                        }
+                        canBeBoxCollider = !((absNormal.x > 0.01f && absNormal.x < 0.99f)
+                                        || (absNormal.z > 0.01f && absNormal.z < 0.99f)
+                                        || (absNormal.y > 0.01f && absNormal.y < 0.99f));
                     }
 
-                    canBeBoxColliderResults[i] = canBeBoxCollider;
-                    meshData.subMeshCount = 1;
-                    meshData.SetSubMesh(
-                        0,
-                        new SubMeshDescriptor(0, finalTriIndexCount)
-                    );
-                }
-            }
-        }
+                    var vertOffsetStart = faceVertexOffsets[face];
+                    var vertOffsetEnd = faceVertexOffsets[face + 1];
+                    for (int n = vertOffsetStart; n < vertOffsetEnd; n++) {
+                        outputVerts[n - solidVertStart] = faceVertices[n] * scalingFactor - meshOrigin;
+                    }
 
-        public static void WeldVertices(this Mesh aMesh, float aMaxDelta = 0.1f, float maxAngle = 180f) {
-            var verts = aMesh.vertices;
-            var normals = aMesh.normals;
-            var uvs = aMesh.uv;
-            List<int> newVerts = new List<int>();
-            int[] map = new int[verts.Length];
-            // create mapping and filter duplicates.
-            for (int i = 0; i < verts.Length; i++) {
-                var p = verts[i];
-                var n = normals[i];
-                var uv = uvs[i];
-                bool duplicate = false;
-                for (int i2 = 0; i2 < newVerts.Count; i2++) {
-                    int a = newVerts[i2];
-                    if (
-                        (verts[a] - p).sqrMagnitude <= aMaxDelta // compare position
-                        && Vector3.Angle(normals[a], n) <= maxAngle // compare normal
-                                                                    // && (uvs[a] - uv).sqrMagnitude <= aMaxDelta // compare first uv coordinate
-                        ) {
-                        map[i] = i2;
-                        duplicate = true;
-                        break;
+                    // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
+                    var triIndexStart = faceTriIndexCounts[face] - faceTriIndexCounts[solidOffsetStart];
+                    var faceVertStart = vertOffsetStart - solidVertStart;
+                    for (int t = 2; t < vertOffsetEnd - vertOffsetStart; t++) {
+                        outputTris[triIndexStart + (t - 2) * 3] = faceVertStart;
+                        outputTris[triIndexStart + (t - 2) * 3 + 1] = faceVertStart + t - 1;
+                        outputTris[triIndexStart + (t - 2) * 3 + 2] = faceVertStart + t;
                     }
                 }
-                if (!duplicate) {
-                    map[i] = newVerts.Count;
-                    newVerts.Add(i);
-                }
+
+                canBeBoxColliderResults[i] = canBeBoxCollider;
+                meshData.subMeshCount = 1;
+                meshData.SetSubMesh(
+                    0,
+                    new SubMeshDescriptor(0, finalTriIndexCount)
+                );
             }
-            // create new vertices
-            var verts2 = new Vector3[newVerts.Count];
-            var normals2 = new Vector3[newVerts.Count];
-            var uvs2 = new Vector2[newVerts.Count];
-            for (int i = 0; i < newVerts.Count; i++) {
-                int a = newVerts[i];
-                verts2[i] = verts[a];
-                normals2[i] = normals[a];
-                uvs2[i] = uvs[a];
-            }
-            // map the triangle to the new vertices
-            var tris = aMesh.triangles;
-            for (int i = 0; i < tris.Length; i++) {
-                tris[i] = map[tris[i]];
-            }
-            aMesh.Clear();
-            aMesh.vertices = verts2;
-            aMesh.normals = normals2;
-            aMesh.triangles = tris;
-            aMesh.uv = uvs2;
         }
 
-        public static void SmoothNormalsJobs(this Mesh aMesh, float weldingAngle = 80, float maxDelta = 0.1f) {
-            var meshData = Mesh.AcquireReadOnlyMeshData(aMesh);
-            var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            meshData[0].GetVertices(verts);
-            var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            meshData[0].GetNormals(normals);
-            var smoothNormalsResults = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
+        // public static void WeldVertices(this Mesh aMesh, float aMaxDelta = 0.1f, float maxAngle = 180f) {
+        //     var verts = aMesh.vertices;
+        //     var normals = aMesh.normals;
+        //     var uvs = aMesh.uv;
+        //     List<int> newVerts = new List<int>();
+        //     int[] map = new int[verts.Length];
+        //     // create mapping and filter duplicates.
+        //     for (int i = 0; i < verts.Length; i++) {
+        //         var p = verts[i];
+        //         var n = normals[i];
+        //         var uv = uvs[i];
+        //         bool duplicate = false;
+        //         for (int i2 = 0; i2 < newVerts.Count; i2++) {
+        //             int a = newVerts[i2];
+        //             if (
+        //                 (verts[a] - p).sqrMagnitude <= aMaxDelta // compare position
+        //                 && Vector3.Angle(normals[a], n) <= maxAngle // compare normal
+        //                                                             // && (uvs[a] - uv).sqrMagnitude <= aMaxDelta // compare first uv coordinate
+        //                 ) {
+        //                 map[i] = i2;
+        //                 duplicate = true;
+        //                 break;
+        //             }
+        //         }
+        //         if (!duplicate) {
+        //             map[i] = newVerts.Count;
+        //             newVerts.Add(i);
+        //         }
+        //     }
+        //     // create new vertices
+        //     var verts2 = new Vector3[newVerts.Count];
+        //     var normals2 = new Vector3[newVerts.Count];
+        //     var uvs2 = new Vector2[newVerts.Count];
+        //     for (int i = 0; i < newVerts.Count; i++) {
+        //         int a = newVerts[i];
+        //         verts2[i] = verts[a];
+        //         normals2[i] = normals[a];
+        //         uvs2[i] = uvs[a];
+        //     }
+        //     // map the triangle to the new vertices
+        //     var tris = aMesh.triangles;
+        //     for (int i = 0; i < tris.Length; i++) {
+        //         tris[i] = map[tris[i]];
+        //     }
+        //     aMesh.Clear();
+        //     aMesh.vertices = verts2;
+        //     aMesh.normals = normals2;
+        //     aMesh.triangles = tris;
+        //     aMesh.uv = uvs2;
+        // }
 
-            var jobData = new SmoothJob();
-            jobData.cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
-            jobData.maxDelta = maxDelta;
+        // public static void SmoothNormalsJobs(this Mesh aMesh, float weldingAngle = 80, float maxDelta = 0.1f) {
+        //     var meshData = Mesh.AcquireReadOnlyMeshData(aMesh);
+        //     var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        //     meshData[0].GetVertices(verts);
+        //     var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        //     meshData[0].GetNormals(normals);
+        //     var smoothNormalsResults = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
 
-            jobData.verts = verts.Reinterpret<float3>();
-            jobData.normals = normals.Reinterpret<float3>();
-            jobData.results = smoothNormalsResults.Reinterpret<float3>();
+        //     var jobData = new SmoothJob();
+        //     jobData.cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
+        //     jobData.maxDelta = maxDelta;
 
-            var handle = jobData.Schedule(smoothNormalsResults.Length, 8);
-            handle.Complete();
+        //     jobData.verts = verts.Reinterpret<float3>();
+        //     jobData.normals = normals.Reinterpret<float3>();
+        //     jobData.results = smoothNormalsResults.Reinterpret<float3>();
 
-            meshData.Dispose(); // must dispose this early, before modifying mesh
+        //     var handle = jobData.Schedule(smoothNormalsResults.Length, 8);
+        //     handle.Complete();
 
-            aMesh.SetNormals(smoothNormalsResults);
+        //     meshData.Dispose(); // must dispose this early, before modifying mesh
 
-            verts.Dispose();
-            normals.Dispose();
-            smoothNormalsResults.Dispose();
-        }
+        //     aMesh.SetNormals(smoothNormalsResults);
+
+        //     verts.Dispose();
+        //     normals.Dispose();
+        //     smoothNormalsResults.Dispose();
+        // }
 
 #if SCOPA_USE_BURST
         [BurstCompile]

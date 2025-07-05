@@ -109,7 +109,7 @@ namespace Scopa {
 
         static Material builtinDefaultMaterial = null;
 
-        /// <summary> note: textureName is NOT case sensitive, no need to convert ToLowerInvariant() </summary>
+        /// <summary> NOT case sensitive </summary>
         public bool IsTextureNameCulled(string textureNameSearch) {
             if ( string.IsNullOrWhiteSpace(textureNameSearch) )
                 return true;
@@ -123,9 +123,9 @@ namespace Scopa {
             return false;
         }
 
-        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
-        public bool IsEntityMergeToWorld(string entityClassname) {
-            var search = entityClassname;
+        /// <summary> NOT case sensitive </summary>
+        public bool IsEntityMergeToWorld(string entityClassnameSearch) {
+            var search = entityClassnameSearch.ToLowerInvariant();
             for(int i=0; i<mergeToWorld.Count; i++) {
                 if ( search.Contains(mergeToWorld[i]) ) {
                     return true;
@@ -134,9 +134,9 @@ namespace Scopa {
             return false;
         }
 
-        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
+        /// <summary> NOT case sensitive </summary>
         public bool IsEntityStatic(string entityClassname) {
-            var search = entityClassname;
+            var search = entityClassname.ToLowerInvariant();
             for(int i=0; i<staticEntities.Count; i++) {
                 if ( search.Contains(staticEntities[i]) ) {
                     return true;
@@ -145,9 +145,9 @@ namespace Scopa {
             return false;
         }
 
-        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
+        /// <summary> NOT case sensitive </summary>
         public bool IsEntityNonsolid(string entityClassname) {
-            var search = entityClassname;
+            var search = entityClassname.ToLowerInvariant();
             for(int i=0; i<nonsolidEntities.Count; i++) {
                 if ( search.Contains(nonsolidEntities[i]) ) {
                     return true;
@@ -156,9 +156,9 @@ namespace Scopa {
             return false;
         }
 
-        /// <summary> note: entityClassname must already be ToLowerInvariant() </summary>
+        /// <summary> NOT case sensitive </summary>
         public bool IsEntityTrigger(string entityClassname) {
-            var search = entityClassname;
+            var search = entityClassname.ToLowerInvariant();
             for(int i=0; i<triggerEntities.Count; i++) {
                 if ( search.Contains(triggerEntities[i]) ) {
                     return true;
@@ -167,7 +167,7 @@ namespace Scopa {
             return false;
         }
 
-        /// <summary> note: textureName is NOT case sensitive, no need to convert ToLowerInvariant() anymore </summary>
+        /// <summary> NOT case sensitive </summary>
         public MaterialOverride GetMaterialOverrideFor(string textureNameSearch) {
             if ( materialOverrides == null || materialOverrides.Length == 0) {
                 return null;
