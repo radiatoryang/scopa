@@ -1,3 +1,12 @@
+// uncomment to enable debug messages
+// #define SCOPA_MESH_DEBUG
+// #define SCOPA_MESH_VERBOSE
+
+#if SCOPA_MESH_DEBUG
+using System.Diagnostics;
+using Debug = UnityEngine.Debug;
+#endif
+
 using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -12,6 +21,7 @@ using Vector3 = UnityEngine.Vector3;
 
 #if SCOPA_USE_BURST
 using Unity.Burst;
+using Unity.Burst.CompilerServices;
 #endif
 
 #if UNITY_EDITOR
@@ -21,112 +31,19 @@ using UnityEditor;
 namespace Scopa {
     /// <summary>main class for Scopa mesh generation / geo functions</summary>
     public static class ScopaMesh {
-        /// <summary> Burst-compatible data struct for a face's vertex buffer / tri index offsets </summary>
-        public struct ScopaFaceData {
-            /// <summary> will be 0 until CountJob fills it</summary>
-            public int vertIndexStart, vertCount;
-
-            public ScopaFaceData(int globalVertStart, int vertCount) : this() {
-                this.vertIndexStart = globalVertStart;
-                this.vertCount = vertCount;
-            }
-
-            public static implicit operator int2(ScopaFaceData d) => new(d.vertIndexStart, d.vertCount);
-            public static implicit operator ScopaFaceData(int2 i) => new(i.x, i.y);
-
-            public override string ToString() {
-                return $"VertStart {vertIndexStart}, VertCount {vertCount}";
-            }
-        }
-
-        public struct ScopaFaceMeshData {
-            /// <summary> will be 0 until CountJob fills it</summary>
-            public int meshVertStart, meshTriStart;
-
-            /// <summary> Corresponds to textureName list index / meshDataArray index. 
-            /// If negative, this face has been discarded / should be culled. 
-            /// Don't delete the data because it'll be needed for collision meshes! 
-            /// Use math.abs() to recover original textureName / meshDataArray index / etc </summary>
-            public int materialIndex;
-
-            public ScopaFaceMeshData(int materialIndex, bool isCulled = false) : this() {
-                this.meshVertStart = 0;
-                this.meshTriStart = 0;
-                this.materialIndex = (isCulled ? -1 : 1) * materialIndex;
-            }
-
-            public ScopaFaceMeshData(int meshVertStart, int meshTriStart, int materialIndex) : this() {
-                this.meshVertStart = meshVertStart;
-                this.meshTriStart = meshTriStart;
-                this.materialIndex = materialIndex;
-            }
-
-            public static implicit operator int3(ScopaFaceMeshData d) => new(d.meshVertStart, d.meshTriStart, d.materialIndex);
-            public static implicit operator ScopaFaceMeshData(int3 i) => new(i.x, i.y, i.z);
-
-            public override string ToString() {
-                return $"MVertStart {meshVertStart}, MTriStart {meshTriStart}, material {materialIndex}";
-            }
-        }
-
-        /// <summary> Burst-compatible data struct for generating UVs on a face </summary>
-        public struct ScopaFaceUVData {
-            /// <summary> .xyz = scaled texture axis in Quake space, .w = shift in Quake space </summary>
-            public float4 faceU, faceV;
-
-            public ScopaFaceUVData(float4 u, float4 v) : this() {
-                this.faceU = u;
-                this.faceV = v;
-            }
-
-            public static implicit operator float4x2(ScopaFaceUVData d) => new(d.faceU, d.faceV);
-            public static implicit operator ScopaFaceUVData(float4x2 i) => new(i.c0, i.c1);
-        }
-
-        /// <summary> Burst-compatible data struct for a texture / material group / mesh </summary>
-        public struct ScopaTextureData {
-            public int textureWidth, textureHeight, textureIndex;
-
-            public ScopaTextureData(int textureWidth, int textureHeight, int textureIndex, bool isCulled = false) {
-                this.textureWidth = textureWidth;
-                this.textureHeight = textureHeight;
-                this.textureIndex = (isCulled ? -1 : 1) * textureIndex;
-            }
-
-            public static implicit operator int3(ScopaTextureData d) => new(d.textureWidth, d.textureHeight, d.textureIndex);
-            public static implicit operator ScopaTextureData(int3 i) => new(i.x, i.y, i.z);
-
-            public override string ToString() {
-                return $"{textureWidth}x{textureHeight} material {textureIndex}";
-            }
-        }
-
-        /// <summary> Burst-compatible data struct for a mesh </summary>
-        public struct ScopaMeshCounts {
-            public int vertCount, triIndexCount;
-            public ScopaMeshCounts(int vertCount, int triIndexCount) : this() {
-                this.vertCount = vertCount;
-                this.triIndexCount = triIndexCount;
-            }
-
-            public static implicit operator int2(ScopaMeshCounts d) => new(d.vertCount, d.triIndexCount);
-            public static implicit operator ScopaMeshCounts(int2 i) => new(i.x, i.y);
-            public override string ToString() {
-                return $"{vertCount} verts, {triIndexCount} triIndices";
-            }
-        }
-
         /// <summary>
-        /// <para>Main data class that schedules jobs to process all of an entity's Quake brushes into Unity mesh data and colliders, all at once.</para>
-        /// <para>see <c>ScopaMaterialConfig.OnJobs()</c> and <c>ScopaMaterialConfig.OnMeshes()</c> to modify meshes, per material.</para>
-        /// <list>
-        /// <item> 1) VertJob fills vertStream with vertex data </item>
-        /// <item> 2) CountJob counts and finalizes vertex data </item>
+        /// <para>Main data class that schedules jobs to process all of one (1) entity's Quake brushes into Unity mesh data and colliders, all at once.</para>
+        /// <para>API: see <c>ScopaMaterialConfig.OnJobs()</c> and <c>ScopaMaterialConfig.OnMeshes()</c> to add your own code to modify meshes, per material.</para>
+        /// <list> Jobs overview:
+        /// <item> 1) VertJob fills vertStream with shared vertex data </item>
+        /// <item> 2) VertCountJob counts and finalizes shared vertex data </item>
         /// <item> 3) (optional) OcclusionJob culls hidden faces </item>
-        /// <item> 4) MeshJob fills MeshDataArray </item>
+        /// <item> 4) MeshCountJob counts vertices and tri indices per mesh </item>
+        /// <item> 5) MeshJob uses MeshCountJob results to fill MeshDataArray with verts, normals, and triangles, etc</item>
         /// </list></summary>
         public class ScopaMeshJobGroup {
             public ScopaMapConfig config;
+            public ScopaEntityData entity;
             public NativeArray<int> planeOffsets;
             public NativeArray<double4> planes;
 
@@ -158,10 +75,33 @@ namespace Scopa {
 
             JobHandle finalJobHandle;
 
-            public ScopaMeshJobGroup(ScopaMapConfig config, Solid[] solids) {
-                this.config = config;
+            #if SCOPA_MESH_DEBUG
+            Dictionary<string, Stopwatch> timers = new();
+            #endif
 
-                // VERT JOB - intersect the planes to generate vertices
+            void StartTimer(string timerLabel) {
+                #if SCOPA_MESH_DEBUG
+                var timer = new Stopwatch();
+                timers.Add(timerLabel, timer);
+                timer.Start();
+                #endif
+            }
+
+            void StopTimer(string timerLabel) {
+                #if SCOPA_MESH_DEBUG
+                if (!timers.ContainsKey(timerLabel))
+                    Debug.LogError($"no timer called {timerLabel}");
+                timers[timerLabel].Stop();
+                #endif
+            }
+
+            public ScopaMeshJobGroup(ScopaMapConfig config, ScopaEntityData entity, Solid[] solids) {
+                this.config = config;
+                this.entity = entity;
+
+                StartTimer("Total");
+                StartTimer("Planes");
+                // this can never be Bursted because Solids are managed
                 var planeCount = 0;
                 planeOffsets = new NativeArray<int>(solids.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 for (int i = 0; i < solids.Length; i++) {
@@ -183,15 +123,20 @@ namespace Scopa {
                     }
                 }
                 vertStream = new(planeCount, Allocator.TempJob);
+                StopTimer("Planes");
 
+                // VERT JOB - intersect the planes to generate vertices
+                StartTimer("Verts");
                 var vertJob = new VertJob {
                     planeOffsets = planeOffsets,
                     facePlanes = planes,
                     vertStream = vertStream.AsWriter()
                 };
-                vertJob.Schedule(solids.Length, 32).Complete();
+                vertJob.Schedule(solids.Length, 64).Complete();
+                StopTimer("Verts");
 
                 // VERT COUNT JOB - count vertices and make the buffer
+                StartTimer("VertCount");
                 faceData = new(planeCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 faceVerts = new(vertStream.Count(), Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
@@ -243,17 +188,31 @@ namespace Scopa {
                 }
 
                 vertCountJobHandle.Complete();
-
+                StopTimer("VertCount");
+                
                 if (config.removeHiddenFaces) {
+                    StartTimer("Occlusion");
+                    var planeLookup = new NativeParallelMultiHashMap<int4, int>(planeCount, Allocator.TempJob);
+                    var planeLookupJob = new PlaneLookupJob {
+                        planes = planes,
+                        faceMeshData = faceMeshData,
+                        planeLookup = planeLookup
+                    };
+                    planeLookupJob.Run(planeCount);
+                    
                     var occlusionJob = new OcclusionJob {
                         faceVerts = faceVerts,
                         planes = planes,
                         faceData = faceData,
-                        faceMeshData = faceMeshData
+                        faceMeshData = faceMeshData,
+                        planeLookup = planeLookup
                     };
                     occlusionJob.Schedule(planeCount, 128).Complete();
+                    planeLookup.Dispose();
+                    StopTimer("Occlusion");
                 }
 
+                StartTimer("MeshCount");
                 var faceMeshDataReadOnly = new NativeArray<ScopaFaceMeshData>(faceMeshData.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 faceMeshData.CopyTo(faceMeshDataReadOnly);
                 meshCounts = new(textureData.Length, Allocator.TempJob);
@@ -266,11 +225,11 @@ namespace Scopa {
                 };
                 meshCountJob.Schedule(textureNames.Count, 4).Complete();
                 faceMeshDataReadOnly.Dispose();
+                StopTimer("MeshCount");
 
-                // var finalVisibleMeshCount = textureData.Where( tex => tex.textureIndex >= 0).Count();
+                StartTimer("MeshBuild");
                 meshDataArray = Mesh.AllocateWritableMeshData(textureNames.Count);
                 for (int i = 0; i < textureNames.Count; i++) {
-                    // Debug.Log($"meshData {i}: {textureData[i]}");
                     var meshData = meshDataArray[i];
                     meshData.SetVertexBufferParams(meshCounts[i].vertCount,
                         new VertexAttributeDescriptor(VertexAttribute.Position),
@@ -297,6 +256,8 @@ namespace Scopa {
                 // TODO: smooth normals job
             }
 
+            /// <summary> Per-brush job that intersects planes to generate vertices.
+            /// The vertices go into a big per-face shared NativeStream buffer. </summary>
 #if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
@@ -340,7 +301,9 @@ namespace Scopa {
                         vertStream.EndForEachIndex();
                         polygon.Dispose();
                     }
-                    // Debug.Log($"VertJob finished job {i} with {planeCount} planes!");
+                    #if SCOPA_MESH_VERBOSE
+                    Debug.Log($"VertJob finished job {i} with {planeCount} planes!");
+                    #endif
                 }
 
                 static double3 GetClosestAxisToNormal(double3 normal) {
@@ -397,43 +360,8 @@ namespace Scopa {
                 }
             }
 
-// #if SCOPA_USE_BURST
-//             [BurstCompile]
-// #endif
-//             public struct CountJob : IJob {
-//                 public NativeStream vertStream;
-//                 [ReadOnlyAttribute] public NativeArray<double4> planes;
-//                 public NativeArray<ScopaFaceData> faceData;
-//                 public NativeArray<float3> faceVerts;
-//                 public NativeArray<ScopaTextureData> textureData;
-
-//                 public void Execute() { // TODO: make parallel
-//                     var vRead = vertStream.AsReader();
-//                     // have to consolidate the NativeStream and calculate cumulative meshData offsets
-//                     var vertCounter = 0;
-//                     for (int i = 0; i < planes.Length; i++) { // each ForEachBuffer of NativeStream is a face
-
-//                         var count = vRead.BeginForEachIndex(i); // each index is a plane
-//                         for (int v = 0; v < count; v++) {
-//                             faceVerts[vertCounter + v] = vRead.Read<float3>();
-//                         }
-//                         vRead.EndForEachIndex();
-
-//                         var texData = textureData[faceData[i].materialIndex];
-//                         var newVert = texData.vertCount;
-//                         var newTri = texData.triIndexCount;
-//                         // Debug.Log($"countjob: textureData {texData.vertCount} / {texData.triIndexCount}");
-
-//                         // TODO: how to handle culled face?
-
-//                         faceData[i] = new(vertCounter, count, newVert, newTri, faceData[i].materialIndex);
-//                         textureData[faceData[i].materialIndex] = texData + new int4(0, 0, count, (count - 2) * 3);
-//                         vertCounter += count;
-//                     }
-//                     // Debug.Log($"CountJob finished with {vertCounter} verts and {triIndexCounter} tri indices");
-//                 }
-//             }
-
+            /// <summary> Single threaded job that counts vertices per face.
+            /// Cannot be multithreaded, we need the cumulative vertex offsets. </summary>
 #if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
 #endif
@@ -459,8 +387,31 @@ namespace Scopa {
                 }
             }
 
-            /// <summary> Job that does a simple occlusion test: for each plane/face, is it covered up by another plane/face in same brush?
-            /// If it is, then set its faceData as culled.</summary>
+            const double LOOKUP_NORMAL_TOLERANCE = 0.01d;
+            static int4 GetPlaneLookupKey(double4 plane) {
+                var roundedNormal = math.round(plane.xyz);
+                if (math.lengthsq(roundedNormal-plane.xyz) > LOOKUP_NORMAL_TOLERANCE * LOOKUP_NORMAL_TOLERANCE)
+                    return ((int4)plane)*100;
+                else
+                    return new int4((int)roundedNormal.x, (int)roundedNormal.y, (int)roundedNormal.z, (int)plane.w)*100;
+            }
+
+            /// <summary> Generates a plane lookup to accelerate OcclusionJob. </summary>
+#if SCOPA_USE_BURST
+            [BurstCompile(FloatMode = FloatMode.Fast)]
+#endif
+            public struct PlaneLookupJob : IJobFor {
+                [ReadOnlyAttribute] public NativeArray<double4> planes;
+                [ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> faceMeshData;
+                [WriteOnly] public NativeParallelMultiHashMap<int4, int> planeLookup;
+
+                public void Execute(int i) {
+                    if (faceMeshData[i].materialIndex >= 0)
+                        planeLookup.Add(GetPlaneLookupKey(planes[i]), i);
+                }
+            }
+
+            /// <summary> Per-face job to cull each face covered by another face (in same entity) </summary>
             #if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
             #endif
@@ -469,52 +420,59 @@ namespace Scopa {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
                 [NativeDisableParallelForRestriction] public NativeArray<ScopaFaceMeshData> faceMeshData;
+                [ReadOnlyAttribute] public NativeParallelMultiHashMap<int4, int> planeLookup;
 
                 public void Execute(int i) { // i = face index
-                    if (faceMeshData[i].materialIndex < 0) // if already culled, skip
+                    if (faceMeshData[i].materialIndex < 0)
                         return;
 
-                    // test face (i) against all other faces (n) 
-                    for(int n=0; n<faceData.Length; n++) {
-                        // Debug.Log($"OcclusionJob {i} - test {n}");
-                        // early out test: if any of these are true, then occlusion is impossible...
-                        // (1) if other face is culled OR (2) if they're far apart OR (3) face similar directions
-                        if ( faceMeshData[n].materialIndex < 0 || math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > 0.99d )
-                            continue;
+                    var planeLookupKey = GetPlaneLookupKey(planes[i])*-1;
+                    if (!planeLookup.ContainsKey(planeLookupKey))
+                        return;
 
-                        // now test whether this face's vertices are completely inside another
-                        var offsetStart = faceData[i].vertIndexStart;
-                        var offsetEnd = offsetStart + faceData[i].vertCount;
-                        var center = faceVerts[offsetStart]; // calculate center to shrink face slightly later
-                        for( int b=offsetStart+1; b<offsetEnd; b++) {
-                            center += faceVerts[b];
-                        }
-                        center /= faceData[i].vertCount;
+                    var face = faceData[i];
+                    var offsetStart = face.vertIndexStart;
+                    var offsetEnd = offsetStart + face.vertCount;
+                    var faceCenter = faceVerts[offsetStart];
+                    for( int b=offsetStart+1; b<offsetEnd; b++) {
+                        faceCenter += faceVerts[b];
+                    }
+                    faceCenter /= face.vertCount;
+                    var ignoreAxis = GetIgnoreAxis(math.abs(planes[i]));
+
+                    var planeLookupEnumerator = planeLookup.GetValuesForKey(planeLookupKey);
+                    
+                    foreach(var n in planeLookupEnumerator) {
+                    // for(int n=0; n<planes.Length; n++) { // test face (i) against all other faces (n) 
+                    //     // early out test: if any of these are true, then occlusion is impossible...
+                    //     // (1) if other face is culled OR (2) if they're far apart OR (3) not facing exactly opposite directions
+                    //     if ( faceMeshData[n].materialIndex < 0 || math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > -0.99d )
+                    //         continue;
 
                         // get occluding face ("polygon")
                         var otherPolygon = new NativeArray<float3>(faceData[n].vertCount, Allocator.Temp);
                         NativeArray<float3>.Copy(faceVerts, faceData[n].vertIndexStart, otherPolygon, 0, faceData[n].vertCount);
-
-                        // 2D math is easier, so let's ignore the least important axis
-                        var foundUnoccludedVert = false;
-                        var ignoreAxis = GetIgnoreAxis(math.abs(planes[i]));
-                        for( int x=offsetStart; x<offsetEnd && !foundUnoccludedVert; x++ ) {
-                            var point = faceVerts[x] + math.normalize(center - faceVerts[x]) * 0.2f; // shrink face point slightly
-                            switch (ignoreAxis) {
-                                case 0: if (!IsInPolygonYZ(point, otherPolygon)) foundUnoccludedVert = true; break;
-                                case 1: if (!IsInPolygonXZ(point, otherPolygon)) foundUnoccludedVert = true; break;
-                                case 2: if (!IsInPolygonXY(point, otherPolygon)) foundUnoccludedVert = true; break;
+                        
+                        var foundOutsideVert = false;
+                        for( int x=offsetStart; x<offsetEnd && !foundOutsideVert; x++ ) {
+                            var point = faceVerts[x] + math.normalize(faceCenter - faceVerts[x]) * 0.2f; // shrink face point slightly
+                            switch (ignoreAxis) { // 2D math is easier, so let's ignore the least important axis
+                                case 0: if (!IsInPolygonYZ(point, otherPolygon)) foundOutsideVert = true; break;
+                                case 1: if (!IsInPolygonXZ(point, otherPolygon)) foundOutsideVert = true; break;
+                                case 2: if (!IsInPolygonXY(point, otherPolygon)) foundOutsideVert = true; break;
                             }
                         }
                         otherPolygon.Dispose();
 
                         // if no verts outside polygon, then it's occluded... cull it!
-                        if (!foundUnoccludedVert)
-                            faceMeshData[i] *= new int3(0, 0, -1);
-                        return;
+                        if (!foundOutsideVert) {
+                            faceMeshData[i] = new int3(0, 0, -1);
+                            return;
+                        }
                     }
                 }
 
+                [return: AssumeRange(0, 2)]
                 static int GetIgnoreAxis(double4 norm) {
                     // VHE prioritises the axes in order of X, Y, Z.
                     if (norm.x >= norm.y && norm.x >= norm.z) return 0;
@@ -556,6 +514,7 @@ namespace Scopa {
                     return inside;
                 }
             }
+
 
 #if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
@@ -664,9 +623,10 @@ namespace Scopa {
                     meshes[i] = newMesh;
                 }
                 finalJobHandle.Complete();
+                StopTimer("MeshBuild");
 
                 // TODO: call JobsDone()
-
+                StartTimer("MeshWrite");
                 for (int i = 0; i < meshes.Length; i++) {
                     var meshData = meshDataArray[i];
                     meshData.subMeshCount = 1;
@@ -695,8 +655,18 @@ namespace Scopa {
                     // Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
                     results.Add(new(newMesh, null, textureToMaterial[textureNames[i]], null));
                 }
+                StopTimer("MeshWrite");
+                StopTimer("Total");
 
                 // TODO: call OnMeshesDone()
+
+                #if SCOPA_MESH_DEBUG
+                string timerLog = $"ScopaMeshJobGroup finished {meshes.Length} meshes for {entity.ClassName}";
+                foreach(var timerKVP in timers) {
+                    timerLog += $"\n{timerKVP.Key} {timerKVP.Value.ElapsedMilliseconds} ms";
+                }
+                Debug.Log(timerLog);
+                #endif
 
                 // TODO: don't dispose these, pass them into collider jobs?
                 Dispose();
@@ -713,6 +683,101 @@ namespace Scopa {
                 faceUVData.Dispose();
                 textureData.Dispose();
                 meshCounts.Dispose();
+            }
+        }
+
+               /// <summary> Burst-compatible data struct for a face's vertex buffer / tri index offsets </summary>
+        public struct ScopaFaceData {
+            /// <summary> will be 0 until VertCountJob fills it</summary>
+            public int vertIndexStart, vertCount;
+
+            public ScopaFaceData(int globalVertStart, int vertCount) : this() {
+                this.vertIndexStart = globalVertStart;
+                this.vertCount = vertCount;
+            }
+
+            public static implicit operator int2(ScopaFaceData d) => new(d.vertIndexStart, d.vertCount);
+            public static implicit operator ScopaFaceData(int2 i) => new(i.x, i.y);
+
+            public override string ToString() {
+                return $"VertStart {vertIndexStart}, VertCount {vertCount}";
+            }
+        }
+
+        public struct ScopaFaceMeshData {
+            /// <summary> will be 0 until VertCountJob fills it</summary>
+            public int meshVertStart, meshTriStart;
+
+            /// <summary> Corresponds to textureName list index / meshDataArray index. 
+            /// If negative, this face has been discarded / should be culled. 
+            /// Don't delete the data because it'll be needed for collision meshes! 
+            /// Use math.abs() to recover original textureName / meshDataArray index / etc </summary>
+            public int materialIndex;
+
+            public ScopaFaceMeshData(int materialIndex, bool isCulled = false) : this() {
+                this.meshVertStart = 0;
+                this.meshTriStart = 0;
+                this.materialIndex = (isCulled ? -1 : 1) * materialIndex;
+            }
+
+            public ScopaFaceMeshData(int meshVertStart, int meshTriStart, int materialIndex) : this() {
+                this.meshVertStart = meshVertStart;
+                this.meshTriStart = meshTriStart;
+                this.materialIndex = materialIndex;
+            }
+
+            public static implicit operator int3(ScopaFaceMeshData d) => new(d.meshVertStart, d.meshTriStart, d.materialIndex);
+            public static implicit operator ScopaFaceMeshData(int3 i) => new(i.x, i.y, i.z);
+
+            public override string ToString() {
+                return $"MVertStart {meshVertStart}, MTriStart {meshTriStart}, material {materialIndex}";
+            }
+        }
+
+        /// <summary> Burst-compatible data struct for generating UVs on a face </summary>
+        public struct ScopaFaceUVData {
+            /// <summary> .xyz = scaled texture axis in Quake space, .w = shift in Quake space </summary>
+            public float4 faceU, faceV;
+
+            public ScopaFaceUVData(float4 u, float4 v) : this() {
+                this.faceU = u;
+                this.faceV = v;
+            }
+
+            public static implicit operator float4x2(ScopaFaceUVData d) => new(d.faceU, d.faceV);
+            public static implicit operator ScopaFaceUVData(float4x2 i) => new(i.c0, i.c1);
+        }
+
+        /// <summary> Burst-compatible data struct for a texture / material group / mesh </summary>
+        public struct ScopaTextureData {
+            public int textureWidth, textureHeight, textureIndex;
+
+            public ScopaTextureData(int textureWidth, int textureHeight, int textureIndex, bool isCulled = false) {
+                this.textureWidth = textureWidth;
+                this.textureHeight = textureHeight;
+                this.textureIndex = (isCulled ? -1 : 1) * textureIndex;
+            }
+
+            public static implicit operator int3(ScopaTextureData d) => new(d.textureWidth, d.textureHeight, d.textureIndex);
+            public static implicit operator ScopaTextureData(int3 i) => new(i.x, i.y, i.z);
+
+            public override string ToString() {
+                return $"{textureWidth}x{textureHeight} material {textureIndex}";
+            }
+        }
+
+        /// <summary> Burst-compatible data struct for a mesh </summary>
+        public struct ScopaMeshCounts {
+            public int vertCount, triIndexCount;
+            public ScopaMeshCounts(int vertCount, int triIndexCount) : this() {
+                this.vertCount = vertCount;
+                this.triIndexCount = triIndexCount;
+            }
+
+            public static implicit operator int2(ScopaMeshCounts d) => new(d.vertCount, d.triIndexCount);
+            public static implicit operator ScopaMeshCounts(int2 i) => new(i.x, i.y);
+            public override string ToString() {
+                return $"{vertCount} verts, {triIndexCount} triIndices";
             }
         }
 
