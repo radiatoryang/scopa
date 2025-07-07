@@ -20,6 +20,8 @@ using Vector3 = UnityEngine.Vector3;
 #if SCOPA_USE_BURST
 using Unity.Burst;
 using Unity.Burst.CompilerServices;
+using System.Globalization;
+
 #endif
 
 #if UNITY_EDITOR
@@ -86,9 +88,9 @@ namespace Scopa {
 
             // RESULTS
             /// <summary> Finalized data to generate renderers. Will be NULL until Complete() is called, but will persist even after disposal.</summary>
-            public ScopaRendererMeshResult[] rendererResults;
+            public List<ScopaRendererMeshResult> rendererResults;
             /// <summary> Finalized data to generate colliders. Will be NULL until Complete() is called, but will persist even after disposal.</summary>
-            public ScopaColliderMeshResult[] colliderResults;
+            public List<ScopaColliderResult> colliderResults;
 
             JobHandle finalJobHandle, colliderJobHandle;
 
@@ -719,6 +721,7 @@ namespace Scopa {
                 StartTimer("BrushColliderData");
                 var fakeTextureData = new NativeArray<ScopaTextureData>(solids.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 var allowBoxColliders = config.colliderMode != ScopaMapConfig.ColliderImportMode.ConvexMeshColliderOnly && !isMegaMeshCollider;
+                boxColliderData = new(solids.Length, Allocator.TempJob, NativeArrayOptions.ClearMemory);
                 var brushColliderJob = new BrushColliderJob {
                     planes = planes,
                     planeOffsets = planeOffsets,
@@ -736,7 +739,7 @@ namespace Scopa {
                 var colliderFaceMeshDataReadOnly = new NativeArray<ScopaFaceMeshData>(colliderFaceMeshData.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 colliderFaceMeshData.CopyTo(colliderFaceMeshDataReadOnly);
 
-                colliderMeshCounts = new(solids.Length, Allocator.TempJob);
+                colliderMeshCounts = new(solids.Length, Allocator.TempJob, NativeArrayOptions.ClearMemory);
                 var meshCountJob = new MeshCountJob {
                     faceData = faceData,
                     faceMeshDataReadOnly = colliderFaceMeshDataReadOnly,
@@ -750,9 +753,9 @@ namespace Scopa {
                 StopTimer("ColliderMeshCount");
 
                 StartTimer("ColliderMeshBuild");
-                meshDataArray = Mesh.AllocateWritableMeshData(solids.Length);
+                colliderMeshDataArray = Mesh.AllocateWritableMeshData(solids.Length);
                 for (int i = 0; i < solids.Length; i++) {
-                    var meshData = meshDataArray[i];
+                    var meshData = colliderMeshDataArray[i];
                     meshData.SetVertexBufferParams(colliderMeshCounts[i].vertCount,
                         new VertexAttributeDescriptor(VertexAttribute.Position)
                     );
@@ -761,11 +764,11 @@ namespace Scopa {
 
                 var meshJob = new MeshColliderJob {
                     faceData = faceData,
-                    faceMeshData = faceMeshData,
+                    colliderFaceMeshData = colliderFaceMeshData,
                     allVerts = allVerts,
-                    meshOrigin = float3.zero, // TODO: get per entity origin? fuck what
-                    meshDataArray = meshDataArray,
-                    scalingConfig = new float2(config.globalTexelScale, config.scalingFactor)
+                    meshOrigin = entityOrigin,
+                    colliderMeshDataArray = colliderMeshDataArray,
+                    scalingFactor = config.scalingFactor
                 };
                 colliderJobHandle = meshJob.Schedule(planes.Length, 128);
             }
@@ -833,19 +836,20 @@ namespace Scopa {
             /// <summary> Basically like MeshJob, but just vertices and tris (for collision meshes) </summary>
             public struct MeshColliderJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
-                [ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> faceMeshData;
+                [ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> colliderFaceMeshData;
                 [ReadOnlyAttribute] public NativeArray<float3> allVerts;
                 [ReadOnlyAttribute] public float3 meshOrigin;
-                [NativeDisableParallelForRestriction] public Mesh.MeshDataArray meshDataArray;
-
-                /// <summary> x = globalTextureScale, y = scalingFactor</summary>
-                [ReadOnlyAttribute] public float2 scalingConfig;
+                [NativeDisableParallelForRestriction] public Mesh.MeshDataArray colliderMeshDataArray;
+                [ReadOnlyAttribute] public float scalingFactor;
 
                 public void Execute(int i) { // i = face index
-                    var face = faceData[i];
-                    var faceMesh = faceMeshData[i];
+                    if (colliderFaceMeshData[i].meshIndex < 0)
+                        return;
 
-                    var meshData = meshDataArray[faceMesh.meshIndex];
+                    var face = faceData[i];
+                    var faceMesh = colliderFaceMeshData[i];
+
+                    var meshData = colliderMeshDataArray[faceMesh.meshIndex];
                     var outputVerts = meshData.GetVertexData<float3>();
                     var outputTris = meshData.GetIndexData<uint>();
 
@@ -855,7 +859,7 @@ namespace Scopa {
                         var n = face.vertIndexStart + x; // global vert buffer index
 
                         // all Face Datas are still in Quake space; need to convert to Unity space and axes
-                        outputVerts[mdi] = allVerts[n].xzy * scalingConfig.y - meshOrigin;
+                        outputVerts[mdi] = allVerts[n].xzy * scalingFactor - meshOrigin;
                     }
 
                     // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
@@ -879,7 +883,7 @@ namespace Scopa {
 
                 // TODO: call OnMeshesDone()
 #if SCOPA_MESH_DEBUG
-                string timerLog = $"ScopaMeshJobGroup {entityData.ClassName}: {rendererResults.Length} renderer meshes / {colliderResults.Length} ";
+                string timerLog = $"ScopaMeshJobGroup {entityData.ClassName}: {rendererResults.Count} renderers / {colliderResults.Count} colliders";
                 foreach (var timerKVP in timers) {
                     timerLog += $"\n{timerKVP.Key} {timerKVP.Value.ElapsedMilliseconds} ms";
                 }
@@ -891,8 +895,7 @@ namespace Scopa {
                 var meshes = new Mesh[textureNames.Count];
                 for (int i = 0; i < meshes.Length; i++) {
                     var newMesh = new Mesh {
-                        name = $"{textureNames[i]}"
-                        // name = string.Format(colliderNameFormat, i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture))
+                        name = $"{namePrefix}_{textureNames[i]}"
                     };
                     meshes[i] = newMesh;
                 }
@@ -908,9 +911,13 @@ namespace Scopa {
                 }
                 // finalizing mesh!
                 Mesh.ApplyAndDisposeWritableMeshData(meshDataArray, meshes);
-                rendererResults = new ScopaRendererMeshResult[meshes.Length];
+                rendererResults = new List<ScopaRendererMeshResult>(meshes.Length);
                 for (int i = 0; i < meshes.Length; i++) {
                     var newMesh = meshes[i];
+
+                    if (newMesh == null || newMesh.vertexCount == 0)
+                        continue;
+
                     if (config.addTangents)
                         newMesh.RecalculateTangents();
                     newMesh.RecalculateBounds();
@@ -938,49 +945,50 @@ namespace Scopa {
 #endif
 
                     // Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
-                    rendererResults[i] = new(newMesh, entityData, textureToMaterial[textureNames[i]]);
+                    rendererResults.Add(new(newMesh, entityData, textureToMaterial[textureNames[i]]));
                 }
                 StopTimer("MeshWrite");
             }
 
             public void FinishCollisionMeshes() {
-                var meshes = new Mesh[solids.Length];
-                for (int i = 0; i < meshes.Length; i++) {
-                    meshes[i] = new Mesh();
+                var colliderMeshes = new Mesh[solids.Length];
+                for (int i = 0; i < colliderMeshes.Length; i++) {
+                    colliderMeshes[i] = new Mesh();
                 }
 
                 colliderJobHandle.Complete();
                 StopTimer("ColliderMeshBuild");
 
                 StartTimer("ColliderMeshWrite");
-                for (int i = 0; i < meshes.Length; i++) {
-                    var meshData = meshDataArray[i];
+                for (int i = 0; i < colliderMeshes.Length; i++) {
+                    var meshData = colliderMeshDataArray[i];
                     meshData.subMeshCount = 1;
                     meshData.SetSubMesh(0, new SubMeshDescriptor(0, colliderMeshCounts[i].triIndexCount), MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
                 }
-                colliderResults = new ScopaColliderMeshResult[solids.Length];
-                Mesh.ApplyAndDisposeWritableMeshData(colliderMeshDataArray, meshes);
+                colliderResults = new List<ScopaColliderResult>(solids.Length);
+                Mesh.ApplyAndDisposeWritableMeshData(colliderMeshDataArray, colliderMeshes);
 
-                for (int i = 0; i < meshes.Length; i++) { // TODO: colliderNameFormat string
-                    Mesh newMesh = meshes[i];
+                for (int i = 0; i < colliderMeshes.Length; i++) { // TODO: colliderNameFormat string
+                    Mesh newMesh = colliderMeshes[i];
                     
                     if (newMesh != null && newMesh.vertexCount > 0) {
+                        newMesh.name = $"{namePrefix}_Collider{i.ToString("D5", CultureInfo.InvariantCulture)}";
                         newMesh.RecalculateBounds();
 #if UNITY_EDITOR
                         if (config.meshCompression != ScopaMapConfig.ModelImporterMeshCompression.Off)
                             MeshUtility.SetMeshCompression(newMesh, (ModelImporterMeshCompression)config.meshCompression);
 #endif
-                        colliderResults[i] = new ScopaColliderMeshResult(
+                        colliderResults.Add(new(
                             newMesh,
                             entityData,
                             colliderSolidity[i]
-                        );
-                    } else if (colliderSolidity[i] != ColliderSolidity.NoCollider) { // if box collider, we'll just use the mesh bounds to config a collider 
-                        colliderResults[i] = new ScopaColliderMeshResult(
+                        ));
+                    } else if (colliderSolidity[i] != ColliderSolidity.SolidConcaveMegaCollider && colliderSolidity[i] != ColliderSolidity.NoCollider) { // if box collider, we'll just use the mesh bounds to config a collider 
+                        colliderResults.Add(new(
                             boxColliderData[i],
                             entityData,
                             colliderSolidity[i]
-                        );
+                        ));
                     }
                 }
                 StopTimer("ColliderMeshWrite");

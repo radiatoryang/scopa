@@ -92,22 +92,35 @@ namespace Scopa {
             #if UNITY_EDITOR
             // var findTimer = new Stopwatch();
             // findTimer.Start();
+
             var materialSearch = AssetDatabase.FindAssets("t:Material a:assets");
-            // findTimer.Stop();
 
             var materials = new Dictionary<string, Material>(materialSearch.Length);
             foreach ( var materialSearchGUID in materialSearch) {
+                var path = AssetDatabase.GUIDToAssetPath(materialSearchGUID);
+                var firstAsset = AssetDatabase.LoadAssetAtPath<Material>(path);
+
                 // if there's multiple Materials attached to one Asset, we have to do additional filtering
-                var allAssets = AssetDatabase.LoadAllAssetsAtPath( AssetDatabase.GUIDToAssetPath(materialSearchGUID) );
-                foreach ( var asset in allAssets ) {
-                    if ( asset != null && asset is Material) {
-                        var key = asset.name.ToLowerInvariant();
-                        if (!materials.ContainsKey(key))
-                            materials.Add(key, asset as Material);
+                if (AssetDatabase.IsSubAsset(firstAsset)) { 
+                    var allAssets = AssetDatabase.LoadAllAssetsAtPath(path);
+                    foreach ( var asset in allAssets ) {
+                        if ( asset != null && asset is Material) {
+                            var key = asset.name.ToLowerInvariant();
+                            if (!materials.ContainsKey(key))
+                                materials.Add(key, asset as Material);
+                        }
                     }
+                } else { 
+                    var key = firstAsset.name.ToLowerInvariant();
+                    if (!materials.ContainsKey(key))
+                        materials.Add(key, firstAsset);
                 }
             }
-            // Debug.Log($"CacheMaterialSearch: {findTimer.ElapsedMilliseconds} ms / {forTimer.ElapsedMilliseconds} ms");
+            
+            // findTimer.Stop();
+            // Debug.Log($"CacheMaterialSearch: {findTimer.ElapsedMilliseconds} ms");
+            Debug.Log($"found {materials.Count} materials");
+            
             return materials;
             #else
             Debug.Log("CacheMaterialSearch() is not available at runtime.");
@@ -156,13 +169,14 @@ namespace Scopa {
             var entityOrigin = Vector3.zero;
             if ( entData.TryGetVector3Scaled("origin", out var scaledPos, config.scalingFactor) ) {
                 entityOrigin = scaledPos;
-            }
+            } 
             
+            var entityName = $"{entData.ClassName}#{entData.ID}";
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>().ToArray();
             var brushJobs = solids.Length == 0 ? null : 
                 new ScopaMesh.ScopaMeshJobGroup(
                     config,
-                    namePrefix,
+                    $"{namePrefix}_{entityName}",
                     entityOrigin,
                     entData,
                     solids,
@@ -173,7 +187,7 @@ namespace Scopa {
             var entityPrefab = config.GetEntityPrefabFor(entData.ClassName);
             var entityObject = InstantiateOrCreateEmpty(rootGameObject.transform, entityPrefab, entData, config);
 
-            entityObject.name = $"{entData.ClassName}#{entData.ID}";
+            entityObject.name = entityName;
             if ( entData.TryGetString("targetname", out var targetName) )
                 entityObject.name += " " + targetName;
             entityObject.transform.position = entityOrigin;
@@ -199,12 +213,9 @@ namespace Scopa {
             UpdateEntityComponents(config, entData, entityObject);
         }
 
-        static void InstantiateRenderers(ScopaRendererMeshResult[] results, ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
+        static void InstantiateRenderers(List<ScopaRendererMeshResult> results, ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
             var entityMeshPrefab = config.GetMeshPrefabFor(entData.ClassName);
-            for (int i = 0; i < results.Length; i++) {
-                var result = results[i];
-                if (result == null)
-                    continue;
+            foreach(var result in results) {
 
                 var thisMeshPrefab = entityMeshPrefab;
                 var materialConfig = result.material.materialConfig;
@@ -216,7 +227,7 @@ namespace Scopa {
                 }
 
                 var newMeshObj = InstantiateOrCreateEmpty(entityObject.transform, thisMeshPrefab, entData, config);
-                newMeshObj.name = result.mesh.name;
+                newMeshObj.name = result.material.GetTextureNameForSearching();
 
                 // // detect smoothing angle, if defined via map config or material config or entity
                 // var smoothNormalAngle = config.defaultSmoothingAngle;
@@ -256,24 +267,22 @@ namespace Scopa {
             }
         }
 
-        static void InstantiateColliders(ScopaColliderMeshResult[] results, ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
-            for (int i = 0; i < results.Length; i++) {
+        static void InstantiateColliders(List<ScopaColliderResult> results, ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
+            for (int i = 0; i < results.Count; i++) {
                 var result = results[i];
-                if (result == null)
-                    continue;
-
-                var newGO = new GameObject(string.Format("Collider", i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture)));
-                newGO.transform.SetParent(entityObject.transform);
-                newGO.transform.localPosition = Vector3.zero;
-                newGO.transform.localRotation = Quaternion.identity;
-                newGO.transform.localScale = Vector3.one;
 
                 if (result.mesh != null && result.mesh.vertexCount > 0) { // MESH COLLIDER
+                    var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, entData, config);
+                    newGO.name = string.Format("Collider{0}", i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
+
                     var newMeshCollider = newGO.AddComponent<MeshCollider>();
                     newMeshCollider.convex = result.solidity == ScopaMesh.ColliderSolidity.Trigger || result.solidity == ScopaMesh.ColliderSolidity.SolidConvex;
                     newMeshCollider.isTrigger = result.solidity == ScopaMesh.ColliderSolidity.Trigger;
                     newMeshCollider.sharedMesh = result.mesh;
                 } else if (math.lengthsq(result.boxColliderData.size) > 0.01f) { // BOX COLLIDER
+                    var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, entData, config);
+                    newGO.name = string.Format("Collider{0}", i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
+
                     var box = result.boxColliderData;
                     newGO.transform.localPosition = box.position;
                     newGO.transform.localEulerAngles = box.eulerAngles;
@@ -434,19 +443,19 @@ namespace Scopa {
         public Mesh GetMesh() => mesh;
     }
 
-    public class ScopaColliderMeshResult: IScopaMeshResult {
+    public class ScopaColliderResult: IScopaMeshResult {
         public Mesh mesh;
         public ScopaMesh.ScopaBoxColliderData boxColliderData;
         public ScopaEntityData entityData;
         public ScopaMesh.ColliderSolidity solidity;
 
-        public ScopaColliderMeshResult(Mesh mesh, ScopaEntityData entityData, ScopaMesh.ColliderSolidity solidity) {
+        public ScopaColliderResult(Mesh mesh, ScopaEntityData entityData, ScopaMesh.ColliderSolidity solidity) {
             this.mesh = mesh;
             this.entityData = entityData;
             this.solidity = solidity;
         }
 
-        public ScopaColliderMeshResult(ScopaMesh.ScopaBoxColliderData box, ScopaEntityData entityData, ScopaMesh.ColliderSolidity solidity) {
+        public ScopaColliderResult(ScopaMesh.ScopaBoxColliderData box, ScopaEntityData entityData, ScopaMesh.ColliderSolidity solidity) {
             this.boxColliderData = box;
             this.entityData = entityData;
             this.solidity = solidity;

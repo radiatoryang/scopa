@@ -35,6 +35,9 @@ namespace Scopa.Editor {
 
             // we have to serialize every mesh as a subasset, or else it won't get saved
             foreach ( var meshResult in meshList ) {
+                if (meshResult == null)
+                    continue;
+                    
                 var mesh = meshResult.GetMesh();
                 if (mesh != null) {
                     ctx.AddObjectToAsset(mesh.name, mesh);

@@ -59,7 +59,7 @@ namespace Scopa {
 
         [Space(), Header("TEXTURES & MATERIALS")]
 
-        [Tooltip("(EDITOR-ONLY) (default: true) try to automatically match each texture name to a similarly named Material already in the project")]
+        [Tooltip("(EDITOR-ONLY) (default: true) try to automatically match each texture name to a similarly named Material already in the project. Increases import times based on how many Materials it must find.")]
         public bool findMaterials = true;
 
         [Tooltip("(default: 1.0) map-wide scaling factor for all texture faces; < 1.0 enlarges textures, > 1.0 shrinks textures")]
