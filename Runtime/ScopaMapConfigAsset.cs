@@ -47,8 +47,8 @@ namespace Scopa {
 
         [Space(), Header("COLLIDERS")]
 
-        [Tooltip("(default: Box and Convex) For each brush we add a collider. Axis-aligned boxy brushes use Box Colliders, anything else gets a convex Mesh Collider. You can also force just one type, or use a big complex expensive concave Mesh Collider.")]
-        public ColliderImportMode colliderMode = ColliderImportMode.BoxAndConvex;
+        [Tooltip("(default: Concave Mesh Collider) Concave mesh collider is convenient and OK for most uses, but can be buggy at high speeds / expensive for a big complex map. If you need accuracy / stability, use Box and Convex - but be warned Unity makes each brush collider have its own game object, which can add lots of overhead for big complex maps.\nNote: Triggers can't be concave, and will default to Box / Convex.")]
+        public ColliderImportMode colliderMode = ColliderImportMode.MergeAllToOneConcaveMeshCollider;
 
         [Tooltip("(default: illusionary) If an entity's classname contains a word in this list, do not generate a collider for it and disable Navigation Static for it.")]
         public List<string> nonsolidEntities = new List<string>() {"illusionary"};
