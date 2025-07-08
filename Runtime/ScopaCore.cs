@@ -137,7 +137,7 @@ namespace Scopa {
                 if ( ent.Children[i] is Entity ) {
                     var moreMerges = PrepassEntityRecursive( worldspawn, ent.Children[i] as Entity, config );
                     foreach(var merge in moreMerges) {
-                        mergedEntityData.Append(merge);
+                        mergedEntityData.Add(merge.Key, merge.Value);
                     }
                 } // merge child brush to worldspawn
                 else if ( config.IsEntityMergeToWorld(ent.ClassName) && ent.Children[i] is Solid ) {
@@ -283,13 +283,13 @@ namespace Scopa {
                     var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, entData, config);
                     newGO.name = string.Format("Collider{0}", i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
 
-                    var box = result.boxColliderData;
-                    newGO.transform.localPosition = box.position;
-                    newGO.transform.localEulerAngles = box.eulerAngles;
+                    var box = result.boxColliderData; // still have to convert from Quake space to Unity space
+                    newGO.transform.localPosition = box.position.xzy * config.scalingFactor;
+                    newGO.transform.localEulerAngles = new Vector3(box.eulerAngles.x, -box.eulerAngles.z, box.eulerAngles.y) * Mathf.Rad2Deg;
 
                     var boxCol = newGO.AddComponent<BoxCollider>();
                     boxCol.center = Vector3.zero;
-                    boxCol.size = box.size;
+                    boxCol.size = box.size.xzy * config.scalingFactor;
                     boxCol.isTrigger = result.solidity == ScopaMesh.ColliderSolidity.Trigger;
                 }
             }

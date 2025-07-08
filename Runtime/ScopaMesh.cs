@@ -400,13 +400,16 @@ namespace Scopa {
                     var vRead = allVertStream.AsReader();
                     var vertCounter = 0;
                     for (int i = 0; i < planes.Length; i++) {
+                        var center = float3.zero;
                         var count = vRead.BeginForEachIndex(i); // each ForEachBuffer is a face
                         for (int v = 0; v < count; v++) {
-                            allVerts[vertCounter + v] = vRead.Read<float3>();
+                            var vert = vRead.Read<float3>();
+                            allVerts[vertCounter + v] = vert;
+                            center += vert;
                         }
                         vRead.EndForEachIndex();
 
-                        faceData[i] = new(vertCounter, count);
+                        faceData[i] = new(vertCounter, count, center/count);
                         vertCounter += count;
                     }
                 }
@@ -511,29 +514,16 @@ namespace Scopa {
                     var face = faceData[i];
                     var offsetStart = face.vertIndexStart;
                     var offsetEnd = offsetStart + face.vertCount;
-                    var faceCenter = allVerts[offsetStart];
-                    for (int b = offsetStart + 1; b < offsetEnd; b++) {
-                        faceCenter += allVerts[b];
-                    }
-                    faceCenter /= face.vertCount;
                     var ignoreAxis = GetIgnoreAxis(math.abs(planes[i]));
 
                     var planeLookupEnumerator = planeLookup.GetValuesForKey(planeLookupKey);
-
                     foreach (var n in planeLookupEnumerator) {
-                        // for(int n=0; n<planes.Length; n++) { // test face (i) against all other faces (n) 
-                        //     // early out test: if any of these are true, then occlusion is impossible...
-                        //     // (1) if other face is culled OR (2) if they're far apart OR (3) not facing exactly opposite directions
-                        //     if ( faceMeshData[n].materialIndex < 0 || math.abs(planes[i].w + planes[n].w) > 0.1d || math.dot(planes[i].xyz, planes[n].xyz) > -0.99d )
-                        //         continue;
-
-                        // get occluding face ("polygon")
                         var otherPolygon = new NativeArray<float3>(faceData[n].vertCount, Allocator.Temp);
                         NativeArray<float3>.Copy(allVerts, faceData[n].vertIndexStart, otherPolygon, 0, faceData[n].vertCount);
 
                         var foundOutsideVert = false;
                         for (int x = offsetStart; x < offsetEnd && !foundOutsideVert; x++) {
-                            var point = allVerts[x] + math.normalize(faceCenter - allVerts[x]) * 0.2f; // shrink face point slightly
+                            var point = allVerts[x] + math.normalize(face.faceCenter - allVerts[x]) * 0.2f; // shrink face point slightly
                             switch (ignoreAxis) { // 2D math is easier, so let's ignore the least important axis
                                 case 0: if (!IsInPolygonYZ(point, otherPolygon)) foundOutsideVert = true; break;
                                 case 1: if (!IsInPolygonXZ(point, otherPolygon)) foundOutsideVert = true; break;
@@ -708,13 +698,15 @@ namespace Scopa {
                 colliderSolidity = new NativeArray<ColliderSolidity>(solids.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 for(int i=0; i<solids.Length; i++) {
                     // for merged entities, check the entity's original classname
-                    if (mergedEntityData.ContainsKey(solids[i]))
+                    if (mergedEntityData.ContainsKey(solids[i])) {
                         colliderSolidity[i] = GetColliderSolidity(mergedEntityData[solids[i]].ClassName);
-                    else
+                    } else {
                         colliderSolidity[i] = mainColliderMode;
+                    }
 
                     if (isMegaMeshCollider && colliderSolidity[i] == ColliderSolidity.SolidConvex)
                         colliderSolidity[i] = ColliderSolidity.SolidConcaveMegaCollider;
+                    
                 }
                 StopTimer("PrepColliderJobs");
 
@@ -726,6 +718,7 @@ namespace Scopa {
                     planes = planes,
                     planeOffsets = planeOffsets,
                     colliderSolidity = colliderSolidity,
+                    faceData = faceData,
                     colliderFaceMeshData = colliderFaceMeshData,
                     allowBoxColliders = allowBoxColliders,
                     boxColliderData = boxColliderData,
@@ -790,6 +783,7 @@ namespace Scopa {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
                 [ReadOnlyAttribute] public NativeArray<ColliderSolidity> colliderSolidity;
+                [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
                 [NativeDisableParallelForRestriction, WriteOnly] public NativeArray<ScopaFaceMeshData> colliderFaceMeshData;
                 const double BOX_ORTHOGONAL_TOLERANCE = 0.01d;
                 [ReadOnlyAttribute] public bool allowBoxColliders;
@@ -825,11 +819,60 @@ namespace Scopa {
                     if (meshIndex == -2) { // skip this solid
                         boxColliderData[i] = float3x3.zero;
                     } else if (meshIndex == -1) { // generate a box collider
-                        boxColliderData[i] = float3x3.zero; // FOR NOW: don't generate box collider
-                        // position: get center of solid
-                        // rotation: forward = biggest, most upright face
-                        // size: match pairs of parallel planes
+                        // position / centroid: average of all face centers
+                        var position = float3.zero;
+                        var faceCenters = new NativeList<float3>(6, Allocator.Temp);
+                        for(int p=0; p<planeCount; p++) {
+                            position += faceData[planeStart+p].faceCenter;
+                            faceCenters.Add(faceData[planeStart+p].faceCenter);
+                        }
+                        position /= 6;
+
+                        // size: the vector between each pair of parallel face centers
+                        var up = MeasureDistantPairs( 2, faceCenters );
+                        var forward = MeasureDistantPairs( 1, faceCenters );
+                        var right = MeasureDistantPairs( 0, faceCenters );
+                        var size = new float3( math.length(right), math.length(forward), math.length(up));
+
+                        // rotation
+                        var rotation = quaternion.LookRotation(math.normalize(up), math.normalize(forward));
+                        var euler = math.Euler(rotation);
+                        boxColliderData[i] = new(position, euler, size);
+
+                        faceCenters.Dispose();
                     }
+                }
+            }
+
+            static float3 MeasureDistantPairs(int axis, NativeList<float3> list) {
+                if (axis == 0)
+                    list.Sort( new SortByX() );
+                else if (axis == 1)
+                    list.Sort( new SortByY() );
+                else
+                    list.Sort( new SortByZ() );
+                
+                var vector = list[list.Length-1] - list[0];
+                list.RemoveAt(list.Length-1);
+                list.RemoveAt(0);
+                return vector;
+            }
+
+            struct SortByX : IComparer<float3> {
+                public int Compare(float3 a, float3 b) {
+                    return a.x.CompareTo(b.x);
+                }
+            }
+
+            struct SortByY : IComparer<float3> {
+                public int Compare(float3 a, float3 b) {
+                    return a.y.CompareTo(b.y);
+                }
+            }
+
+            struct SortByZ : IComparer<float3> {
+                public int Compare(float3 a, float3 b) {
+                    return a.z.CompareTo(b.z);
                 }
             }
 
@@ -1043,14 +1086,13 @@ namespace Scopa {
         public struct ScopaFaceData {
             /// <summary> will be 0 until VertCountJob fills it</summary>
             public int vertIndexStart, vertCount;
+            public float3 faceCenter;
 
-            public ScopaFaceData(int globalVertStart, int vertCount) : this() {
-                this.vertIndexStart = globalVertStart;
+            public ScopaFaceData(int vertIndexStart, int vertCount, float3 faceCenter) : this() {
+                this.vertIndexStart = vertIndexStart;
                 this.vertCount = vertCount;
+                this.faceCenter = faceCenter;
             }
-
-            public static implicit operator int2(ScopaFaceData d) => new(d.vertIndexStart, d.vertCount);
-            public static implicit operator ScopaFaceData(int2 i) => new(i.x, i.y);
 
             public override string ToString() {
                 return $"VertStart {vertIndexStart}, VertCount {vertCount}";

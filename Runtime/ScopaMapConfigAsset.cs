@@ -294,7 +294,6 @@ namespace Scopa {
 
         public enum ColliderImportMode {
             None,
-            BoxColliderOnly,
             ConvexMeshColliderOnly,
             BoxAndConvex,
             MergeAllToOneConcaveMeshCollider
