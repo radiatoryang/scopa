@@ -119,7 +119,7 @@ namespace Scopa {
             
             // findTimer.Stop();
             // Debug.Log($"CacheMaterialSearch: {findTimer.ElapsedMilliseconds} ms");
-            Debug.Log($"found {materials.Count} materials");
+            // Debug.Log($"found {materials.Count} materials");
             
             return materials;
             #else
@@ -202,8 +202,8 @@ namespace Scopa {
                 
             if (brushJobs != null) {
                 brushJobs.CompleteJobsAndGetResults();
-                InstantiateRenderers(brushJobs.rendererResults, config, entData, entityObject);
-                InstantiateColliders(brushJobs.colliderResults, config, entData, entityObject);
+                InstantiateRenderers(brushJobs, entityObject);
+                InstantiateColliders(brushJobs, entityObject);
                 meshList.AddRange(brushJobs.rendererResults);
                 meshList.AddRange(brushJobs.colliderResults);
                 brushJobs.DisposeJobsData();
@@ -213,8 +213,10 @@ namespace Scopa {
             UpdateEntityComponents(config, entData, entityObject);
         }
 
-        static void InstantiateRenderers(List<ScopaRendererMeshResult> results, ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
-            var entityMeshPrefab = config.GetMeshPrefabFor(entData.ClassName);
+        static void InstantiateRenderers(ScopaMesh.ScopaMeshJobGroup jobData, GameObject entityObject) {
+            var entityMeshPrefab = jobData.config.GetMeshPrefabFor(jobData.entityData.ClassName);
+            var results = jobData.rendererResults;
+            var config = jobData.config;
             foreach(var result in results) {
 
                 var thisMeshPrefab = entityMeshPrefab;
@@ -226,7 +228,7 @@ namespace Scopa {
                     thisMeshPrefab = materialConfig.meshPrefab;
                 }
 
-                var newMeshObj = InstantiateOrCreateEmpty(entityObject.transform, thisMeshPrefab, entData, config);
+                var newMeshObj = InstantiateOrCreateEmpty(entityObject.transform, thisMeshPrefab, jobData.entityData, config);
                 newMeshObj.name = result.material.GetTextureNameForSearching();
 
                 // // detect smoothing angle, if defined via map config or material config or entity
@@ -245,8 +247,20 @@ namespace Scopa {
 
                 // you can inherit ScopaMaterialConfig + override OnBuildMeshObject for extra per-material import logic
                 if ( materialConfig != null && materialConfig.useOnBuildMeshObject ) {
-                    materialConfig.OnBuildMeshObject( newMeshObj, result.mesh );
+                    materialConfig.OnBuildMeshObject( newMeshObj, result.mesh, jobData );
                 }
+
+                // now, finally, at the very end, optimize
+                // If optimize everything, just combine the two optimizations into one call
+                    if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeIndexBuffers) != 0 &&
+                        (config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0) {
+                        result.mesh.Optimize();
+                    } else {
+                        if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeIndexBuffers) != 0)
+                            result.mesh.OptimizeIndexBuffers();
+                        if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0)
+                            result.mesh.OptimizeReorderVertexBuffer();
+                    }
 
                 // populate components... if the mesh components aren't there, then add them
                 if ( newMeshObj.TryGetComponent<MeshFilter>(out var meshFilter) == false ) {
@@ -262,17 +276,18 @@ namespace Scopa {
                 meshRenderer.sharedMaterial = result.material.material;
 
                 if ( addedMeshRenderer ) { // if we added a generic mesh renderer, then set default shadow caster setting too
-                    meshRenderer.shadowCastingMode = config.castShadows;
+                    meshRenderer.shadowCastingMode = jobData.config.castShadows;
                 }
             }
         }
 
-        static void InstantiateColliders(List<ScopaColliderResult> results, ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
+        static void InstantiateColliders(ScopaMesh.ScopaMeshJobGroup jobData, GameObject entityObject) {
+            var results = jobData.colliderResults;
             for (int i = 0; i < results.Count; i++) {
                 var result = results[i];
 
                 if (result.mesh != null && result.mesh.vertexCount > 0) { // MESH COLLIDER
-                    var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, entData, config);
+                    var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, jobData.entityData, jobData.config);
                     newGO.name = string.Format("Collider{0}", i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
 
                     var newMeshCollider = newGO.AddComponent<MeshCollider>();
@@ -280,16 +295,16 @@ namespace Scopa {
                     newMeshCollider.isTrigger = result.solidity == ScopaMesh.ColliderSolidity.Trigger;
                     newMeshCollider.sharedMesh = result.mesh;
                 } else if (math.lengthsq(result.boxColliderData.size) > 0.01f) { // BOX COLLIDER
-                    var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, entData, config);
+                    var newGO = InstantiateOrCreateEmpty(entityObject.transform, null, jobData.entityData, jobData.config);
                     newGO.name = string.Format("Collider{0}", i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
 
                     var box = result.boxColliderData; // still have to convert from Quake space to Unity space
-                    newGO.transform.localPosition = box.position.xzy * config.scalingFactor;
+                    newGO.transform.localPosition = box.position.xzy * jobData.config.scalingFactor;
                     newGO.transform.localEulerAngles = new Vector3(box.eulerAngles.x, -box.eulerAngles.z, box.eulerAngles.y) * Mathf.Rad2Deg;
 
                     var boxCol = newGO.AddComponent<BoxCollider>();
                     boxCol.center = Vector3.zero;
-                    boxCol.size = box.size.xzy * config.scalingFactor;
+                    boxCol.size = box.size.xzy * jobData.config.scalingFactor;
                     boxCol.isTrigger = result.solidity == ScopaMesh.ColliderSolidity.Trigger;
                 }
             }

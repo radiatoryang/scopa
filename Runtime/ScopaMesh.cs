@@ -32,14 +32,16 @@ namespace Scopa {
     /// <summary>main class for Scopa mesh generation / geo functions </summary>
     public static class ScopaMesh {
         /// <summary>
-        /// <para>Main data class that schedules jobs to process all of one (1) entity's Quake brushes into Unity mesh data and colliders, all at once.</para>
-        /// <para>API: see <c>ScopaMaterialConfig.OnJobs()</c> and <c>ScopaMaterialConfig.OnMeshes()</c> to add your own code to modify meshes, per material.</para>
-        /// <list> Jobs overview:
-        /// <item> 1) VertJob fills vertex stream with shared vertex data </item>
-        /// <item> 2) VertCountJob counts and finalizes shared vertex data </item>
-        /// <item> 3) (optional) OcclusionJob culls hidden faces </item>
-        /// <item> 4) MeshCountJob counts non-culled vertices and tri indices per mesh </item>
-        /// <item> 5) MeshJob uses MeshCountJob results to fill MeshDataArray with verts, normals, and triangles, etc</item>
+        /// <para>Main class that schedules multi-threaded jobs to process all of one (1) entity's Quake brushes into Unity mesh data and colliders, all at once.</para>
+        /// <para>API: see <c>ScopaMaterialConfig.OnBuildMeshObject()</c> to add your own code to modify meshes, per material.
+        /// <br />You can even use the raw jobs data / raw Quake-space map data too, before it gets disposed.</para>
+        /// <list> Jobs pipeline overview for meshes in rendererResults:
+        /// <item> 1. VertJob clips Quake planes to fill vertex stream with shared vertex data </item>
+        /// <item> 2. VertCountJob counts and finalizes shared vertex data, per face </item>
+        /// <item> 3. (optional) OcclusionJob culls hidden faces </item>
+        /// <item> 4. MeshCountJob counts non-culled vertices and tri indices per mesh </item>
+        /// <item> 5. MeshJob uses MeshCounts to fill MeshDataArray with verts, tris, etc</item>
+        /// <item> 6. Complete() turns MeshDataArray into actual Meshes</item>
         /// </list></summary>
         public class ScopaMeshJobGroup {
             public ScopaMapConfig config;
@@ -52,9 +54,9 @@ namespace Scopa {
             /// <summary> Raw Quake-space brush data from the Sledge MAP parser. </summary>
             public Solid[] solids;
             /// <summary> Shared buffer for Quake-space planes (xyz = normal, w = distance) straight from Sledge MAP parser. </summary>
-            public NativeArray<double4> planes;
+            public NativeArray<double4> allPlanes;
             /// <summary> Per-brush offsets in the planes array. </summary>
-            public NativeArray<int> planeOffsets;
+            public NativeArray<int> allPlaneOffsets;
             /// <summary> Contains Quake-space verts for all meshes. Populated by CountJob, based on NativeStream data. </summary>
             public NativeArray<float3> allVerts;
 
@@ -63,7 +65,7 @@ namespace Scopa {
             public NativeArray<ScopaFaceData> faceData;
             /// <summary> Per-mesh-face vertStart offsets and vertCount, populated by a MeshCountsJob, used with allVerts to build a mesh. </summary>
             public NativeArray<ScopaFaceMeshData> faceMeshData, colliderFaceMeshData;
-            /// <summary> Per-face UV axis data. </summary
+            /// <summary> Per-face UV axis data. </summary>
             public NativeArray<ScopaFaceUVData> faceUVData;
 
             // PER-MESH DATA
@@ -107,13 +109,13 @@ namespace Scopa {
 
                 // Planes Prep can never be Bursted because Solids are managed
                 var planeCount = 0;
-                planeOffsets = new NativeArray<int>(solids.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                allPlaneOffsets = new NativeArray<int>(solids.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 for (int i = 0; i < solids.Length; i++) {
-                    planeOffsets[i] = planeCount;
+                    allPlaneOffsets[i] = planeCount;
                     planeCount += solids[i].Faces.Count;
                 }
 
-                planes = new(planeCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                allPlanes = new(planeCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 for (int i = 0; i < solids.Length; i++) {
                     if (solids[i].Faces.Count < 4) {
                         Debug.LogWarning($"{entity.ClassName}'s brush #{i} has less than 4 faces, which is impossible. It will be ignored. (Fix it in your level editor.)");
@@ -121,7 +123,7 @@ namespace Scopa {
                     }
                     for (int p = 0; p < solids[i].Faces.Count; p++) {
                         var quakeFace = solids[i].Faces[p];
-                        planes[planeOffsets[i] + p] = new double4(
+                        allPlanes[allPlaneOffsets[i] + p] = new double4(
                             quakeFace.Plane.Normal.X,
                             quakeFace.Plane.Normal.Y,
                             quakeFace.Plane.Normal.Z,
@@ -135,8 +137,8 @@ namespace Scopa {
                 // VERT JOB - intersect the planes to generate vertices
                 StartTimer("Verts");
                 var vertJob = new VertJob {
-                    planeOffsets = planeOffsets,
-                    facePlanes = planes,
+                    planeOffsets = allPlaneOffsets,
+                    facePlanes = allPlanes,
                     allVertStream = allVertStream.AsWriter()
                 };
                 vertJob.Schedule(solids.Length, 64).Complete();
@@ -149,7 +151,7 @@ namespace Scopa {
 
                 var vertCountJob = new VertCountJob {
                     faceData = faceData,
-                    planes = planes,
+                    planes = allPlanes,
                     allVerts = allVerts,
                     allVertStream = allVertStream,
                 };
@@ -164,7 +166,7 @@ namespace Scopa {
                         // detect materials and allocate
                         var quakeFace = solids[i].Faces[p];
                         var textureName = quakeFace.TextureName;
-                        var pIndex = planeOffsets[i] + p;
+                        var pIndex = allPlaneOffsets[i] + p;
 
                         if (textureNames.Contains(textureName)) {
                             var index = textureNames.IndexOf(textureName);
@@ -205,7 +207,7 @@ namespace Scopa {
                     StartTimer("Occlusion");
                     var planeLookup = new NativeParallelMultiHashMap<int4, int>(planeCount, Allocator.TempJob);
                     var planeLookupJob = new PlaneLookupJob {
-                        planes = planes,
+                        planes = allPlanes,
                         faceMeshData = faceMeshData,
                         planeLookup = planeLookup
                     };
@@ -213,7 +215,7 @@ namespace Scopa {
 
                     var occlusionJob = new OcclusionJob {
                         allVerts = allVerts,
-                        planes = planes,
+                        planes = allPlanes,
                         faceData = faceData,
                         faceMeshData = faceMeshData,
                         planeLookup = planeLookup
@@ -251,13 +253,12 @@ namespace Scopa {
                 }
 
                 var meshJob = new MeshJob {
-                    planes = planes,
+                    planes = allPlanes,
                     faceData = faceData,
                     faceUVData = faceUVData,
                     faceMeshData = faceMeshData,
-                    faceVertices = allVerts,
+                    allVerts = allVerts,
                     meshOrigin = entityOrigin,
-                    meshCounts = meshCounts,
                     meshDataArray = meshDataArray,
                     textureData = textureData.AsArray(),
                     scalingConfig = new float2(config.globalTexelScale, config.scalingFactor)
@@ -481,15 +482,16 @@ namespace Scopa {
             const double OCCLUSION_TOLERANCE = 0.01d;
             static int4 GetPlaneLookupKey(double4 plane) {
                 var roundedNormal = math.round(plane.xyz);
-                if (math.lengthsq(roundedNormal - plane.xyz) > OCCLUSION_TOLERANCE * OCCLUSION_TOLERANCE)
+                if (math.lengthsq(roundedNormal - plane.xyz) > OCCLUSION_TOLERANCE * OCCLUSION_TOLERANCE) {
                     return (int4)(plane * OCCLUSION_PRECISION);
-                else
+                } else {
                     return new int4(
                         ((int)roundedNormal.x) * OCCLUSION_PRECISION,
                         ((int)roundedNormal.y) * OCCLUSION_PRECISION,
                         ((int)roundedNormal.z) * OCCLUSION_PRECISION,
                         (int)(plane.w * OCCLUSION_PRECISION)
                     );
+                }
             }
 
             /// <summary> Per-face job to cull each face covered by another face (in same entity) </summary>
@@ -621,10 +623,9 @@ namespace Scopa {
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceUVData> faceUVData;
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> faceMeshData;
-                [ReadOnlyAttribute] public NativeArray<float3> faceVertices;
+                [ReadOnlyAttribute] public NativeArray<float3> allVerts;
 
                 [ReadOnlyAttribute] public float3 meshOrigin;
-                [ReadOnlyAttribute] public NativeArray<ScopaMeshCounts> meshCounts;
                 [ReadOnlyAttribute] public NativeArray<ScopaTextureData> textureData;
 
                 [NativeDisableParallelForRestriction] public Mesh.MeshDataArray meshDataArray;
@@ -660,13 +661,13 @@ namespace Scopa {
                         var n = face.vertIndexStart + x; // global vert buffer index
 
                         // all Face Datas are still in Quake space; need to convert to Unity space and axes
-                        outputVerts[mdi] = faceVertices[n].xzy * scalingConfig.y - meshOrigin;
+                        outputVerts[mdi] = allVerts[n].xzy * scalingConfig.y - meshOrigin;
                         outputNorms[mdi] = (float3)planes[i].xzy;
 
                         var uv = faceUVData[i];
                         outputUVs[mdi] = new float2( // NOTE: UV axes are already scaled
-                            (math.dot(faceVertices[n].xzy, uv.faceU.xzy) + uv.faceU.w) / textureData[faceMesh.meshIndex].textureWidth,
-                            (math.dot(faceVertices[n].xzy, -uv.faceV.xzy) - uv.faceV.w) / textureData[faceMesh.meshIndex].textureHeight
+                            (math.dot(allVerts[n].xzy, uv.faceU.xzy) + uv.faceU.w) / textureData[faceMesh.meshIndex].textureWidth,
+                            (math.dot(allVerts[n].xzy, -uv.faceV.xzy) - uv.faceV.w) / textureData[faceMesh.meshIndex].textureHeight
                         ) * scalingConfig.x;
                     }
 
@@ -680,6 +681,8 @@ namespace Scopa {
                     }
                 }
             }
+
+
 
 #endregion
 #region Collider Jobs
@@ -715,8 +718,8 @@ namespace Scopa {
                 var allowBoxColliders = config.colliderMode != ScopaMapConfig.ColliderImportMode.ConvexMeshColliderOnly && !isMegaMeshCollider;
                 boxColliderData = new(solids.Length, Allocator.TempJob, NativeArrayOptions.ClearMemory);
                 var brushColliderJob = new BrushColliderJob {
-                    planes = planes,
-                    planeOffsets = planeOffsets,
+                    planes = allPlanes,
+                    planeOffsets = allPlaneOffsets,
                     colliderSolidity = colliderSolidity,
                     faceData = faceData,
                     colliderFaceMeshData = colliderFaceMeshData,
@@ -763,7 +766,7 @@ namespace Scopa {
                     colliderMeshDataArray = colliderMeshDataArray,
                     scalingFactor = config.scalingFactor
                 };
-                colliderJobHandle = meshJob.Schedule(planes.Length, 128);
+                colliderJobHandle = meshJob.Schedule(allPlanes.Length, 128);
             }
 
             ColliderSolidity GetColliderSolidity(string className) {
@@ -945,7 +948,6 @@ namespace Scopa {
                 finalJobHandle.Complete();
                 StopTimer("MeshBuild");
 
-                // TODO: call JobsDone()
                 StartTimer("MeshWrite");
                 for (int i = 0; i < meshes.Length; i++) {
                     var meshData = meshDataArray[i];
@@ -964,17 +966,6 @@ namespace Scopa {
                     if (config.addTangents)
                         newMesh.RecalculateTangents();
                     newMesh.RecalculateBounds();
-
-                    // If optimize everything, just combine the two optimizations into one call
-                    if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeIndexBuffers) != 0 &&
-                        (config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0) {
-                        newMesh.Optimize();
-                    } else {
-                        if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeIndexBuffers) != 0)
-                            newMesh.OptimizeIndexBuffers();
-                        if ((config.optimizeMesh & ScopaMapConfig.ModelImporterMeshOptimization.OptimizeVertexBuffers) != 0)
-                            newMesh.OptimizeReorderVertexBuffer();
-                    }
 
 #if UNITY_EDITOR
                     if (config.addLightmapUV2) {
@@ -1038,8 +1029,8 @@ namespace Scopa {
             }
 
             public void DisposeJobsData() {
-                planeOffsets.Dispose();
-                planes.Dispose();
+                allPlaneOffsets.Dispose();
+                allPlanes.Dispose();
                 allVerts.Dispose();
                 faceData.Dispose();
                 faceMeshData.Dispose();
