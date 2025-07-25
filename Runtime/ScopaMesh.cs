@@ -95,6 +95,7 @@ namespace Scopa {
             public List<ScopaColliderResult> colliderResults;
 
             JobHandle finalJobHandle, colliderJobHandle;
+            bool hasColliderJobs;
 
             public ScopaMeshJobGroup(ScopaMapConfig config, string namePrefix, Vector3 entityOrigin, ScopaEntityData entity, Solid[] solids, Dictionary<Solid, Entity> mergedEntityData, Dictionary<string, Material> materialSearch = null) {
                 this.config = config;
@@ -278,7 +279,9 @@ namespace Scopa {
                 // snappingJob.Schedule(planeOffsets.Length, 128).Complete();
                 // StopTimer("VertSnap");
 
-                StartColliderJobs();
+                hasColliderJobs = config.colliderMode != ScopaMapConfig.ColliderImportMode.None && !config.IsEntityNonsolid(entityData.ClassName);
+                if (hasColliderJobs)
+                    StartColliderJobs();
             }
 
 #region Renderer Mesh Jobs
@@ -688,9 +691,6 @@ namespace Scopa {
 #region Collider Jobs
 
             void StartColliderJobs() {
-                if (config.colliderMode == ScopaMapConfig.ColliderImportMode.None || config.IsEntityNonsolid(entityData.ClassName))
-                    return;
-
                 StartTimer("PrepColliderJobs");
                 var mainColliderMode = GetColliderSolidity(entityData.ClassName);
                 var isMegaMeshCollider = config.colliderMode == ScopaMapConfig.ColliderImportMode.MergeAllToOneConcaveMeshCollider
@@ -921,9 +921,8 @@ namespace Scopa {
 #region Jobs Completion
 
             public void CompleteJobsAndGetResults() {
-                if (finalJobHandle != null)
-                    FinishRendererMeshes();
-                if (colliderJobHandle != null)
+                FinishRendererMeshes();
+                if (hasColliderJobs)
                     FinishCollisionMeshes();
                 StopTimer("Total");
 

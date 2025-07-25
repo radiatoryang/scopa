@@ -384,7 +384,7 @@ namespace Scopa {
                 #if UNITY_EDITOR
                 newObj = PrefabUtility.InstantiatePrefab(prefab) as GameObject; // maintain prefab linkage
                 #else
-                newObj = UnityEngine.Object.Instantiate(entityPrefab);
+                newObj = UnityEngine.Object.Instantiate(prefab);
                 #endif
             } else {
                 newObj = new GameObject();
