@@ -22,11 +22,14 @@ namespace Scopa.Editor {
             EditorGUI.LabelField( new Rect(16, 0, Screen.width, 32), ".MAP Import Settings", EditorStyles.boldLabel);
 
             var externalConfig = serializedObject.FindProperty("externalConfig");
-            EditorGUI.PropertyField(new Rect(EXTERNAL_CONFIG_FIELD_OFFSET, 8, Screen.width-EXTERNAL_CONFIG_FIELD_OFFSET-16, 20), externalConfig, new GUIContent() );
+            var hasExternalConfig = externalConfig.objectReferenceValue != null;
+            var externalConfigOffset = hasExternalConfig ? EXTERNAL_CONFIG_FIELD_OFFSET - SAVE_BUTTON_WIDTH : EXTERNAL_CONFIG_FIELD_OFFSET;
+            var externalConfigWidth = hasExternalConfig ? Screen.width-EXTERNAL_CONFIG_FIELD_OFFSET-16+SAVE_BUTTON_WIDTH : Screen.width-EXTERNAL_CONFIG_FIELD_OFFSET-16;
+            EditorGUI.PropertyField(new Rect(externalConfigOffset, 8, externalConfigWidth, 20), externalConfig, new GUIContent() );
 
             var internalConfig = serializedObject.FindProperty("config");
 
-            if ( GUI.Button( new Rect(EXTERNAL_CONFIG_FIELD_OFFSET-SAVE_BUTTON_WIDTH, 8, SAVE_BUTTON_WIDTH, 20), "Save as Asset...") ) {
+            if ( !hasExternalConfig && GUI.Button( new Rect(EXTERNAL_CONFIG_FIELD_OFFSET-SAVE_BUTTON_WIDTH, 8, SAVE_BUTTON_WIDTH, 20), "Save as Asset...") ) {
                 var newPath = EditorUtility.SaveFilePanelInProject("Export import settings as Map Config Asset...", "New Map Config Asset", "asset", "Save these MAP importer settings as an external asset, somewhere in your Assets folder.");
                 var configAsset = ScriptableObject.CreateInstance<ScopaMapConfigAsset>();
                 configAsset.config = internalConfig.GetSerializedValue<ScopaMapConfig>().ShallowCopy();

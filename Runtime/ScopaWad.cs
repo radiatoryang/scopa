@@ -44,6 +44,8 @@ namespace Scopa {
                 Debug.LogError("Couldn't parse WAD file " + wad.Name);
             }
 
+            ScopaProjectSettings.Recache();
+
             var textureList = new List<Texture2D>();
 
             foreach ( var entry in wad.Entries ) {
@@ -234,16 +236,17 @@ namespace Scopa {
                 }
                 // Debug.Log("started working on " + texName);
 
+                int resolution = wadConfig.resolution == WadResolution.ProjectDefault ? (int)ScopaProjectSettings.GetCached().editorTextureResolution : (int)wadConfig.resolution;
                 var mipTex = new MipTextureLump();
                 mipTex.Name = texName;
-                mipTex.Width = System.Convert.ToUInt32(texture.width / (int)wadConfig.resolution);
-                mipTex.Height = System.Convert.ToUInt32(texture.height / (int)wadConfig.resolution);
+                mipTex.Width = System.Convert.ToUInt32(texture.width / resolution);
+                mipTex.Height = System.Convert.ToUInt32(texture.height / resolution);
                 mipTex.NumMips = 4; // all wad3 textures always have 3 mips
                 // Debug.Log($"{mipTex.Name} is {mipTex.Width} x {mipTex.Height}");
 
                 bool isTransparent = GraphicsFormatUtility.HasAlphaChannel(mat.mainTexture.graphicsFormat);
 
-                mipTex.MipData = QuantizeToMipmap( texture, mat.color, isTransparent, (int)wadConfig.resolution, out var palette );
+                mipTex.MipData = QuantizeToMipmap( texture, mat.color, isTransparent, resolution, out var palette );
 
                 mipTex.Palette = new byte[palette.Length * 3];
                 for( int i=0; i<palette.Length; i++) {

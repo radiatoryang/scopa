@@ -39,7 +39,7 @@ namespace Scopa.Editor {
             var indent = EditorGUI.indentLevel;
             EditorGUI.indentLevel = 0;
 
-            SerializedProperty prop = property.FindPropertyRelative("format");
+            SerializedProperty prop = property.FindPropertyRelative("resolution");
             do {
                 EditorGUILayout.PropertyField(prop, true);
             }

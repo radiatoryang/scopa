@@ -13,9 +13,9 @@
 
 ## Installation
 
-This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2020.1 or later. To install, open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html)
+This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2023.2 or later. To install, open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html)
 
-Dependencies: [Unity.Collections](https://docs.unity3d.com/Packages/com.unity.collections@latest/) and [Unity.Mathematics](https://docs.unity3d.com/Packages/com.unity.mathematics@latest). [Burst](https://docs.unity3d.com/Packages/com.unity.burst@latest/) is optional but strongly recommended for much faster map imports.
+Dependencies: [Burst](https://docs.unity3d.com/Packages/com.unity.burst@latest/), [Unity.Collections](https://docs.unity3d.com/Packages/com.unity.collections@latest/), and [Unity.Mathematics](https://docs.unity3d.com/Packages/com.unity.mathematics@latest). These are already required for URP anyway.
 
 ## Usage
 
@@ -43,6 +43,7 @@ For more info, see [Documentation](Documentation~/Index.md).
 - lots of file format handling from [Sledge Formats](https://github.com/LogicAndTrick/sledge-formats)
 - GPU-based texture resizing from [Unity GPU Texture Resize](https://github.com/ababilinski/unity-gpu-texture-resize)
 - color palette generation from [JeremyAnsel.ColorQuant](https://github.com/JeremyAnsel/JeremyAnsel.ColorQuant), an implementation of Xiaolin Wu's Color Quantizer (v2) from Graphics Gems volume II
+- mesh normal smoothing from [Ica_Normal_Tools](https://github.com/Ica-Software/Ica_Normal_Tools/)
 
 ## Advice
 - I prefer more control, but if you want to pay for something simpler with magic auto configuration then try [Tremble Map Importer (Asset Store)](https://assetstore.unity.com/packages/tools/level-design/tremble-map-importer-277805)

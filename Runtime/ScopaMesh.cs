@@ -1,11 +1,21 @@
 // uncomment to enable debug messages
-#define SCOPA_MESH_DEBUG
+// #define SCOPA_MESH_DEBUG
 // #define SCOPA_MESH_VERBOSE
 
 #if SCOPA_MESH_DEBUG
 using System.Diagnostics;
 using Debug = UnityEngine.Debug;
 #endif
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
+// Burst is now required, since URP is the new normal + URP requires Burst anyway
+// sorry to anyone who hates this
+using Unity.Burst;
+using Unity.Burst.CompilerServices;
+using System.Globalization;
 
 using System.Collections.Generic;
 using Sledge.Formats.Map.Objects;
@@ -16,17 +26,7 @@ using Unity.Mathematics;
 using UnityEngine.Rendering;
 using Mesh = UnityEngine.Mesh;
 using Vector3 = UnityEngine.Vector3;
-
-#if SCOPA_USE_BURST
-using Unity.Burst;
-using Unity.Burst.CompilerServices;
-using System.Globalization;
-
-#endif
-
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
+using Ica.Normal;
 
 namespace Scopa {
     /// <summary>main class for Scopa mesh generation / geo functions </summary>
@@ -96,14 +96,16 @@ namespace Scopa {
 
             JobHandle finalJobHandle, colliderJobHandle;
             bool hasColliderJobs;
+            float defaultSmoothingAngle;
 
-            public ScopaMeshJobGroup(ScopaMapConfig config, string namePrefix, Vector3 entityOrigin, ScopaEntityData entity, Solid[] solids, Dictionary<Solid, Entity> mergedEntityData, Dictionary<string, Material> materialSearch = null) {
+            public ScopaMeshJobGroup(ScopaMapConfig config, string namePrefix, Vector3 entityOrigin, ScopaEntityData entity, Solid[] solids, Dictionary<Solid, Entity> mergedEntityData, Dictionary<string, Material> materialSearch = null, float defaultSmoothingAngle = -1) {
                 this.config = config;
                 this.namePrefix = namePrefix;
                 this.entityOrigin = entityOrigin;
                 this.entityData = entity;
                 this.mergedEntityData = mergedEntityData;
                 this.solids = solids;
+                this.defaultSmoothingAngle = defaultSmoothingAngle;
 
                 StartTimer("Total");
                 StartTimer("Planes");
@@ -162,6 +164,7 @@ namespace Scopa {
                 faceMeshData = new(planeCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 faceUVData = new(planeCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 textureData = new(128, Allocator.TempJob);
+                var defaultTexSize = ScopaProjectSettings.GetCached().defaultTexSize;
                 for (int i = 0; i < solids.Length; i++) {
                     for (int p = 0; p < solids[i].Faces.Count; p++) {
                         // detect materials and allocate
@@ -188,8 +191,8 @@ namespace Scopa {
 
                             textureNames.Add(textureName);
                             textureData.Add(matOverride.material != null && matOverride.material.mainTexture != null ?
-                                new(matOverride.material.mainTexture.width, matOverride.material.mainTexture.height, index, isCulled) :
-                                new(config.defaultTexSize, config.defaultTexSize, index, isCulled)
+                                new(matOverride.material.mainTexture.width, matOverride.material.mainTexture.height, index, (int)matOverride.materialConfig.smoothingAngle, isCulled) :
+                                new(defaultTexSize, defaultTexSize, index, -1, isCulled)
                             );
                         }
 
@@ -253,6 +256,7 @@ namespace Scopa {
                     meshData.SetIndexBufferParams(meshCounts[i].triIndexCount, IndexFormat.UInt32);
                 }
 
+                var globalTexelScale = (int)ScopaProjectSettings.GetCached().editorTextureResolution;
                 var meshJob = new MeshJob {
                     planes = allPlanes,
                     faceData = faceData,
@@ -262,7 +266,7 @@ namespace Scopa {
                     meshOrigin = entityOrigin,
                     meshDataArray = meshDataArray,
                     textureData = textureData.AsArray(),
-                    scalingConfig = new float2(config.globalTexelScale, config.scalingFactor)
+                    scalingConfig = new float2(globalTexelScale, config.scalingFactor)
                 };
                 finalJobHandle = meshJob.Schedule(planeCount, 128);
 
@@ -287,9 +291,8 @@ namespace Scopa {
 #region Renderer Mesh Jobs
             /// <summary> Per-brush job that intersects planes to generate vertices.
             /// The vertices go into a big per-face shared NativeStream buffer. </summary>
-#if SCOPA_USE_BURST
+
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct VertJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<double4> facePlanes;
                 [NativeDisableParallelForRestriction] public NativeStream.Writer allVertStream;
@@ -391,9 +394,7 @@ namespace Scopa {
 
             /// <summary> Single threaded job that counts vertices per face.
             /// Cannot be multithreaded, we need the cumulative vertex offsets. </summary>
-#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct VertCountJob : IJob {
                 public NativeStream allVertStream;
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
@@ -419,57 +420,53 @@ namespace Scopa {
                 }
             }
 
-            //             /// <summary> Per-brush job that snaps verts together, outward, to minimize seams. </summary>
-            // #if SCOPA_USE_BURST
-            //             [BurstCompile(FloatMode = FloatMode.Fast)]
-            // #endif
-            //             public struct VertSnapJob : IJobParallelFor {
-            //                 [ReadOnlyAttribute] public NativeArray<double4> facePlanes;
-            //                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
-            //                 [NativeDisableParallelForRestriction] public NativeArray<float3> faceVerts;
-            //                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
-            //                 [ReadOnlyAttribute] public float snappingDistance;
+//             /// <summary> Snaps verts together on a 3D grid </summary>
+//             [BurstCompile(FloatMode = FloatMode.Fast)]
+//             public struct VertSnapJob : IJobParallelFor {
+//                 [ReadOnlyAttribute] public NativeArray<double4> facePlanes;
+//                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
+//                 [NativeDisableParallelForRestriction] public NativeArray<float3> faceVerts;
+//                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
+//                 [ReadOnlyAttribute] public float snappingDistance;
 
-            //                 public void Execute(int i) { // i = solid index
-            //                     int planeCount = (i + 1 < planeOffsets.Length ? planeOffsets[i + 1] : facePlanes.Length) - planeOffsets[i];
+//                 public void Execute(int i) { // i = solid index
+//                     int planeCount = (i + 1 < planeOffsets.Length ? planeOffsets[i + 1] : facePlanes.Length) - planeOffsets[i];
 
-            //                     // snap nearby vertices together within each solid -- but always snap to the FURTHEST vertex from the center
-            //                     var vertexCount = 0;
-            //                     var origin = float3.zero;
-            //                     for (var p=0; p<planeCount; p++) {
-            //                         for (int v = 0; v<faceData[p].vertCount; i++) {
-            //                             origin += faceVerts[faceData[p].vertIndexStart+v];
-            //                         }
-            //                         vertexCount += faceData[p].vertCount;
-            //                     }
-            //                     origin /= vertexCount;
+//                     // snap nearby vertices together within each solid
+//                     var vertexCount = 0;
+//                     var origin = float3.zero;
+//                     for (var p=0; p<planeCount; p++) {
+//                         for (int v = 0; v<faceData[p].vertCount; i++) {
+//                             origin += faceVerts[faceData[p].vertIndexStart+v];
+//                         }
+//                         vertexCount += faceData[p].vertCount;
+//                     }
+//                     origin /= vertexCount;
 
-            //                     for(var f1=0; f1<planeCount; f1++) {
-            //                         for(var f2=0; f2<planeCount; f2++) {
-            //                             if (f1 == f2)
-            //                                 continue;
+//                     for(var f1=0; f1<planeCount; f1++) {
+//                         for(var f2=0; f2<planeCount; f2++) {
+//                             if (f1 == f2)
+//                                 continue;
 
-            //                             for (int a=0; a < faceData[f1].vertCount; a++) {
-            //                                 var vA = faceData[f1].vertIndexStart+a;
-            //                                 for (int b=0; b < faceData[f2].vertCount; b++) {
-            //                                     var vB = faceData[f2].vertIndexStart+b;
-            //                                     if (math.lengthsq(faceVerts[vA] - faceVerts[vB]) < snappingDistance * snappingDistance) {
-            //                                         if (math.lengthsq(faceVerts[vA] - origin) > math.lengthsq(faceVerts[vB] - origin))
-            //                                             faceVerts[vB] = faceVerts[vA];
-            //                                         else
-            //                                             faceVerts[vA] = faceVerts[vB];
-            //                                     }
-            //                                 }
-            //                             }
-            //                         }
-            //                     }
-            //                 }
-            //             }
+//                             for (int a=0; a < faceData[f1].vertCount; a++) {
+//                                 var vA = faceData[f1].vertIndexStart+a;
+//                                 for (int b=0; b < faceData[f2].vertCount; b++) {
+//                                     var vB = faceData[f2].vertIndexStart+b;
+//                                     if (math.lengthsq(faceVerts[vA] - faceVerts[vB]) < snappingDistance * snappingDistance) {
+//                                         if (math.lengthsq(faceVerts[vA] - origin) > math.lengthsq(faceVerts[vB] - origin))
+//                                             faceVerts[vB] = faceVerts[vA];
+//                                         else
+//                                             faceVerts[vA] = faceVerts[vB];
+//                                     }
+//                                 }
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
 
             /// <summary> Generates a plane lookup to accelerate OcclusionJob. </summary>
-#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct PlaneLookupJob : IJobFor {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> faceMeshData;
@@ -498,9 +495,7 @@ namespace Scopa {
             }
 
             /// <summary> Per-face job to cull each face covered by another face (in same entity) </summary>
-#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct OcclusionJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<float3> allVerts;
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
@@ -589,9 +584,7 @@ namespace Scopa {
             }
 
 
-#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct MeshCountJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
                 [NativeDisableParallelForRestriction, ReadOnlyAttribute] public NativeArray<ScopaFaceMeshData> faceMeshDataReadOnly;
@@ -618,9 +611,7 @@ namespace Scopa {
                 }
             }
 
-#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct MeshJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
                 [ReadOnlyAttribute] public NativeArray<ScopaFaceData> faceData;
@@ -674,7 +665,7 @@ namespace Scopa {
                         ) * scalingConfig.x;
                     }
 
-                    // TODO: snapping pass / normals / welding on vertices
+                    // normals smoothing happens at the very end of mesh finalization, via Ica.Normals
 
                     // verts are already in correct order, add as basic fan pattern (since we know it's a convex face)
                     for (int t = 2; t < face.vertCount; t++) {
@@ -779,9 +770,7 @@ namespace Scopa {
                 }
             }
 
-#if SCOPA_USE_BURST
             [BurstCompile(FloatMode = FloatMode.Fast)]
-#endif
             public struct BrushColliderJob : IJobParallelFor {
                 [ReadOnlyAttribute] public NativeArray<double4> planes;
                 [ReadOnlyAttribute] public NativeArray<int> planeOffsets;
@@ -818,7 +807,7 @@ namespace Scopa {
                         colliderFaceMeshData[p] = new(0, 0, meshIndex);
                     };
 
-                    fakeTextureData[i] = new(0, 0, meshIndex == i ? i : -1);
+                    fakeTextureData[i] = new(0, 0, meshIndex == i ? i : -1, 0);
                     if (meshIndex == -2) { // skip this solid
                         boxColliderData[i] = float3x3.zero;
                     } else if (meshIndex == -1) { // generate a box collider
@@ -958,9 +947,15 @@ namespace Scopa {
                 rendererResults = new List<ScopaRendererMeshResult>(meshes.Length);
                 for (int i = 0; i < meshes.Length; i++) {
                     var newMesh = meshes[i];
+                    var materialOverride = textureToMaterial[textureNames[i]];
 
                     if (newMesh == null || newMesh.vertexCount == 0)
                         continue;
+
+                    if (materialOverride != null && materialOverride.materialConfig.smoothingAngle > -1)
+                        newMesh.RecalculateNormalsIca(materialOverride.materialConfig.smoothingAngle);
+                    else if (defaultSmoothingAngle > 0)
+                        newMesh.RecalculateNormalsIca(defaultSmoothingAngle);
 
                     if (config.addTangents)
                         newMesh.RecalculateTangents();
@@ -978,7 +973,7 @@ namespace Scopa {
 #endif
 
                     // Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
-                    rendererResults.Add(new(newMesh, entityData, textureToMaterial[textureNames[i]]));
+                    rendererResults.Add(new(newMesh, entityData, materialOverride));
                 }
                 StopTimer("MeshWrite");
             }
@@ -1134,20 +1129,20 @@ namespace Scopa {
 
         /// <summary> Burst-compatible data struct for a texture / material group / mesh </summary>
         public struct ScopaTextureData {
-            public int textureWidth, textureHeight, textureIndex;
-            // TODO: smoothingAngle
+            public int textureWidth, textureHeight, textureIndex, smoothingAngle;
 
-            public ScopaTextureData(int textureWidth, int textureHeight, int textureIndex, bool isCulled = false) {
+            public ScopaTextureData(int textureWidth, int textureHeight, int textureIndex, int smoothingAngle, bool isCulled = false) {
                 this.textureWidth = textureWidth;
                 this.textureHeight = textureHeight;
                 this.textureIndex = (isCulled ? -1 : 1) * textureIndex;
+                this.smoothingAngle = smoothingAngle;
             }
 
-            public static implicit operator int3(ScopaTextureData d) => new(d.textureWidth, d.textureHeight, d.textureIndex);
-            public static implicit operator ScopaTextureData(int3 i) => new(i.x, i.y, i.z);
+            public static implicit operator int4(ScopaTextureData d) => new(d.textureWidth, d.textureHeight, d.textureIndex, d.smoothingAngle);
+            public static implicit operator ScopaTextureData(int4 i) => new(i.x, i.y, i.z, i.w);
 
             public override string ToString() {
-                return $"{textureWidth}x{textureHeight} material {textureIndex}";
+                return $"{textureWidth}x{textureHeight} material {textureIndex} smoothing {smoothingAngle}";
             }
         }
 
@@ -1184,142 +1179,36 @@ namespace Scopa {
 
 #endregion
 
+        // public static void SnapBrushVertices(Solid sledgeSolid, float snappingDistance = 4f) {
+        //     // snap nearby vertices together within in each solid -- but always snap to the FURTHEST vertex from the center
+        //     var origin = new System.Numerics.Vector3();
+        //     var vertexCount = 0;
+        //     foreach (var face in sledgeSolid.Faces) {
+        //         for (int i = 0; i < face.Vertices.Count; i++) {
+        //             origin += face.Vertices[i];
+        //         }
+        //         vertexCount += face.Vertices.Count;
+        //     }
+        //     origin /= vertexCount;
 
-        public static void WeldVertices(this Mesh aMesh, float aMaxDelta = 0.1f, float maxAngle = 180f) {
-            var verts = aMesh.vertices;
-            var normals = aMesh.normals;
-            var uvs = aMesh.uv;
-            List<int> newVerts = new List<int>();
-            int[] map = new int[verts.Length];
-            // create mapping and filter duplicates.
-            for (int i = 0; i < verts.Length; i++) {
-                var p = verts[i];
-                var n = normals[i];
-                var uv = uvs[i];
-                bool duplicate = false;
-                for (int i2 = 0; i2 < newVerts.Count; i2++) {
-                    int a = newVerts[i2];
-                    if (
-                        (verts[a] - p).sqrMagnitude <= aMaxDelta // compare position
-                        && Vector3.Angle(normals[a], n) <= maxAngle // compare normal
-                                                                    // && (uvs[a] - uv).sqrMagnitude <= aMaxDelta // compare first uv coordinate
-                        ) {
-                        map[i] = i2;
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate) {
-                    map[i] = newVerts.Count;
-                    newVerts.Add(i);
-                }
-            }
-            // create new vertices
-            var verts2 = new Vector3[newVerts.Count];
-            var normals2 = new Vector3[newVerts.Count];
-            var uvs2 = new Vector2[newVerts.Count];
-            for (int i = 0; i < newVerts.Count; i++) {
-                int a = newVerts[i];
-                verts2[i] = verts[a];
-                normals2[i] = normals[a];
-                uvs2[i] = uvs[a];
-            }
-            // map the triangle to the new vertices
-            var tris = aMesh.triangles;
-            for (int i = 0; i < tris.Length; i++) {
-                tris[i] = map[tris[i]];
-            }
-            aMesh.Clear();
-            aMesh.vertices = verts2;
-            aMesh.normals = normals2;
-            aMesh.triangles = tris;
-            aMesh.uv = uvs2;
-        }
+        //     foreach (var face1 in sledgeSolid.Faces) {
+        //         foreach (var face2 in sledgeSolid.Faces) {
+        //             if (face1 == face2)
+        //                 continue;
 
-        public static void SmoothNormalsJobs(this Mesh aMesh, float weldingAngle = 80, float maxDelta = 0.1f) {
-            var meshData = Mesh.AcquireReadOnlyMeshData(aMesh);
-            var verts = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            meshData[0].GetVertices(verts);
-            var normals = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            meshData[0].GetNormals(normals);
-            var smoothNormalsResults = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.TempJob);
-
-            var jobData = new SmoothJob();
-            jobData.cos = Mathf.Cos(weldingAngle * Mathf.Deg2Rad);
-            jobData.maxDelta = maxDelta;
-
-            jobData.verts = verts.Reinterpret<float3>();
-            jobData.normals = normals.Reinterpret<float3>();
-            jobData.results = smoothNormalsResults.Reinterpret<float3>();
-
-            var handle = jobData.Schedule(smoothNormalsResults.Length, 8);
-            handle.Complete();
-
-            meshData.Dispose(); // must dispose this early, before modifying mesh
-
-            aMesh.SetNormals(smoothNormalsResults);
-
-            verts.Dispose();
-            normals.Dispose();
-            smoothNormalsResults.Dispose();
-        }
-
-#if SCOPA_USE_BURST
-        [BurstCompile]
-#endif
-        public struct SmoothJob : IJobParallelFor {
-            [ReadOnlyAttribute] public NativeArray<float3> verts, normals;
-            public NativeArray<float3> results;
-
-            public float cos, maxDelta;
-
-            public void Execute(int i) {
-                var tempResult = normals[i];
-                var resultCount = 1;
-
-                for (int i2 = 0; i2 < verts.Length; i2++) {
-                    if (math.lengthsq(verts[i2] - verts[i]) <= maxDelta && math.dot(normals[i2], normals[i]) >= cos) {
-                        tempResult += normals[i2];
-                        resultCount++;
-                    }
-                }
-
-                if (resultCount > 1)
-                    tempResult = math.normalize(tempResult / resultCount);
-                results[i] = tempResult;
-            }
-        }
-
-        public static void SnapBrushVertices(Solid sledgeSolid, float snappingDistance = 4f) {
-            // snap nearby vertices together within in each solid -- but always snap to the FURTHEST vertex from the center
-            var origin = new System.Numerics.Vector3();
-            var vertexCount = 0;
-            foreach (var face in sledgeSolid.Faces) {
-                for (int i = 0; i < face.Vertices.Count; i++) {
-                    origin += face.Vertices[i];
-                }
-                vertexCount += face.Vertices.Count;
-            }
-            origin /= vertexCount;
-
-            foreach (var face1 in sledgeSolid.Faces) {
-                foreach (var face2 in sledgeSolid.Faces) {
-                    if (face1 == face2)
-                        continue;
-
-                    for (int a = 0; a < face1.Vertices.Count; a++) {
-                        for (int b = 0; b < face2.Vertices.Count; b++) {
-                            if ((face1.Vertices[a] - face2.Vertices[b]).LengthSquared() < snappingDistance * snappingDistance) {
-                                if ((face1.Vertices[a] - origin).LengthSquared() > (face2.Vertices[b] - origin).LengthSquared())
-                                    face2.Vertices[b] = face1.Vertices[a];
-                                else
-                                    face1.Vertices[a] = face2.Vertices[b];
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        //             for (int a = 0; a < face1.Vertices.Count; a++) {
+        //                 for (int b = 0; b < face2.Vertices.Count; b++) {
+        //                     if ((face1.Vertices[a] - face2.Vertices[b]).LengthSquared() < snappingDistance * snappingDistance) {
+        //                         if ((face1.Vertices[a] - origin).LengthSquared() > (face2.Vertices[b] - origin).LengthSquared())
+        //                             face2.Vertices[b] = face1.Vertices[a];
+        //                         else
+        //                             face1.Vertices[a] = face2.Vertices[b];
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
     }
 }

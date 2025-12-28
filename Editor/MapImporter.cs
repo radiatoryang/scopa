@@ -20,8 +20,18 @@ namespace Scopa.Editor {
         public ScopaMapConfigAsset externalConfig;
         public ScopaMapConfig config;
 
+        [SerializeField, HideInInspector]
+        bool firstImport = true;
+
         public override void OnImportAsset(AssetImportContext ctx)
         {
+            if (firstImport) {
+                var defaultConfig = ScopaProjectSettings.Get().defaultMapImportConfig;
+                if (defaultConfig != null)
+                    externalConfig = defaultConfig;
+                firstImport = false;
+            }
+
             var currentConfig = externalConfig != null ? externalConfig.config : config;
 
             if ( currentConfig == null ) {

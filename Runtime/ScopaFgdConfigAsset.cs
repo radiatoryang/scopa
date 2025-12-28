@@ -116,7 +116,7 @@ namespace Scopa {
             [Tooltip("note that Quake / Half-Life 1 TrenchBroom only supports PointClass or SolidClass (brush entity)")]
             public FgdClassType classType = FgdClassType.PointClass;
 
-            [Tooltip("size of the object in map units, in the level editor; set size to 0, 0, 0 to omit")]
+            [Tooltip("size of the PointClass in map units, in the level editor; set size to 0, 0, 0 to omit")]
             public Bounds editorSize = new Bounds( Vector3.zero, Vector3.one * 32);
 
             [Tooltip("color of the object in the level editor; set alpha to 0 to omit")]

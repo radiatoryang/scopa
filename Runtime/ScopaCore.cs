@@ -26,6 +26,8 @@ namespace Scopa {
         /// <summary>The main high-level map file import function. Use this to support mods. For editor-time import with asset handling, see ImportMapInEditor().</summary>
         public static GameObject ImportMap(string mapFilepath, ScopaMapConfig currentConfig, out List<IScopaMeshResult> meshList)
         {
+            ScopaProjectSettings.Recache();
+
             var parseTimer = new Stopwatch();
             parseTimer.Start();
             var mapFile = ScopaCore.ParseMap(mapFilepath, currentConfig);
@@ -173,6 +175,19 @@ namespace Scopa {
             
             var entityName = $"{entData.ClassName}#{entData.ID}";
             var solids = entData.Children.Where( x => x is Solid).Cast<Solid>().ToArray();
+
+            // detect smoothing angle, if defined via map config or entity
+            var smoothNormalAngle = config.defaultSmoothingAngle;
+            if (entData.TryGetBool("_phong", out var phong)) {
+                if ( phong ) {
+                    if (entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
+                        smoothNormalAngle = Mathf.RoundToInt( phongAngle );
+                    }
+                } else {
+                    smoothNormalAngle = -1;
+                }
+            }
+
             var brushJobs = solids.Length == 0 ? null : 
                 new ScopaMesh.ScopaMeshJobGroup(
                     config,
@@ -181,7 +196,8 @@ namespace Scopa {
                     entData,
                     solids,
                     mergedEntityData,
-                    materialSearch
+                    materialSearch,
+                    smoothNormalAngle
                 );
 
             var entityPrefab = config.GetEntityPrefabFor(entData.ClassName);
@@ -230,20 +246,6 @@ namespace Scopa {
 
                 var newMeshObj = InstantiateOrCreateEmpty(entityObject.transform, thisMeshPrefab, jobData.entityData, config);
                 newMeshObj.name = result.material.GetTextureNameForSearching();
-
-                // // detect smoothing angle, if defined via map config or material config or entity
-                // var smoothNormalAngle = config.defaultSmoothingAngle;
-                // if (entData.TryGetBool("_phong", out var phong)) {
-                //     if ( phong ) {
-                //         if ( entData.TryGetFloat("_phong_angle", out var phongAngle) ) {
-                //             smoothNormalAngle = Mathf.RoundToInt( phongAngle );
-                //         }
-                //     } else {
-                //         smoothNormalAngle = -1;
-                //     }
-                // } else if ( textureKVP.Value != null && textureKVP.Value.materialConfig != null && textureKVP.Value.materialConfig.smoothingAngle >= 0 ) {
-                //     smoothNormalAngle = textureKVP.Value.materialConfig.smoothingAngle;
-                // }
 
                 // you can inherit ScopaMaterialConfig + override OnBuildMeshObject for extra per-material import logic
                 if ( materialConfig != null && materialConfig.useOnBuildMeshObject ) {
@@ -313,7 +315,7 @@ namespace Scopa {
         static void UpdateEntityComponents(ScopaMapConfig config, ScopaEntityData entData, GameObject entityObject) {
             var entityComponent = entityObject.GetComponent<IScopaEntityData>();
 
-            if ( config.addScopaEntityComponent && entityComponent == null)
+            if ( ScopaProjectSettings.GetCached().addScopaEntityComponent && entityComponent == null)
                 entityComponent = entityObject.AddComponent<ScopaEntity>();
 
             if ( entityComponent != null)
@@ -373,7 +375,7 @@ namespace Scopa {
                     }
                 }
 
-                if ( config.callOnEntityImport )
+                if ( ScopaProjectSettings.GetCached().callOnEntityImport )
                     entComp.OnEntityImport( entData );
             }
         }
