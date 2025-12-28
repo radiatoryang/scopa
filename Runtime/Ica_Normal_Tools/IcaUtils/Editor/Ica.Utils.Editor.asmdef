@@ -1,0 +1,18 @@
+{
+  "name": "Ica.Utils.Editor",
+  "rootNamespace": "Ica.Utils.Editor",
+  "references": [
+    "GUID:61b61935899704748b3c537804f1954e"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
