@@ -312,7 +312,7 @@ namespace Scopa {
                         var right = math.normalize(math.cross(plane.xyz, up));
 
                         var planePoint = plane.xyz * -plane.w;
-                        var radius = 1000000d;
+                        var radius = 32000d;
                         polygon[0] = planePoint + (right + up) * radius; // Top right
                         polygon[1] = planePoint + (-right + up) * radius; // Top left
                         polygon[2] = planePoint + (-right - up) * radius; // Bottom left
