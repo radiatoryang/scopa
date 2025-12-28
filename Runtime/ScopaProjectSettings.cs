@@ -24,7 +24,8 @@ namespace Scopa {
         }
 
         [Header("Textures & Materials")]
-        [Tooltip("(default: Full) global scaling for all UV coordinates; if you're mapping in your editor with full resolution textures, leave this at Full... but if you're using WADs, we recommend Quarter resolution")]
+        [HelpBox("MAPs use texture pixel units, not normalized UVs, so texture size / texture importer settings will directly affect the final imported UVs.", HelpBoxMessageType.Info)]
+        [Tooltip("(default: Full) global scaling for all UV coordinates; if you're mapping in your editor with full resolution textures, leave this at Full... but if you're using WADs, we recommend Quarter resolution or maybe even lower")]
         public TexelResolution editorTextureResolution = TexelResolution.Full;
 
         [Tooltip("(default: 128) If we can't match a map face to a Material's Main Texture, use this default placeholder texture size. Half-Life 1 used 128, Half-Life 2 used 512.")]
@@ -35,8 +36,10 @@ namespace Scopa {
         
 
         [Header("Quake / Half-Life keyword adapter")]
-        [HelpBox("Use keywords to adapt Quake / Half-Life maps with minimal FGD config or prefab setup. If you ignore Quake / Half-Life naming conventions, you may want to delete some of these. If in doubt, it's safer to just leave it all as-is, since TrenchBroom expects these conventions.", HelpBoxMessageType.Info)]
-        
+        [HelpBox("Use keywords to adapt Quake / Half-Life maps with minimal FGD config or prefab setup. If in doubt, leave it all as-is, since TrenchBroom expects some of these naming conventions.", HelpBoxMessageType.Info)]
+        [Tooltip("(default: true) disable this to disable all this keyword-based functionality")]
+        public bool useKeywords = true;
+
         [Tooltip("(default: sky, trigger, skip, hint, nodraw, null, clip, origin) When a face's texture name contains any word in this list, discard that face from the mesh. But this does not affect mesh colliders.")]
         public List<string> cullTextures = new List<string>() {"sky", "trigger", "skip", "hint", "nodraw", "null", "clip", "origin"};
 
@@ -53,7 +56,7 @@ namespace Scopa {
         public List<string> staticEntities = new List<string>() {"worldspawn", "func_wall"};
 
         [Header("Scopa Entity Scripting")]
-        [HelpBox("If you want to use some of Scopa's built-in entity handling / API, this is where you configure it -- or where you turn it off.")]
+        [HelpBox("If you want to use some of Scopa's built-in entity handling / API, this is where you configure it -- or where you turn it off.", HelpBoxMessageType.Info)]
         [Tooltip("(default: true) if enabled, automatically add ScopaEntity component to all game objects (if not already present in the entityPrefab)... disable this if you don't want to use the built-in ScopaEntity at all, and override it with your own")]
         public bool addScopaEntityComponent = true;
 

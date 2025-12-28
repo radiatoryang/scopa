@@ -14,8 +14,9 @@ namespace Scopa.Editor {
             if ( saveIcon == null)
                 saveIcon = EditorGUIUtility.IconContent("SaveActive").image;
 
+            var wadCreator = property.GetSerializedValue<ScopaWadCreator>();
+
             if (GUI.Button(new Rect(position.x, position.y, position.width, 18), new GUIContent(" Export WAD...", saveIcon, "Generate and save a .WAD... We recommend choosing a folder OUTSIDE the Assets folder.")) ) {
-                var wadCreator = property.GetSerializedValue<ScopaWadCreator>();
                 var defaultPath = ScopaCore.IsValidPath(wadCreator.lastSavePath) ? wadCreator.lastSavePath : Application.dataPath;
                 var defaultFilename = ScopaCore.IsValidPath(wadCreator.lastSavePath) ? System.IO.Path.GetFileNameWithoutExtension(wadCreator.lastSavePath) : "New WAD";
                 var newPath = EditorUtility.SaveFilePanel("Export WAD file to...", defaultPath, defaultFilename, "wad");
@@ -42,6 +43,8 @@ namespace Scopa.Editor {
             SerializedProperty prop = property.FindPropertyRelative("resolution");
             do {
                 EditorGUILayout.PropertyField(prop, true);
+                if (prop.name == "resolution" && wadCreator.resolution == WadResolution.ProjectDefault && GUILayout.Button("edit default resolution in Project Settings > Scopa"))
+                    SettingsService.OpenProjectSettings("Project/Scopa");
             }
             while (prop.NextVisible(false));
 

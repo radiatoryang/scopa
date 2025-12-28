@@ -78,6 +78,9 @@ namespace Scopa {
 
         /// <summary> NOT case sensitive </summary>
         public bool IsTextureNameCulled(string textureNameSearch) {
+            if (!ScopaProjectSettings.GetCached().useKeywords)
+                return false;
+
             if ( string.IsNullOrWhiteSpace(textureNameSearch) )
                 return true;
 
@@ -93,6 +96,9 @@ namespace Scopa {
 
         /// <summary> NOT case sensitive </summary>
         public bool IsEntityMergeToWorld(string entityClassnameSearch) {
+            if (!ScopaProjectSettings.GetCached().useKeywords)
+                return false;
+
             var search = entityClassnameSearch.ToLowerInvariant();
             var mergeToWorld = ScopaProjectSettings.GetCached().mergeToWorld;
             for(int i=0; i<mergeToWorld.Count; i++) {
@@ -105,6 +111,9 @@ namespace Scopa {
 
         /// <summary> NOT case sensitive </summary>
         public bool IsEntityStatic(string entityClassname) {
+            if (!ScopaProjectSettings.GetCached().useKeywords)
+                return false;
+
             var search = entityClassname.ToLowerInvariant();
             var staticEntities = ScopaProjectSettings.GetCached().staticEntities;
             for(int i=0; i<staticEntities.Count; i++) {
@@ -117,6 +126,9 @@ namespace Scopa {
 
         /// <summary> NOT case sensitive </summary>
         public bool IsEntityNonsolid(string entityClassname) {
+            if (!ScopaProjectSettings.GetCached().useKeywords)
+                return false;
+
             var search = entityClassname.ToLowerInvariant();
             var nonsolidEntities = ScopaProjectSettings.GetCached().nonsolidEntities;
             for(int i=0; i<nonsolidEntities.Count; i++) {
@@ -129,6 +141,9 @@ namespace Scopa {
 
         /// <summary> NOT case sensitive </summary>
         public bool IsEntityTrigger(string entityClassname) {
+            if (!ScopaProjectSettings.GetCached().useKeywords)
+                return false;
+
             var search = entityClassname.ToLowerInvariant();
             var triggerEntities = ScopaProjectSettings.GetCached().triggerEntities;
             for(int i=0; i<triggerEntities.Count; i++) {

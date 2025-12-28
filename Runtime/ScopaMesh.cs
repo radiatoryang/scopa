@@ -820,7 +820,7 @@ namespace Scopa {
                         colliderFaceMeshData[p] = new(0, 0, meshIndex);
                     };
 
-                    fakeTextureData[i] = new(0, 0, meshIndex == i ? i : -1, 0);
+                    fakeTextureData[i] = new(0, 0, meshIndex == i ? i : -1, -1);
                     if (meshIndex == -2) { // skip this solid
                         boxColliderData[i] = float3x3.zero;
                     } else if (meshIndex == -1) { // generate a box collider
