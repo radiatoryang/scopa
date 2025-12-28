@@ -190,9 +190,22 @@ namespace Scopa {
                             faceMeshData[pIndex] = new(index, isCulled);
 
                             textureNames.Add(textureName);
-                            textureData.Add(matOverride.material != null && matOverride.material.mainTexture != null ?
-                                new(matOverride.material.mainTexture.width, matOverride.material.mainTexture.height, index, (int)matOverride.materialConfig.smoothingAngle, isCulled) :
-                                new(defaultTexSize, defaultTexSize, index, -1, isCulled)
+                            textureData.Add(
+                                matOverride.material != null && matOverride.material.mainTexture != null ?
+                                new(
+                                    matOverride.material.mainTexture.width, 
+                                    matOverride.material.mainTexture.height, 
+                                    index, 
+                                    matOverride.materialConfig != null ? (int)matOverride.materialConfig.smoothingAngle : -1,
+                                    isCulled
+                                ) :
+                                new(
+                                    defaultTexSize, 
+                                    defaultTexSize, 
+                                    index, 
+                                    -1, 
+                                    isCulled
+                                )
                             );
                         }
 
@@ -952,10 +965,12 @@ namespace Scopa {
                     if (newMesh == null || newMesh.vertexCount == 0)
                         continue;
 
-                    if (materialOverride != null && materialOverride.materialConfig.smoothingAngle > -1)
-                        newMesh.RecalculateNormalsIca(materialOverride.materialConfig.smoothingAngle);
-                    else if (defaultSmoothingAngle > 0)
+                    if (materialOverride != null && materialOverride.materialConfig != null && materialOverride.materialConfig.smoothingAngle > -1) {
+                        if (materialOverride.materialConfig.smoothingAngle > 0)
+                            newMesh.RecalculateNormalsIca(materialOverride.materialConfig.smoothingAngle);
+                    } else if (defaultSmoothingAngle > 0) {
                         newMesh.RecalculateNormalsIca(defaultSmoothingAngle);
+                    }
 
                     if (config.addTangents)
                         newMesh.RecalculateTangents();
