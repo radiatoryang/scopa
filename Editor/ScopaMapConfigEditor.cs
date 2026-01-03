@@ -31,6 +31,9 @@ namespace Scopa.Editor {
             }
             while (prop.NextVisible(false));
 
+            if (GUILayout.Button( new GUIContent("open Project Settings > Scopa", "less common map import settings are in Project Settings > Scopa")))
+                SettingsService.OpenProjectSettings("Project/Scopa");
+
             // Set indent back to what it was
             EditorGUI.indentLevel = indent;
 

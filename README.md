@@ -13,7 +13,7 @@
 
 ## Installation
 
-This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2023.2 or later. To install, open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2021.2/Documentation/Manual/upm-ui-giturl.html)
+This is a [Unity Package](https://docs.unity3d.com/Manual/PackagesList.html) for Unity 2022.3 or later. To install, open [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) and add `https://github.com/radiatoryang/scopa.git` [(more info and help)](https://docs.unity3d.com/2022.3/Documentation/Manual/upm-ui-giturl.html)
 
 Dependencies: [Burst](https://docs.unity3d.com/Packages/com.unity.burst@latest/), [Unity.Collections](https://docs.unity3d.com/Packages/com.unity.collections@latest/), and [Unity.Mathematics](https://docs.unity3d.com/Packages/com.unity.mathematics@latest). These are already required for URP anyway.
 
