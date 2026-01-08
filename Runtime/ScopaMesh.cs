@@ -71,8 +71,8 @@ namespace Scopa {
             // PER-MESH DATA
             /// <summary> Various metadata / counters, each one = a mesh </summary>
             public NativeArray<ScopaMeshCounts> meshCounts, colliderMeshCounts;
-            /// <summary> Unity's special data structure for the actual final mesh data. Populated by MeshJob. </summary>
-            public Mesh.MeshDataArray meshDataArray, colliderMeshDataArray;
+            /// <summary> Unity's special data structure for the actual final mesh data. Populated by MeshJob. Gets disposed in MeshWrite. </summary>
+            private Mesh.MeshDataArray meshDataArray, colliderMeshDataArray;
 
             // COLLISION DATA
             /// <summary> Data to generate Box Colliders </summary>
@@ -988,7 +988,7 @@ namespace Scopa {
 #endif
 
                     // Debug.Log($"writing {newMesh.name} with {newMesh.vertexCount}");
-                    rendererResults.Add(new(newMesh, entityData, materialOverride));
+                    rendererResults.Add(new(i, newMesh, entityData, materialOverride));
                 }
                 StopTimer("MeshWrite");
             }

@@ -24,6 +24,6 @@ namespace Scopa
         
         /// <summary>To use this, make a new class that inherits from ScopaMaterialConfig + override OnBuildMeshObject() to add custom components / modify mesh data at .MAP import time
         /// ... and don't forget to set useOnBuildMeshObject=true in the inspector.</summary>
-        public virtual void OnBuildMeshObject(GameObject meshObject, Mesh mesh, ScopaMesh.ScopaMeshJobGroup jobsData) { }
+        public virtual void OnBuildMeshObject(GameObject meshObject, ScopaRendererMeshResult meshResult, ScopaMesh.ScopaMeshJobGroup jobsData) { }
     }
 }

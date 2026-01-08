@@ -249,7 +249,7 @@ namespace Scopa {
 
                 // you can inherit ScopaMaterialConfig + override OnBuildMeshObject for extra per-material import logic
                 if ( materialConfig != null && materialConfig.useOnBuildMeshObject ) {
-                    materialConfig.OnBuildMeshObject( newMeshObj, result.mesh, jobData );
+                    materialConfig.OnBuildMeshObject( newMeshObj, result, jobData );
                 }
 
                 // now, finally, at the very end, optimize
@@ -446,12 +446,10 @@ namespace Scopa {
         public Mesh mesh;
         public ScopaEntityData entityData;
         public ScopaMapConfig.MaterialOverride material;
+        public int meshDataIndex;
 
-        public ScopaRendererMeshResult(Mesh mesh) {
-            this.mesh = mesh;
-        }
-
-        public ScopaRendererMeshResult(Mesh mesh, ScopaEntityData entityData, ScopaMapConfig.MaterialOverride materialConfig) {
+        public ScopaRendererMeshResult(int meshDataIndex, Mesh mesh, ScopaEntityData entityData, ScopaMapConfig.MaterialOverride materialConfig) {
+            this.meshDataIndex = meshDataIndex;
             this.mesh = mesh;
             this.entityData = entityData;
             this.material = materialConfig;
