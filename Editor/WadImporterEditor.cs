@@ -101,10 +101,10 @@ namespace Scopa.Editor {
             base.Apply();
         }
 
-        protected override void ResetValues()
+        public override void DiscardChanges()
         {
             wasModified = false;
-            base.ResetValues();
+            base.DiscardChanges();
         }
 
 
